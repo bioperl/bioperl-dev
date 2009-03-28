@@ -1,0 +1,39 @@
+$Id$
+
+o Version
+
+ This is bioperl-dev version 1.6.9, a developer release.
+
+o Description 
+ 
+ bioperl-dev contains experimental modules intended to expand the
+ Bioperl envelope. New ideas for future point and stable releases
+ are being explored here. Interested users are encouraged to 
+ give these a try, keeping in mind the following points:
+
+ o the modules here will likely depend on the current HEAD 
+   revision of Bioperl (bioperl-live/trunk); a release version 
+   may not suffice;
+
+ o documentation is likely to be spotty at best;
+ 
+ o the code should be considered unsupported, though a polite email
+   to the dev it likely to elicit a positive response;
+
+ o the code should not be considered "production quality"; when this
+   level is reached, bioperl-dev modules will graduate to the 
+   core or the appropriate specialty package.
+
+ See the Changes file for more information about what is contained in
+ here.
+
+o Installation
+
+ See the accompanying INSTALL file for details on installing
+ bioperl-dev
+ 
+o Feedback
+
+Write down any problems or praise and send them to 
+bioperl-l@bioperl.org  ;-)
+

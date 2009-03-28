@@ -1,0 +1,49 @@
+# $Id$
+
+bioperl-dev INSTALLATION
+
+INSTALL THE RIGHT BIOPERL
+
+You need the latest developer snapshot of Bioperl for the highest
+probability of success. The bioperl-dev repository contains highly
+experimental code, and is likely to depend on the very latest commits.
+For instructions on installing latest revision, bioperl-live/trunk,
+see http://www.bioperl.org/wiki/Using_Subversion.
+
+INSTALLATION
+
+Installation instructions at the following address apply here:
+http://www.bioperl.org/wiki/Installing_Bioperl_for_Unix
+The next section summarizes the essential points from there.
+
+INSTALLATION FROM SVN CHECKOUT
+
+Check out a working copy of the bioperl-dev trunk:
+
+  >svn svn://code.open-bio.org/bioperl/bioperl-dev/trunk bioperl-dev
+
+Issue the following command from within bioperl-dev/:
+
+  >perl Build.PL
+
+You can run regression tests and install bioperl-dev using the
+following commands:
+
+  >./Build test  
+  >./Build install
+
+NOTE: many tests will be skipped without the necessary environment
+variables set to tell Bioperl where your programs are installed.
+
+INSTALLING bioperl-dev ON WINDOWS
+
+[stub]
+
+ENVIRONMENT VARIABLES
+
+ Some important environment variables you need to be aware of.
+
+ Variable		Values     Comment
+ --------------------------------------------------------------------
+
+[stub]

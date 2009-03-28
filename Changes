@@ -1,0 +1,30 @@
+$Id$
+Revision history for bioperl-dev modules
+
+Full details of changes between all versions are available online at:
+http://www.bioperl.org/wiki/Change_log
+
+
+1.6.9 Sync version number with current trunk
+
+    o The intention is to indicate a link to the current release
+      (1.6), but force the use of the trunk; the Build.PL stub (based
+      on bioperl-run/Build.PL)
+
+    o Let the games begin. 
+
+0.01 Initial population of bioperl-dev
+
+    o Created a basic distribution structure, ripping from
+      bioperl-live/trunk some basic tools:
+
+      - Bio/Root/* revision 15615
+
+      - t/* revision 15615, with t/data stub only and full t/lib
+
+      - a functional but stubby Build.PL
+
+
+
+
+
