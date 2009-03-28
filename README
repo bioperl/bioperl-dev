@@ -18,7 +18,7 @@ o Description
  o documentation is likely to be spotty at best;
  
  o the code should be considered unsupported, though a polite email
-   to the dev it likely to elicit a positive response;
+   to the dev is likely to elicit a positive response;
 
  o the code should not be considered "production quality"; when this
    level is reached, bioperl-dev modules will graduate to the 
