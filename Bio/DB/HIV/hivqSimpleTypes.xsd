@@ -1,0 +1,1152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema 
+   attributeFormDefault="unqualified" elementFormDefault="qualified"
+   targetNamespace="http://fortinbras.us/HIVDBSchema/1.0/ST"
+   xmlns:xs="http://www.w3.org/2001/XMLSchema"
+   xmlns:tns="http://fortinbras.us/HIVDBSchema/1.0/ST" >
+  <xs:simpleType name="integerGt0">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="genomic_regionType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="complete"/>
+      <xs:enumeration value="5ltr"/>
+      <xs:enumeration value="5ltrr"/>
+      <xs:enumeration value="5ltru3"/>
+      <xs:enumeration value="5ltru5"/>
+      <xs:enumeration value="Tar"/>
+      <xs:enumeration value="Gag_Pol"/>
+      <xs:enumeration value="Gag"/>
+      <xs:enumeration value="p17"/>
+      <xs:enumeration value="p24"/>
+      <xs:enumeration value="p7"/>
+      <xs:enumeration value="p6"/>
+      <xs:enumeration value="Pol"/>
+      <xs:enumeration value="p51"/>
+      <xs:enumeration value="RNase"/>
+      <xs:enumeration value="p31"/>
+      <xs:enumeration value="protease"/>
+      <xs:enumeration value="Vif"/>
+      <xs:enumeration value="Vpr"/>
+      <xs:enumeration value="Tat"/>
+      <xs:enumeration value="Tat1"/>
+      <xs:enumeration value="Tat2"/>
+      <xs:enumeration value="Rev"/>
+      <xs:enumeration value="Rev1"/>
+      <xs:enumeration value="Rev2"/>
+      <xs:enumeration value="Vpu"/>
+      <xs:enumeration value="Env"/>
+      <xs:enumeration value="V1"/>
+      <xs:enumeration value="V2"/>
+      <xs:enumeration value="V3"/>
+      <xs:enumeration value="V4"/>
+      <xs:enumeration value="V5"/>
+      <xs:enumeration value="RRE"/>
+      <xs:enumeration value="gp41"/>
+      <xs:enumeration value="gp120"/>
+      <xs:enumeration value="NEF"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="au_authornumberType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="loc_descriptionType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="loc_entryfeaturetypeType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="polyA_site"/>
+      <xs:enumeration value="mRNA"/>
+      <xs:enumeration value="misc_feature"/>
+      <xs:enumeration value="unsure"/>
+      <xs:enumeration value="gene"/>
+      <xs:enumeration value="sig_peptide"/>
+      <xs:enumeration value="5'UTR"/>
+      <xs:enumeration value="modified_base"/>
+      <xs:enumeration value="stem_loop"/>
+      <xs:enumeration value="gap"/>
+      <xs:enumeration value="repeat_region"/>
+      <xs:enumeration value="misc_recomb"/>
+      <xs:enumeration value="exon"/>
+      <xs:enumeration value="tRNA"/>
+      <xs:enumeration value="prim_transcript"/>
+      <xs:enumeration value="misc_signal"/>
+      <xs:enumeration value="old_sequence"/>
+      <xs:enumeration value="conflict"/>
+      <xs:enumeration value="GC_signal"/>
+      <xs:enumeration value="3'UTR"/>
+      <xs:enumeration value="source"/>
+      <xs:enumeration value="CDS"/>
+      <xs:enumeration value="intron"/>
+      <xs:enumeration value="misc_difference"/>
+      <xs:enumeration value="primer_bind"/>
+      <xs:enumeration value="rep_origin"/>
+      <xs:enumeration value="promoter"/>
+      <xs:enumeration value="V_region"/>
+      <xs:enumeration value="protein_bind"/>
+      <xs:enumeration value="variation"/>
+      <xs:enumeration value="RBS"/>
+      <xs:enumeration value="polyA_signal"/>
+      <xs:enumeration value="enhancer"/>
+      <xs:enumeration value="TATA_signal"/>
+      <xs:enumeration value="LTR"/>
+      <xs:enumeration value="misc_binding"/>
+      <xs:enumeration value="misc_RNA"/>
+      <xs:enumeration value="mat_peptide"/>
+      <xs:enumeration value="misc_structure"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pat_codeType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pat_commentType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pat_ethnicityType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="W"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="B"/>
+      <xs:enumeration value="white"/>
+      <xs:enumeration value="Zulu/Xhosa"/>
+      <xs:enumeration value="black"/>
+      <xs:enumeration value="Tiriyo"/>
+      <xs:enumeration value="Lahu"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pat_hla_typeType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pat_infection_cityType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="countryCodeType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="KH"/>
+      <xs:enumeration value="DJ"/>
+      <xs:enumeration value="TG"/>
+      <xs:enumeration value="JM"/>
+      <xs:enumeration value="GB"/>
+      <xs:enumeration value="HT"/>
+      <xs:enumeration value="ZM"/>
+      <xs:enumeration value="DK"/>
+      <xs:enumeration value="CD"/>
+      <xs:enumeration value="BW"/>
+      <xs:enumeration value="AO"/>
+      <xs:enumeration value="ZW"/>
+      <xs:enumeration value="CV"/>
+      <xs:enumeration value="PR"/>
+      <xs:enumeration value="JP"/>
+      <xs:enumeration value="NA"/>
+      <xs:enumeration value="MA"/>
+      <xs:enumeration value="SV"/>
+      <xs:enumeration value="IT"/>
+      <xs:enumeration value="MZ"/>
+      <xs:enumeration value="ES"/>
+      <xs:enumeration value="FR"/>
+      <xs:enumeration value="AU"/>
+      <xs:enumeration value="LR"/>
+      <xs:enumeration value="RW"/>
+      <xs:enumeration value="TN"/>
+      <xs:enumeration value="BE"/>
+      <xs:enumeration value="IR"/>
+      <xs:enumeration value="BY"/>
+      <xs:enumeration value="SA"/>
+      <xs:enumeration value="NO"/>
+      <xs:enumeration value="KR"/>
+      <xs:enumeration value="ZA"/>
+      <xs:enumeration value="PT"/>
+      <xs:enumeration value="CG"/>
+      <xs:enumeration value="BF"/>
+      <xs:enumeration value="GW"/>
+      <xs:enumeration value="GN"/>
+      <xs:enumeration value="BI"/>
+      <xs:enumeration value="CA"/>
+      <xs:enumeration value="GR"/>
+      <xs:enumeration value="CM"/>
+      <xs:enumeration value="CO"/>
+      <xs:enumeration value="NP"/>
+      <xs:enumeration value="PL"/>
+      <xs:enumeration value="GA"/>
+      <xs:enumeration value="CF"/>
+      <xs:enumeration value="UA"/>
+      <xs:enumeration value="TH"/>
+      <xs:enumeration value="CL"/>
+      <xs:enumeration value="CU"/>
+      <xs:enumeration value="ML"/>
+      <xs:enumeration value="ET"/>
+      <xs:enumeration value="PH"/>
+      <xs:enumeration value="NL"/>
+      <xs:enumeration value="EC"/>
+      <xs:enumeration value="MY"/>
+      <xs:enumeration value="MM"/>
+      <xs:enumeration value="MR"/>
+      <xs:enumeration value="SE"/>
+      <xs:enumeration value="CN"/>
+      <xs:enumeration value="BG"/>
+      <xs:enumeration value="UY"/>
+      <xs:enumeration value="NG"/>
+      <xs:enumeration value="BJ"/>
+      <xs:enumeration value="KE"/>
+      <xs:enumeration value="CH"/>
+      <xs:enumeration value="GH"/>
+      <xs:enumeration value="VN"/>
+      <xs:enumeration value="CI"/>
+      <xs:enumeration value="DZ"/>
+      <xs:enumeration value="US"/>
+      <xs:enumeration value="PE"/>
+      <xs:enumeration value="SL"/>
+      <xs:enumeration value="CY"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="GE"/>
+      <xs:enumeration value="GM"/>
+      <xs:enumeration value="LV"/>
+      <xs:enumeration value="PF"/>
+      <xs:enumeration value="ER"/>
+      <xs:enumeration value="RU"/>
+      <xs:enumeration value="TZ"/>
+      <xs:enumeration value="MW"/>
+      <xs:enumeration value="LY"/>
+      <xs:enumeration value="DE"/>
+      <xs:enumeration value="FI"/>
+      <xs:enumeration value="PK"/>
+      <xs:enumeration value="GQ"/>
+      <xs:enumeration value="VE"/>
+      <xs:enumeration value="RO"/>
+      <xs:enumeration value="SG"/>
+      <xs:enumeration value="AR"/>
+      <xs:enumeration value="IN"/>
+      <xs:enumeration value="SN"/>
+      <xs:enumeration value="TT"/>
+      <xs:enumeration value="BR"/>
+      <xs:enumeration value="HN"/>
+      <xs:enumeration value="TD"/>
+      <xs:enumeration value="SO"/>
+      <xs:enumeration value="DO"/>
+      <xs:enumeration value="UG"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="countryType">
+    <xs:all>
+      <xs:element maxOccurs="1" minOccurs="1" name="countryString">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:maxLength value="50"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:all>
+    <xs:attribute name="ccode" type="tns:countryCodeType" use="required" />
+  </xs:complexType>
+  <xs:simpleType name="pat_infection_yearType">
+    <xs:restriction base="xs:gYear"/>
+  </xs:simpleType>
+  <xs:simpleType name="pat_num_seqType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pat_num_timepointsType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pat_progressionType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="RP"/>
+      <xs:enumeration value="SP"/>
+      <xs:enumeration value="P"/>
+      <xs:enumeration value="LTNP"/>
+      <xs:enumeration value="EC"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pat_projectType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="Swiss HIV Cohort Study"/>
+      <xs:enumeration value="OPTIONS cohort"/>
+      <xs:enumeration value="Copenhagen cohort"/>
+      <xs:enumeration value="UCLA Perinatal Transmission St"/>
+      <xs:enumeration value="PACTG trial 1030"/>
+      <xs:enumeration value="Zambia-UAB"/>
+      <xs:enumeration value="Opiate Users Research Study"/>
+      <xs:enumeration value="New England Hemophilia Cohort"/>
+      <xs:enumeration value="CDC"/>
+      <xs:enumeration value="AIIMS cohort"/>
+      <xs:enumeration value="EXPLORE Study"/>
+      <xs:enumeration value="Sydney Blood Bank Cohort"/>
+      <xs:enumeration value="SFMHS"/>
+      <xs:enumeration value="NVAZ"/>
+      <xs:enumeration value="ACTG 5211"/>
+      <xs:enumeration value="San Francisco Men's Health St"/>
+      <xs:enumeration value="STI"/>
+      <xs:enumeration value="MGH cohort"/>
+      <xs:enumeration value="Australian LTNP Study"/>
+      <xs:enumeration value="1182_48"/>
+      <xs:enumeration value="Boston Acute Infection Cohort"/>
+      <xs:enumeration value="Women's Interagency HIV Study"/>
+      <xs:enumeration value="Quattro"/>
+      <xs:enumeration value="MACS"/>
+      <xs:enumeration value="CNAB2006"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="ALT ANRS"/>
+      <xs:enumeration value="VAX004"/>
+      <xs:enumeration value="Cato Manor"/>
+      <xs:enumeration value="RV126"/>
+      <xs:enumeration value="Primo-CI"/>
+      <xs:enumeration value="Pumwani Sex Worker Cohort"/>
+      <xs:enumeration value="CHAVI"/>
+      <xs:enumeration value="HIVNET 028"/>
+      <xs:enumeration value="Wadsworth Center"/>
+      <xs:enumeration value="French ALT Study Group"/>
+      <xs:enumeration value="RV121"/>
+      <xs:enumeration value="FCHC"/>
+      <xs:enumeration value="Ariel"/>
+      <xs:enumeration value="DMP266"/>
+      <xs:enumeration value="Sinikithemba"/>
+      <xs:enumeration value="ACTG 229"/>
+      <xs:enumeration value="1182_12"/>
+      <xs:enumeration value="HIVNET 023"/>
+      <xs:enumeration value="Seattle primary infection coho"/>
+      <xs:enumeration value="Italian Seroconversion Study"/>
+      <xs:enumeration value="Dakar FSW cohort"/>
+      <xs:enumeration value="Nairobi cohort"/>
+      <xs:enumeration value="Amsterdam Cohort Studies"/>
+      <xs:enumeration value="HIVNET 012"/>
+      <xs:enumeration value="Western Australian HIV Cohort"/>
+      <xs:enumeration value="New York City Perinatal HIV Tr"/>
+      <xs:enumeration value="Bonn Cohort"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pat_risk_factorCodeType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="SH"/>
+      <xs:enumeration value="PH"/>
+      <xs:enumeration value="EX"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="PB"/>
+      <xs:enumeration value="MB"/>
+      <xs:enumeration value="SG"/>
+      <xs:enumeration value="SW"/>
+      <xs:enumeration value="NO"/>
+      <xs:enumeration value="SM"/>
+      <xs:enumeration value="NR"/>
+      <xs:enumeration value="SB"/>
+      <xs:enumeration value="PI"/>
+      <xs:enumeration value="OT"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="pat_risk_factorType">
+    <xs:all>
+      <xs:element maxOccurs="1" minOccurs="1" name="pat_risk_factorString">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:maxLength value="50"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:all>
+    <xs:attribute name="LANLcode" type="tns:pat_risk_factorCodeType" use="required" />
+  </xs:complexType>
+  <xs:simpleType name="pat_sexType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="F"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="M"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="pat_speciesType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="per_lnameType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="spl_pubnumberType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_amplification_strategyType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="SGA"/>
+      <xs:enumeration value="bulk RT-PCR"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="bulk"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_annotatedType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="1"/>
+      <xs:enumeration value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_badseqCodeType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="6"/>
+      <xs:enumeration value="4"/>
+      <xs:enumeration value="1"/>
+      <xs:enumeration value="3"/>
+      <xs:enumeration value="0"/>
+      <xs:enumeration value="2"/>
+      <xs:enumeration value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="ssam_badseqType">
+    <xs:all>
+      <xs:element maxOccurs="1" minOccurs="1" name="ssam_badseqString">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:maxLength value="50"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:all>
+    <xs:attribute name="LANLcode" type="tns:ssam_badseqCodeType" use="required" />
+  </xs:complexType>
+  <xs:simpleType name="ssam_cd4countType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_cd8countType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_clone_name_numberType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_common_nameType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_culture_methodType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="uncultured"/>
+      <xs:enumeration value="UNK"/>
+      <xs:enumeration value="primary"/>
+      <xs:enumeration value="expanded"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_drug_naiveType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="yes"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="no"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_fiebigType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="6"/>
+      <xs:enumeration value="4"/>
+      <xs:enumeration value="1"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="3"/>
+      <xs:enumeration value="2"/>
+      <xs:enumeration value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_health_statusType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="symptomatic"/>
+      <xs:enumeration value="deceased"/>
+      <xs:enumeration value="asymptomatic"/>
+      <xs:enumeration value="AIDS"/>
+      <xs:enumeration value="acute infection"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_isolate_name_numberType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_locus_nameType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_molecule_typeType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="mRNA"/>
+      <xs:enumeration value="UNK"/>
+      <xs:enumeration value="DNA"/>
+      <xs:enumeration value="RNA"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_organismType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="synthetic DNA"/>
+      <xs:enumeration value="HIV-1"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="HIV-2"/>
+      <xs:enumeration value="SIV"/>
+      <xs:enumeration value="SHIV"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_patient_ageType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_phenotypeType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="SI"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="UNK"/>
+      <xs:enumeration value="NSI"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_postendtreatment_daysType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_postfirstsample_daysType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_postinfect_daysType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_postseroconv_daysType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_poststarttreatment_daysType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_sample_cityType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_sample_georegionCodeType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="AFR SSA"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="FUS"/>
+      <xs:enumeration value="MEA"/>
+      <xs:enumeration value="EUR"/>
+      <xs:enumeration value="OCE"/>
+      <xs:enumeration value="ASI"/>
+      <xs:enumeration value="SAM"/>
+      <xs:enumeration value="NAM"/>
+      <xs:enumeration value="CAM"/>
+      <xs:enumeration value="AFR"/>
+      <xs:enumeration value="CRB"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="ssam_sample_georegionType">
+    <xs:all>
+      <xs:element maxOccurs="1" minOccurs="1" name="ssam_sample_georegionString">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:maxLength value="50"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:all>
+    <xs:attribute name="LANLcode" type="tns:ssam_sample_georegionCodeType" use="required" />
+  </xs:complexType>
+  <xs:simpleType name="ssam_sample_tissueType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="jejunum"/>
+      <xs:enumeration value="T-cell"/>
+      <xs:enumeration value="CD4+ T cell supernatant"/>
+      <xs:enumeration value="lymphocyte"/>
+      <xs:enumeration value="dendrites"/>
+      <xs:enumeration value="activated CD4+ T cells"/>
+      <xs:enumeration value="resting CD4+ T cells"/>
+      <xs:enumeration value="liver"/>
+      <xs:enumeration value="blood plasma; whole saliva"/>
+      <xs:enumeration value="prostatic secretion"/>
+      <xs:enumeration value="brain"/>
+      <xs:enumeration value="spinal cord"/>
+      <xs:enumeration value="cervix"/>
+      <xs:enumeration value="plasma"/>
+      <xs:enumeration value="colon"/>
+      <xs:enumeration value="blood plasma"/>
+      <xs:enumeration value="peripheral blood"/>
+      <xs:enumeration value="CSF"/>
+      <xs:enumeration value="lymphoma"/>
+      <xs:enumeration value="caudate region of brain"/>
+      <xs:enumeration value="seminal plasma"/>
+      <xs:enumeration value="whole blood"/>
+      <xs:enumeration value="kidney"/>
+      <xs:enumeration value="monocyte"/>
+      <xs:enumeration value="PBMC"/>
+      <xs:enumeration value="whole saliva"/>
+      <xs:enumeration value="cerebrospinal fluid (CSF)"/>
+      <xs:enumeration value="stored Stump-tailed macaque tissues (SIVSTM)"/>
+      <xs:enumeration value="urethra"/>
+      <xs:enumeration value="breast milk"/>
+      <xs:enumeration value="cerebrospinal fluid"/>
+      <xs:enumeration value="Epidermis"/>
+      <xs:enumeration value="vagina"/>
+      <xs:enumeration value="choroid plexus"/>
+      <xs:enumeration value="spleen"/>
+      <xs:enumeration value="lymph node"/>
+      <xs:enumeration value="urine"/>
+      <xs:enumeration value="sigmoidum"/>
+      <xs:enumeration value="subclavicular lymph node"/>
+      <xs:enumeration value="deep white matter of brain"/>
+      <xs:enumeration value="saliva"/>
+      <xs:enumeration value="CD4+ T cells"/>
+      <xs:enumeration value="vas deferens"/>
+      <xs:enumeration value="Brain"/>
+      <xs:enumeration value="vaginal cells"/>
+      <xs:enumeration value="meninges"/>
+      <xs:enumeration value="rectum"/>
+      <xs:enumeration value="esophagus"/>
+      <xs:enumeration value="CD14+ monocytes"/>
+      <xs:enumeration value="epididymis"/>
+      <xs:enumeration value="seminal fluid"/>
+      <xs:enumeration value="vaginal secretion"/>
+      <xs:enumeration value="cervicovaginal secretions"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="seminal cells"/>
+      <xs:enumeration value="gastric aspirate"/>
+      <xs:enumeration value="stomach"/>
+      <xs:enumeration value="bone marrow"/>
+      <xs:enumeration value="vaginal fluid"/>
+      <xs:enumeration value="semen"/>
+      <xs:enumeration value="supernatant"/>
+      <xs:enumeration value="seminal vesicle"/>
+      <xs:enumeration value="feces"/>
+      <xs:enumeration value="prostate"/>
+      <xs:enumeration value="lung"/>
+      <xs:enumeration value="blood"/>
+      <xs:enumeration value="testis"/>
+      <xs:enumeration value="serum"/>
+      <xs:enumeration value="thymus"/>
+      <xs:enumeration value="duodenum"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_sample_yearType">
+    <xs:restriction base="xs:gYear"/>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_sample_year_upperType">
+    <xs:restriction base="xs:gYear"/>
+  </xs:simpleType>
+  <xs:simpleType name="coreceptorType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="CCR1"/>
+      <xs:enumeration value="CCR2B"/>
+      <xs:enumeration value="CCR2b"/>
+      <xs:enumeration value="CCR3"/>
+      <xs:enumeration value="CCR4"/>
+      <xs:enumeration value="CCR5"/>
+      <xs:enumeration value="CCR8"/>
+      <xs:enumeration value="CSCR4"/>
+      <xs:enumeration value="CXCR4"/>
+      <xs:enumeration value="ChemR23"/>
+      <xs:enumeration value="GPR1"/>
+      <xs:enumeration value="GPR15"/>
+      <xs:enumeration value="STRL33"/>
+      <xs:enumeration value="UNK"/>
+      <xs:enumeration value="US28"/>
+      <xs:enumeration value="V28"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_second_receptorListType">
+    <xs:list itemType="tns:coreceptorType"/>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_second_receptorType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="UNK"/>
+      <xs:enumeration value="CXCR4 GPR15"/>
+      <xs:enumeration value="CCR5 CCR1 CCR2b CCR3 CCR4 CXCR4"/>
+      <xs:enumeration value="CXCR4 CCR8 V28 CCR3 GPR15 STRL33"/>
+      <xs:enumeration value="CCR5 CCR3"/>
+      <xs:enumeration value="CCR5 CXCR4"/>
+      <xs:enumeration value="CCR3 CCR5 CXCR4"/>
+      <xs:enumeration value="CCR5 CCR3 GPR15"/>
+      <xs:enumeration value="CXCR4 V28"/>
+      <xs:enumeration value="CCR5 CCR8"/>
+      <xs:enumeration value="CCR5 CXCR4 CCR3 CCR2b CCR8 V28"/>
+      <xs:enumeration value="CCR3 CCR5"/>
+      <xs:enumeration value="CXCR4 CCR3"/>
+      <xs:enumeration value="CCR2b CCR3 GPR15"/>
+      <xs:enumeration value="CXCR4"/>
+      <xs:enumeration value="CCR5 CXCR4 CCR3"/>
+      <xs:enumeration value="CCR5 CXCR4 STRL33 GPR15"/>
+      <xs:enumeration value="CCR5 CCR3 GPR15 STRL33 CCR8"/>
+      <xs:enumeration value="CCR5"/>
+      <xs:enumeration value="CCR5 STRL33"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="CCR3 CXCR4 CCR5"/>
+      <xs:enumeration value="CCR5 CXCR4 CCR1 CCR2b CCR3"/>
+      <xs:enumeration value="CCR5 CXCR4 CCR3 CCR1"/>
+      <xs:enumeration value="CCR5 GPR15"/>
+      <xs:enumeration value="CCR5 STRL33 GPR1 GPR15"/>
+      <xs:enumeration value="CCR5 CXCR4 CCR4"/>
+      <xs:enumeration value="CCR5 GPR15 STRL33"/>
+      <xs:enumeration value="CCR5 CCR2b CCR3 CXCR4"/>
+      <xs:enumeration value="CCR5 CXCR4 CCR1 CCR2b CCR3 CCR4"/>
+      <xs:enumeration value="CCR5 CCR3 CCR8"/>
+      <xs:enumeration value="CCR5 CCR3 STRL33"/>
+      <xs:enumeration value="CCR5 CSCR4"/>
+      <xs:enumeration value="CCR2B"/>
+      <xs:enumeration value="CSCR4"/>
+      <xs:enumeration value="CCR5 CXCR4 CCR1 CCR2B CCR3"/>
+      <xs:enumeration value="CCR3 CXCR4"/>
+      <xs:enumeration value="CCR5 CXCR4 CCR3 US28 V28"/>
+      <xs:enumeration value="CCR5 CXCR4 CCR8 V28"/>
+      <xs:enumeration value="CXCR4 CCR3 STRL33"/>
+      <xs:enumeration value="CCR5 STRL33 GPR15 GPR1 ChemR23"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_sequencing_methodType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="direct"/>
+      <xs:enumeration value="clone"/>
+      <xs:enumeration value="NULL"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_subtypeType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="FGHJU"/>
+      <xs:enumeration value="BC"/>
+      <xs:enumeration value="F2KU"/>
+      <xs:enumeration value="JU"/>
+      <xs:enumeration value="JKU"/>
+      <xs:enumeration value="ACH"/>
+      <xs:enumeration value="11_cpx"/>
+      <xs:enumeration value="19A1"/>
+      <xs:enumeration value="0102D"/>
+      <xs:enumeration value="ERY"/>
+      <xs:enumeration value="DHU"/>
+      <xs:enumeration value="BCD"/>
+      <xs:enumeration value="0107"/>
+      <xs:enumeration value="BF1"/>
+      <xs:enumeration value="37_cpx"/>
+      <xs:enumeration value="0218"/>
+      <xs:enumeration value="0602"/>
+      <xs:enumeration value="CK"/>
+      <xs:enumeration value="M"/>
+      <xs:enumeration value="BF"/>
+      <xs:enumeration value="0108"/>
+      <xs:enumeration value="AH"/>
+      <xs:enumeration value="A1DU"/>
+      <xs:enumeration value="A1DHK"/>
+      <xs:enumeration value="DRL"/>
+      <xs:enumeration value="A1A2D"/>
+      <xs:enumeration value="18G"/>
+      <xs:enumeration value="KU"/>
+      <xs:enumeration value="06U"/>
+      <xs:enumeration value="AE"/>
+      <xs:enumeration value="42_BF"/>
+      <xs:enumeration value="17_BF"/>
+      <xs:enumeration value="ADG"/>
+      <xs:enumeration value="A1"/>
+      <xs:enumeration value="18B"/>
+      <xs:enumeration value="14_BG"/>
+      <xs:enumeration value="09G"/>
+      <xs:enumeration value="BCU"/>
+      <xs:enumeration value="0211"/>
+      <xs:enumeration value="16_A2D"/>
+      <xs:enumeration value="GSN"/>
+      <xs:enumeration value="1113"/>
+      <xs:enumeration value="AF"/>
+      <xs:enumeration value="B"/>
+      <xs:enumeration value="34_01B"/>
+      <xs:enumeration value="H"/>
+      <xs:enumeration value="02A"/>
+      <xs:enumeration value="A1BD"/>
+      <xs:enumeration value="1819"/>
+      <xs:enumeration value="04A1"/>
+      <xs:enumeration value="U"/>
+      <xs:enumeration value="WRC"/>
+      <xs:enumeration value="MON"/>
+      <xs:enumeration value="F"/>
+      <xs:enumeration value="A1GHU"/>
+      <xs:enumeration value="02A1C"/>
+      <xs:enumeration value="AGJ"/>
+      <xs:enumeration value="01G"/>
+      <xs:enumeration value="02G"/>
+      <xs:enumeration value="06G"/>
+      <xs:enumeration value="01AF2U"/>
+      <xs:enumeration value="GK"/>
+      <xs:enumeration value="0209"/>
+      <xs:enumeration value="0102AG"/>
+      <xs:enumeration value="A1C"/>
+      <xs:enumeration value="31_BC"/>
+      <xs:enumeration value="28_BF"/>
+      <xs:enumeration value="02_AG"/>
+      <xs:enumeration value="11AG"/>
+      <xs:enumeration value="MAC"/>
+      <xs:enumeration value="02GK"/>
+      <xs:enumeration value="HU"/>
+      <xs:enumeration value="08_BC"/>
+      <xs:enumeration value="STM"/>
+      <xs:enumeration value="A2G"/>
+      <xs:enumeration value="AF2"/>
+      <xs:enumeration value="CGU"/>
+      <xs:enumeration value="GOR"/>
+      <xs:enumeration value="F1GU"/>
+      <xs:enumeration value="DK"/>
+      <xs:enumeration value="15_01B"/>
+      <xs:enumeration value="CF1U"/>
+      <xs:enumeration value="03A"/>
+      <xs:enumeration value="0219"/>
+      <xs:enumeration value="A1CD"/>
+      <xs:enumeration value="A1DG"/>
+      <xs:enumeration value="12_BF"/>
+      <xs:enumeration value="02K"/>
+      <xs:enumeration value="AB"/>
+      <xs:enumeration value="F2K"/>
+      <xs:enumeration value="DU"/>
+      <xs:enumeration value="DF1"/>
+      <xs:enumeration value="A1G"/>
+      <xs:enumeration value="AU"/>
+      <xs:enumeration value="0102"/>
+      <xs:enumeration value="ACFG"/>
+      <xs:enumeration value="0708"/>
+      <xs:enumeration value="FKU"/>
+      <xs:enumeration value="A1GJ"/>
+      <xs:enumeration value="13U"/>
+      <xs:enumeration value="F2"/>
+      <xs:enumeration value="AGHU"/>
+      <xs:enumeration value="0206A1"/>
+      <xs:enumeration value="AG"/>
+      <xs:enumeration value="01DU"/>
+      <xs:enumeration value="02A1A2"/>
+      <xs:enumeration value="F1UB"/>
+      <xs:enumeration value="AGK"/>
+      <xs:enumeration value="ABDU"/>
+      <xs:enumeration value="05_DF"/>
+      <xs:enumeration value="A1HU"/>
+      <xs:enumeration value="A2D"/>
+      <xs:enumeration value="ACDJ"/>
+      <xs:enumeration value="0609"/>
+      <xs:enumeration value="A2"/>
+      <xs:enumeration value="22_01A1"/>
+      <xs:enumeration value="MND-2"/>
+      <xs:enumeration value="A1F2"/>
+      <xs:enumeration value="A1H"/>
+      <xs:enumeration value="03_AB"/>
+      <xs:enumeration value="02D"/>
+      <xs:enumeration value="0109"/>
+      <xs:enumeration value="0102DF"/>
+      <xs:enumeration value="ACD"/>
+      <xs:enumeration value="18_cpx"/>
+      <xs:enumeration value="01B"/>
+      <xs:enumeration value="GH"/>
+      <xs:enumeration value="CHU"/>
+      <xs:enumeration value="TAL"/>
+      <xs:enumeration value="G"/>
+      <xs:enumeration value="F1"/>
+      <xs:enumeration value="BU"/>
+      <xs:enumeration value="GHJ"/>
+      <xs:enumeration value="A1CG"/>
+      <xs:enumeration value="32_06A1"/>
+      <xs:enumeration value="0102A"/>
+      <xs:enumeration value="GKU"/>
+      <xs:enumeration value="02H"/>
+      <xs:enumeration value="DF"/>
+      <xs:enumeration value="A1D"/>
+      <xs:enumeration value="BK"/>
+      <xs:enumeration value="HC"/>
+      <xs:enumeration value="TAN"/>
+      <xs:enumeration value="02F2"/>
+      <xs:enumeration value="02O"/>
+      <xs:enumeration value="AC"/>
+      <xs:enumeration value="SYK"/>
+      <xs:enumeration value="AGKU"/>
+      <xs:enumeration value="1819B"/>
+      <xs:enumeration value="CD"/>
+      <xs:enumeration value="AO"/>
+      <xs:enumeration value="ABD"/>
+      <xs:enumeration value="VER"/>
+      <xs:enumeration value="39_BF"/>
+      <xs:enumeration value="LST"/>
+      <xs:enumeration value="J"/>
+      <xs:enumeration value="09A1KU"/>
+      <xs:enumeration value="DEN"/>
+      <xs:enumeration value="GJ"/>
+      <xs:enumeration value="RCM"/>
+      <xs:enumeration value="AGU"/>
+      <xs:enumeration value="GHK"/>
+      <xs:enumeration value="D"/>
+      <xs:enumeration value="GRV"/>
+      <xs:enumeration value="07_BC"/>
+      <xs:enumeration value="02DO"/>
+      <xs:enumeration value="COL"/>
+      <xs:enumeration value="11A1"/>
+      <xs:enumeration value="01A1G"/>
+      <xs:enumeration value="09U"/>
+      <xs:enumeration value="19U"/>
+      <xs:enumeration value="AJ"/>
+      <xs:enumeration value="DG"/>
+      <xs:enumeration value="C"/>
+      <xs:enumeration value="GJO"/>
+      <xs:enumeration value="BLU"/>
+      <xs:enumeration value="0103"/>
+      <xs:enumeration value="A1A2"/>
+      <xs:enumeration value="18D"/>
+      <xs:enumeration value="13_cpx"/>
+      <xs:enumeration value="BAB"/>
+      <xs:enumeration value="MUS-2"/>
+      <xs:enumeration value="DGU"/>
+      <xs:enumeration value="19B"/>
+      <xs:enumeration value="DGC"/>
+      <xs:enumeration value="02C"/>
+      <xs:enumeration value="A1DK"/>
+      <xs:enumeration value="N"/>
+      <xs:enumeration value="01ADF2"/>
+      <xs:enumeration value="GU"/>
+      <xs:enumeration value="A2U"/>
+      <xs:enumeration value="WCM"/>
+      <xs:enumeration value="AD"/>
+      <xs:enumeration value="06A1"/>
+      <xs:enumeration value="0225"/>
+      <xs:enumeration value="0206"/>
+      <xs:enumeration value="DEB"/>
+      <xs:enumeration value="SUN"/>
+      <xs:enumeration value="BCF1"/>
+      <xs:enumeration value="01U"/>
+      <xs:enumeration value="04_cpx"/>
+      <xs:enumeration value="A3"/>
+      <xs:enumeration value="A2F1"/>
+      <xs:enumeration value="02A1"/>
+      <xs:enumeration value="AF2G"/>
+      <xs:enumeration value="01_AE"/>
+      <xs:enumeration value="35_AD"/>
+      <xs:enumeration value="CGJ"/>
+      <xs:enumeration value="09A"/>
+      <xs:enumeration value="A2C"/>
+      <xs:enumeration value="DGH"/>
+      <xs:enumeration value="FK"/>
+      <xs:enumeration value="36_cpx"/>
+      <xs:enumeration value="09A1"/>
+      <xs:enumeration value="BH"/>
+      <xs:enumeration value="ADK"/>
+      <xs:enumeration value="09D"/>
+      <xs:enumeration value="AGH"/>
+      <xs:enumeration value="09_cpx"/>
+      <xs:enumeration value="A1B"/>
+      <xs:enumeration value="A2B"/>
+      <xs:enumeration value="01A1"/>
+      <xs:enumeration value="SMM"/>
+      <xs:enumeration value="K"/>
+      <xs:enumeration value="HJ"/>
+      <xs:enumeration value="02HU"/>
+      <xs:enumeration value="A1F1"/>
+      <xs:enumeration value="24_BG"/>
+      <xs:enumeration value="19_cpx"/>
+      <xs:enumeration value="01BC"/>
+      <xs:enumeration value="ADU"/>
+      <xs:enumeration value="27_cpx"/>
+      <xs:enumeration value="MND-1"/>
+      <xs:enumeration value="01C"/>
+      <xs:enumeration value="BCG"/>
+      <xs:enumeration value="MUS-1"/>
+      <xs:enumeration value="AJK"/>
+      <xs:enumeration value="40_BF"/>
+      <xs:enumeration value="33_01B"/>
+      <xs:enumeration value="A1BC"/>
+      <xs:enumeration value="DH"/>
+      <xs:enumeration value="FU"/>
+      <xs:enumeration value="A1CDGKU"/>
+      <xs:enumeration value="01GHJKU"/>
+      <xs:enumeration value="CPZ"/>
+      <xs:enumeration value="ADGU"/>
+      <xs:enumeration value="AGJU"/>
+      <xs:enumeration value="PAT"/>
+      <xs:enumeration value="23A1"/>
+      <xs:enumeration value="F1U"/>
+      <xs:enumeration value="18U"/>
+      <xs:enumeration value="CU"/>
+      <xs:enumeration value="25_cpx"/>
+      <xs:enumeration value="MNE"/>
+      <xs:enumeration value="A1GU"/>
+      <xs:enumeration value="AKU"/>
+      <xs:enumeration value="BG"/>
+      <xs:enumeration value="A1CDG"/>
+      <xs:enumeration value="F1G"/>
+      <xs:enumeration value="02B"/>
+      <xs:enumeration value="F1F2"/>
+      <xs:enumeration value="07B"/>
+      <xs:enumeration value="BKM"/>
+      <xs:enumeration value="SAB"/>
+      <xs:enumeration value="A2CD"/>
+      <xs:enumeration value="NULL"/>
+      <xs:enumeration value="02U"/>
+      <xs:enumeration value="A1U"/>
+      <xs:enumeration value="AHJU"/>
+      <xs:enumeration value="20_BG"/>
+      <xs:enumeration value="10_CD"/>
+      <xs:enumeration value="21_A2D"/>
+      <xs:enumeration value="ASC"/>
+      <xs:enumeration value="CJU"/>
+      <xs:enumeration value="10A1"/>
+      <xs:enumeration value="OLC"/>
+      <xs:enumeration value="A"/>
+      <xs:enumeration value="23_BG"/>
+      <xs:enumeration value="02A1U"/>
+      <xs:enumeration value="O"/>
+      <xs:enumeration value="02F"/>
+      <xs:enumeration value="29_BF"/>
+      <xs:enumeration value="06_cpx"/>
+      <xs:enumeration value="AFG"/>
+      <xs:enumeration value="AF1"/>
+      <xs:enumeration value="CF1"/>
+      <xs:enumeration value="BDU"/>
+      <xs:enumeration value="BD"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ssam_viralloadType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="sef_descriptionType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="sef_entryfeaturetypeType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="DEFINITION"/>
+      <xs:enumeration value="BASE COUNT"/>
+      <xs:enumeration value="REFERENCE"/>
+      <xs:enumeration value="KEYWORDS"/>
+      <xs:enumeration value="ORGANISM"/>
+      <xs:enumeration value="VERSION"/>
+      <xs:enumeration value="SOURCE"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="sf_featuretypeType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:enumeration value="gene"/>
+      <xs:enumeration value="standard_name"/>
+      <xs:enumeration value="map"/>
+      <xs:enumeration value="sub_strain"/>
+      <xs:enumeration value="isolation_source"/>
+      <xs:enumeration value="rpt_family"/>
+      <xs:enumeration value="collected_by"/>
+      <xs:enumeration value="rpt_type"/>
+      <xs:enumeration value="transl_table"/>
+      <xs:enumeration value="rearranged"/>
+      <xs:enumeration value="mod_base"/>
+      <xs:enumeration value="locus_tag"/>
+      <xs:enumeration value="number"/>
+      <xs:enumeration value="function"/>
+      <xs:enumeration value="collection_date"/>
+      <xs:enumeration value="rpt_unit_range"/>
+      <xs:enumeration value="serotype"/>
+      <xs:enumeration value="organism"/>
+      <xs:enumeration value="variety"/>
+      <xs:enumeration value="country"/>
+      <xs:enumeration value="lab_host"/>
+      <xs:enumeration value="cell_type"/>
+      <xs:enumeration value="EC_number"/>
+      <xs:enumeration value="mol_type"/>
+      <xs:enumeration value="experiment"/>
+      <xs:enumeration value="gene_synonym"/>
+      <xs:enumeration value="frequency"/>
+      <xs:enumeration value="ribosomal_slippage"/>
+      <xs:enumeration value="clone"/>
+      <xs:enumeration value="codon_start"/>
+      <xs:enumeration value="inference"/>
+      <xs:enumeration value="translation"/>
+      <xs:enumeration value="transl_except"/>
+      <xs:enumeration value="citation"/>
+      <xs:enumeration value="bound_moiety"/>
+      <xs:enumeration value="cell_line"/>
+      <xs:enumeration value="germline"/>
+      <xs:enumeration value="protein_id"/>
+      <xs:enumeration value="clone_lib"/>
+      <xs:enumeration value="db_xref"/>
+      <xs:enumeration value="PCR_primers"/>
+      <xs:enumeration value="replace"/>
+      <xs:enumeration value="strain"/>
+      <xs:enumeration value="proviral"/>
+      <xs:enumeration value="label"/>
+      <xs:enumeration value="haplotype"/>
+      <xs:enumeration value="estimated_length"/>
+      <xs:enumeration value="focus"/>
+      <xs:enumeration value="tissue_lib"/>
+      <xs:enumeration value="dev_stage"/>
+      <xs:enumeration value="specimen_voucher"/>
+      <xs:enumeration value="pseudo"/>
+      <xs:enumeration value="isolate"/>
+      <xs:enumeration value="chromosome"/>
+      <xs:enumeration value="allele"/>
+      <xs:enumeration value="pop_variant"/>
+      <xs:enumeration value="tissue_type"/>
+      <xs:enumeration value="sex"/>
+      <xs:enumeration value="host"/>
+      <xs:enumeration value="note"/>
+      <xs:enumeration value="sub_species"/>
+      <xs:enumeration value="exception"/>
+      <xs:enumeration value="phenotype"/>
+      <xs:enumeration value="product"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="sf_featurevalueType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="sm_startType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="sm_stopType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>
