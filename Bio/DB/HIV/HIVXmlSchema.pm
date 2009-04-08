@@ -76,7 +76,7 @@ use HIVXmlSchemaHelper; # fully qualify the ns when necessary
 use XML::LibXML;
 use Log::Report;
 
-=head2 Bio::DB::HIV::HIVQuery::make_xml_from_query
+=head2 Bio::DB::Query::HIVQuery::make_xml_from_query
 
  Title   : make_XML_from_query
  Usage   : $q->make_XML_from_query()
