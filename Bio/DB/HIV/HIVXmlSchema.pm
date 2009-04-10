@@ -72,7 +72,7 @@ Internal methods are usually preceded with a _
 
 package Bio::DB::Query::HIVQuery;
 use strict;
-use HIVXmlSchemaHelper; # fully qualify the ns when necessary
+use Bio::DB::HIV::HIVXmlSchemaHelper; 
 use XML::LibXML;
 use Log::Report;
 
@@ -109,7 +109,7 @@ sub make_xml_with_ids {
     my $self = shift;
     my @ids = @_;
     my @hashes;
-    unless ($self->_run_option == 2) {
+    unless ($self->_run_level == 2) {
 	$self->warn("Method requires that query be run at level 2");
 	return undef;
     }
@@ -130,9 +130,8 @@ sub make_xml_with_ids {
 	    $guts = $wri->($doc, { 'annotHivqSeq' => [@hashes] })
 	};
 	if ($@) {
-	    $@->reportAll;
-	    exit(0);
 	    # handle XML::Compile::Schema error
+	    $self->throw($@->reportAll);
 	}
 	else {
 	    $doc->addChild($guts);
@@ -149,7 +148,7 @@ sub make_xml_with_ids {
 
 package Bio::DB::HIV;
 use strict;
-use HIVXmlSchemaHelper; # fully qualify the ns when necessary
+use Bio::DB::HIV::HIVXmlSchemaHelper; # fully qualify the ns when necessary
 use XML::LibXML::Reader;
 use XML::LibXML;
 use Bio::Phylo::Factory;
@@ -271,17 +270,27 @@ package Bio::DB::HIV::HIVXmlSchema;
 use strict;
 use constant HIVNS => 'http://fortinbras.us/HIVDBSchema/1.0';
 use constant NEXML => 'http://www.nexml.org/1.0';
-
+use File::Spec;
 use XML::LibXML;
 use XML::Compile;
 use XML::Compile::Util qw( SCHEMA2001 SCHEMA2001i pack_type );
 use Exporter;
+use vars qw( $XSDDIR );
 use base qw(XML::Compile::Schema Bio::Root::Root);
 
 BEGIN {
     our (@ISA, @EXPORT_OK);
     push @ISA, qw( Exporter );
-    @EXPORT_OK = qw( HIVNS NEXML );
+
+    for (@INC) {
+	$XSDDIR = File::Spec->catdir($_,"Bio/DB/HIV");
+	last if ( -d $XSDDIR );
+	undef $XSDDIR;
+    }
+
+    @EXPORT_OK = qw( HIVNS NEXML $XSDDIR );
+
+
 }
 
 our @schemata = qw(
@@ -311,7 +320,7 @@ sub new{
    my ($class,@args) = @_;
    my ($schema_dir,$XSC_args) = $class->SUPER::_rearrange([qw(SCHEMADIR,XSCARGS)], @args);
    my @XSDDIRs = ($schema_dir and ref($schema_dir) eq 'ARRAY') ? @$schema_dir : ($schema_dir);
-   my @XSDDIRS = (@INC, $schema_dir);
+   my @XSDDIRS = (@INC, $XSDDIR, $schema_dir);
    my $self = $class->SUPER::new([SCHEMA2001,SCHEMA2001i, @schemata],
 				 'schema_dirs' => [@XSDDIRS],
 				 @$XSC_args);
