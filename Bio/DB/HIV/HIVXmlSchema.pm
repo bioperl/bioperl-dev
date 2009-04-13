@@ -47,7 +47,8 @@ L<svn://code.open-bio.org/bioperl/bioperl-live/trunk/>
 =head1 IMPLEMENTATION NOTES
 
 These routines depend on the NeXML parser/writers in the C<Bio::Phylo> package
-by Rutger Vos. It can be obtained at L<http://phylo.sourceforge.net>.
+by Rutger Vos. It can be obtained at 
+L<https://nexml.svn.sourceforge.net/svnroot/nexml/trunk/nexml/perl/>.
 
 XML manipulations here currently employ the C<XML::LibXML> package of Petr Pajas and C<XML::Compile> and C<XML::Compile::Schema> of Mark Overbeek. These require the presence of C<libxml2> libraries, which can be obtained for many platforms 
 at L<http://xmlsoft.org/index.html>
