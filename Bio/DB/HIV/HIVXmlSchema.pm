@@ -155,6 +155,147 @@ use XML::LibXML;
 use Bio::Phylo::Factory;
 use constant NEXML => 'http://www.nexml.org/1.0';
 
+=head2 make_nexml_from_query_s
+
+ Title   : make_nexml_from_query_s
+ Usage   : $db->make_nexml_from_query_s( $hiv_query_object )
+ Function: Create a NeXML-compliant XML document containing 
+           sequences (not annotations; see 
+           Bio::DB::Query::HIV::make_XML_with_ids()
+           for that) associated with a Bio::DB::Query::HIVQuery
+           object
+ Example :
+ Returns : NeXML-compliant XML document as string
+ Args    : Bio::DB::Query::HIVQuery object; [optional] array of
+           LANL sequence ids.
+ Notes   : Requires Rutger Vos' external package Bio::Phylo.
+           This version of make_nexml_from_query is implemented
+           as a "write stream" from Bio::Phylo-produced NeXML
+           into a DOM object under XML::LibXML. Each Bio::Phylo
+           taxon and datum object produced from each sequence
+           read from the Bio::SeqIO stream is converted into
+           NeXML separately, converted to XML::LibXML
+           elements, and added directly under the DOM nodes
+           tagged 'otus' and 'matrix' respectively. This may
+           avoid memory problems I faced when building the 
+           entire NEXUS representation first in Bio::Phylo, 
+           then writing to a XML::LibXML document.
+
+=cut
+
+sub make_nexml_from_query_s {
+   my ($self,@args) = @_;
+   my ($q)  = @args;
+   
+   my $bpf       = Bio::Phylo::Factory->new;
+   my $seqio     = $self->get_Stream_by_query( $q );
+   my $dat_obj   = $bpf->create_datum();
+   my $taxon_obj = $bpf->create_taxon();
+
+   my ($mx, $taxa, $alphabet);
+   my ($xrdr, $dom, $otus_elt, $characters_elt, $matrix_elt);
+
+   my $doc = XML::LibXML::Document->new();
+
+   # create the DOM, with NexML doc header
+   $dom = XML::LibXML::Element->new('nexml');
+   $dom->setNamespace(NEXML, 'nex');
+   $dom->setAttribute('version', '0.8');
+   $dom->setAttribute('generator', 'Bio::DB::HIVXmlSchema');
+   $dom->setAttribute('xmlns', NEXML);
+
+   # let's try making empty matrix and taxa block nodes within the dom
+   # to be accessed on the fly:
+
+   my $seq1 = $seqio->next_seq; #peek
+   $alphabet = $seq1->alphabet;
+   $mx = $bpf->create_matrix( -type=>$seq1->alphabet ); 
+   $taxa = $bpf->create_taxa();       
+   # create the linkage
+   $mx->set_taxa($taxa);
+   
+   # create 'otus' and 'characters' elements in the DOM, and get
+   # refs to the meaty bits
+   $xrdr = XML::LibXML::Reader->new( string => join('', '<fake>',
+						    $taxa->to_xml,
+						    $mx->to_xml(-compact => 1),
+				     '</fake>'));
+   $xrdr->read;
+   # the (1) argument gets a deep copy of the node...
+   ( $otus_elt, $characters_elt ) = $xrdr->copyCurrentNode(1)->childNodes;
+   ($matrix_elt) = $characters_elt->getChildrenByTagName('matrix');
+   
+   # add to the DOM
+   $dom->addChild($otus_elt);
+   $dom->addChild($characters_elt);
+
+
+   while ( my $seq = $seq1 || $seqio->next_seq ) {
+       undef $seq1;
+
+       $self->throw( "Mixed data NeXML not currently implemented" ) if
+	       $seq->alphabet ne $alphabet;
+
+       my ($taxon, $datum);
+       #create elements...
+       $taxon = $taxon_obj->new( -name => $seq->id, 
+				 -desc => $seq->annotation->get_value('Special','accession'));
+
+       $datum = $dat_obj->new_from_bioperl($seq);
+       #create the link
+       $taxon->set_data($datum);
+       # write the new elements into the DOM...
+
+# no longer using the B:P native facility for insertion
+#       $taxa->insert( $taxon );
+#       $mx->insert( $datum);
+
+       $xrdr = XML::LibXML::Reader->new( string => 
+					 join('', '<fake>',
+					      $taxon->to_xml,
+					      $datum->to_xml(-compact => 1),
+					      '</fake>'));
+       $xrdr->read;
+       my ($otu_elt, $row_elt) = $xrdr->copyCurrentNode(1)->childNodes;
+
+       # put the new row in the matrix
+       $matrix_elt->addChild($row_elt);
+
+       # create the otu element, adding the LANL id and GenBank accn.
+       # as 'dict' elements...
+       my ($lanlid, $tmp, $lanlid_elt, $gbaccn_elt);
+       $lanlid_elt = XML::LibXML::Element->new('dict');
+       $lanlid_elt->setAttribute('id', "dict$$lanlid_elt"); # uniquify
+
+       $lanlid = $otu_elt->getAttribute('label');
+       $tmp = XML::LibXML::Element->new('string');
+       $tmp->setAttribute('id', "LANLSeqId_$$lanlid_elt");
+       $tmp->addChild( XML::LibXML::Text->new($lanlid ) );
+       $lanlid_elt->addChild($tmp);
+       
+       $gbaccn_elt =  XML::LibXML::Element->new('dict');
+       $gbaccn_elt->setAttribute('id', "dict$$gbaccn_elt");
+
+       $tmp = XML::LibXML::Element->new('string');
+       $tmp->setAttribute('id', "GenBankAccn_$$gbaccn_elt");
+       $tmp->addChild( XML::LibXML::Text->new($q->get_accessions_by_id($lanlid)));
+       $gbaccn_elt->addChild($tmp);
+
+       $otu_elt->addChild($lanlid_elt);
+       $otu_elt->addChild($gbaccn_elt);
+
+       # put the otu elt in the otus elt
+       $otus_elt->addChild($otu_elt);
+
+       1;
+   }
+
+   $doc->setDocumentElement($dom);
+
+   return $doc->toString(1);
+
+}
+
 =head2 make_nexml_from_query
 
  Title   : make_nexml_from_query
