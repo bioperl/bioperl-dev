@@ -1,4 +1,4 @@
-#$Id: MapTileUtils.pm 433 2009-05-19 19:19:38Z maj $
+#$Id$
 package Bio::Search::Tiling::MapTileUtils;
 use strict;
 use warnings;

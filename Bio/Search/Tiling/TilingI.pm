@@ -1,4 +1,4 @@
-# $Id: TilingI.pm 432 2009-05-19 19:16:03Z maj $
+# $Id$
 #
 # BioPerl module for Bio::Search::Tiling::TilingI
 #

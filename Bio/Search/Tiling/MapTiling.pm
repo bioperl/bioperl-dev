@@ -1,4 +1,4 @@
-# $Id: MapTiling.pm 433 2009-05-19 19:19:38Z maj $
+# $Id$
 #
 # BioPerl module for Bio::Search::Tiling::MapTiling
 #
