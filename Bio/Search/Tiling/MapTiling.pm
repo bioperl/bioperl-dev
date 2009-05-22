@@ -104,8 +104,34 @@ use Bio::Root::Root;
 use Bio::Search::Tiling::TilingI;
 use Bio::Search::Tiling::MapTileUtils;
 
+# use base qw(Bio::Root::Root Bio::Search::Tiling::TilingI);
 use base qw(Bio::Root::Root Bio::Search::Tiling::TilingI);
 
+# fast, clear, nasty, brutish and short.
+# for _allowable_filters()
+# covers BLAST, FAST families
+# FASTA is ambiguous (nt or aa) based on alg name only
+
+my $filter_lookup = {
+    'N'  => { 'q' => qr/[s]/,
+	      'h' => qr/[s]/ },
+    'P'  => { 'q' => '',
+	      'h' => '' },
+    'X'  => { 'q' => qr/[sf]/, 
+	      'h' => '' },
+    'Y'  => { 'q' => qr/[sf]/, 
+	      'h' => '' },
+    'TA' => { 'q' => '',
+	      'h' => qr/[sf]/ },
+    'TN' => { 'q' => '',
+	      'h' => qr/[sf]/ },
+    'TX' => { 'q' => qr/[sf]/, 
+	      'h' => qr/[sf]/ },
+    'TY' => { 'q' => qr/[sf]/,
+	      'h' => qr/[sf]/ } 
+};
+   
+	    
 =head2 CONSTRUCTOR
 
 =head2 new
@@ -126,52 +152,27 @@ sub new {
     my $class = shift;
     my @args = @_;
     my $self = $class->SUPER::new;
-    my($hit, $qstrand, $hstrand) = $self->_rearrange( [qw( HIT QSTRAND HSTRAND )],@args );
+    my($hit, $qstrand, $hstrand, $qframe, $hframe) = $self->_rearrange( [qw( HIT QSTRAND HSTRAND QFRAME HFRAME )],@args );
 
     $self->throw("HitI object required") unless $hit;
     $self->throw("Argument must be HitI object") unless ( ref $hit && $hit->isa('Bio::Search::Hit::HitI') );
+    $self->{hit} = $hit;
 
     my @hsps;
-    # filter if requested and allowed
-    if ($qstrand) {
-	# check value
-	if ( abs($qstrand) != 1 ) {
-	    $self->throw("Bad argument: QSTRAND must be either +1 or -1");
-	}
-	# check algorithm
-	if (!_involves_dna($hit,'query')) {
-	    $self->warn("Query does not involve a dna sequence; QSTRAND ignored");
-	    $qstrand = undef;
-	}
+    $self->_check_args($qstrand, $hstrand, $qframe, $hframe);
+    # filter if requested 
+    while (local $_ = $hit->next_hsp) { 
+	push @hsps, $_ if ( ( !$qstrand || ($qstrand == $_->strand('query'))) &&
+			    ( !$hstrand || ($hstrand == $_->strand('hit'))  ) &&
+			    ( !defined $qframe  || ($qframe  == $_->frame('query')) ) &&
+			    ( !defined $hframe  || ($hframe  == $_->frame('hit'))   ) );
     }
-    if ($hstrand) {
-	# check value
-	if ( abs($hstrand) != 1 ) {
-	    $self->throw("Bad argument: HSTRAND must be either +1 or -1");
-	}
-	# check algorithm
-	if (!_involves_dna($hit,'hit')) {
-	    $self->warn("Subject does not involve a dna sequence; HSTRAND ignored");
-	    $hstrand = undef;
-	}
-    }
-    if ( !($qstrand || $hstrand) ) {
-	while (local $_ = $hit->next_hsp) { push@hsps, $_; }
-    }
-    else { # filter
-	while (local $_ = $hit->next_hsp) { 
-	    push @hsps, $_ if ( ( !$qstrand || ($qstrand == $_->strand('query'))) &&
-				( !$hstrand || ($hstrand  == $_->strand('hit') )) );
-	}
-    }
-    
-
-    $self->warn("No HSPs present in hit") unless (@hsps);
+    $self->warn("No HSPs present in hit after filtering") unless (@hsps);
     $self->hsps(\@hsps);
-    $self->{hit} = $hit;
     $self->{"strand_query"} = $qstrand;
-    $self->{"strand_hit"} = $hstrand;
-    
+    $self->{"strand_hit"}   = $hstrand;
+    $self->{"frame_query"}  = $qframe;
+    $self->{"strand_hit"}   = $hframe;
     return $self;
 }
 
@@ -217,7 +218,7 @@ sub next_tiling{
 
 sub rewind_tilings{
     my $self = shift;
-    my $typen = shift;
+    my $type = shift;
     $type ||= 'query';
     $self->throw("Unknown type '$type'") unless grep(/^$type$/, qw( hit query subject ));
     $type = 'hit' if $type eq 'subject';
@@ -661,52 +662,79 @@ sub _tiling_iterator {
     return $self->{"_tiling_iterator_$type"};
 }
 
-=head2 _involves_dna
+=head2 _allowable_filters
     
- Title   : _involves_dna
- Usage   : _involves_dna($Bio_Search_Hit_HitI, $type)
- Function: Test if sequences of $type are/were dna sequences, 
+ Title   : _allowable_filters
+ Usage   : _allowable_filters($Bio_Search_Hit_HitI, $type)
+ Function: Return the HSP filters (strand, frame) allowed, 
            based on the reported algorithm
- Returns : True if hit involves dna sequence
+ Returns : String encoding allowable filters: 
+           s = strand, f = frame
+           Empty string if no filters allowed
+           undef if algorithm unrecognized
  Args    : A Bio::Search::Hit::HitI object,
            scalar $type, one of 'hit', 'subject', 'query';
            default is 'query'
 
 =cut
 
-sub _involves_dna {
+sub _allowable_filters {
     my $hit = shift;
     my $type = shift;
-    $type ||= 'query';
-    unless (grep /^$type$/, qw( hit query subject ) ) {
-	warn("Unknown type '$type'; returning false");
-	return 0;
+    $type ||= 'q';
+    unless (grep /^$type$/, qw( h q s ) ) {
+	warn("Unknown type '$type'; returning ''");
+	return '';
     }
-    $type = 'hit' if $type eq 'subject';
+    $type = 'h' if $type eq 's';
     my $alg = $hit->algorithm;
     
     for ($alg) {
+	/MEGABLAST/i && do {
+	    return qr/[s]/;
+	};
 	/(.?)BLAST(.?)/i && do {
-	    return 1 if ( ($2 =~ /N/i) );
-	    return 1 if (($2 =~ /X/i) || ($1 =~ /T/i) && ($type eq 'query'));
-	    last;
+	    return $$filter_lookup{$1.$2}{$type};
 	};
 	/(.?)FAST(.?)/ && do {
-	    return 1 if (( $2 =~ /A/i ) && ($type eq 'subject'));
-	    return 1 if (($1 =~ /T/i) && ($2 =~ /X/i) && ($type eq 'subject'));
-	    return 1 if (( $1 !~ /T/i ) && ($2 =~ /A/i) && 
-			 ($type eq 'query'));
-	    return 1 if (($2 =~ /X/i) && ($type eq 'query'));
-	    last;
+	    return $$filter_lookup{$1.$2}{$type};
 	};
 	do { # unrecognized
 	    last;
 	};
     }
-    return 0;
+    return;
 }
 
+=head2 _check_args
 
+ Title   : _check_args
+ Usage   : _check_args($qstrand, $hstrand, $qframe, $hframe)
+ Function: Throw if strand/frame parms out of bounds or set
+           uselessly for the underlying algorithm
+ Returns : True on success
+ Args    : requested filter arguments to constructor
+
+=cut
+no strict qw( refs );
+sub _check_args {
+    my ($self, $qstrand, $hstrand, $qframe, $hframe) = @_;
+    $self->throw("Strand filter arguments must be +1 or -1")
+	if ( $qstrand && !(abs($qstrand)==1) or
+	     $hstrand && !(abs($hstrand)==1) );
+    $self->throw("Frame filter arguments must be one of (-2,-1,0,1,2)")
+	if ( $qframe && !(grep {abs($qframe)} (0, 1, 2)) or
+	     $hframe && !(grep {abs($hframe)} (0, 1, 2)) );
+
+    for my $t qw( q h ) {
+	for my $f qw( strand frame ) {
+	    my $allowed = _allowable_filters($self->hit, $t);
+	    $self->throw("Filter '$t$f' is not useful for ".$self->hit->algorithm." results")
+		if ( eval "\$${t}${f}" && !($allowed && $f =~ /^$allowed/) );
+	}
+    }
+    return 1;
+}
 
 1;
     
