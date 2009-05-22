@@ -1,5 +1,5 @@
 #-*-perl-*-
-#$Id: t.pl 420 2009-05-18 04:11:18Z maj $
+#$Id$
 use strict;
 BEGIN {
     use lib '.';
