@@ -4,7 +4,7 @@ use strict;
 BEGIN {
     use lib '.';
     use Bio::Root::Test;
-    test_begin(-tests => 19);
+    test_begin(-tests => 1000 );
 }
 
 use_ok('Bio::Search::Tiling::MapTiling');
@@ -24,6 +24,7 @@ while ( $_ = $result->next_hit ) {
 }
 ok(my $test_hit = $_, 'got test hit');
 ok(my $tiling = Bio::Search::Tiling::MapTiling->new($test_hit), 'create tiling');
+
 
 # TilingI compliance
 
@@ -68,5 +69,52 @@ $tiling->rewind('subject');
 while ($tiling->next_tiling('subject')) {$sn++};
 is ($sn, 256, 'tiling iterator regression test(3, rewind)');
 
-# more to come
+# test the filters and filter checking
+# arrays are of the form
+# [$format, $file, \@living_filters, \@dying_filters]
+# @filters = ($qstrand, $hstrand, $qframe, $hframe)
+
+
+my %examples = (
+    'BLASTN' => ['blast', 'AE003528_ecoli.bls',
+		 [1,-1, undef, undef],
+		 [1,-1, 1, 1]],
+    'BLASTP' => ['blast', 'catalase-webblast.BLASTP',
+		 [undef, undef, undef, undef],
+		 [1, undef, undef, undef]],
+    'BLASTX' => ['blast', 'dnaEbsub_ecoli.wublastx',
+		 [1, undef, undef, undef],
+		 [undef, 1, undef, 1]],
+    'TBLASTN'=> ['blast', 'dnaEbsub_ecoli.wutblastn',
+		 [undef, 1, undef, 1],
+		 [1, undef, 1, undef]],
+    'TBLASTX'=> ['blast', 'dnaEbsub_ecoli.wutblastx',
+		 [1, 1, 0, 1],
+		 [1, -2, 3, 3]],
+    'FASTA'  => ['fasta', 'cysprot_vs_gadfly.FASTA',
+		 [undef, undef, undef, undef],
+		 [1, undef, undef, undef]],
+    'FASTXY'  => ['fasta', '5X_1895.FASTXY',
+		 [1, undef, undef, undef],
+		 [undef, 1, undef, 1]],
+    'MEGABLAST' => ['blast', '503384.MEGABLAST.2',
+		 [1,-1, undef, undef],
+		 [1,-1, 1, 1]],
+    'TFASTA' => undef,
+    'TFASTX' => undef
+    );
+
+foreach (keys %examples) {
+    next unless $examples{$_};
+    ok( my $blio = Bio::SearchIO->new( -format=>$examples{$_}[0],
+				       -file  =>test_input_file($examples{$_}[1])), 
+	"$_ data file");
+    my $hit = $blio->next_result->next_hit;
+    ok( $tiling = Bio::Search::Tiling::MapTiling->new($hit, @{$examples{$_}[2]}), "tiling object created for $_ hit");
+    dies_ok { Bio::Search::Tiling::MapTiling->new($hit, @{$examples{$_}[3]}) } "tiling object arg exception check for $_ hit";
+    1;
+}
+
+
+    
 
