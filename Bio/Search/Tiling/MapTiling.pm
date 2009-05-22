@@ -99,6 +99,7 @@ use strict;
 use warnings;
 
 # Object preamble - inherits from Bio::Root::Root
+use lib '../../..';
 
 use Bio::Root::Root;
 use Bio::Search::Tiling::TilingI;
@@ -159,7 +160,7 @@ sub new {
     $self->{hit} = $hit;
 
     my @hsps;
-    $self->_check_args($qstrand, $hstrand, $qframe, $hframe);
+    $self->_check_new_args($qstrand, $hstrand, $qframe, $hframe);
     # filter if requested 
     while (local $_ = $hit->next_hsp) { 
 	push @hsps, $_ if ( ( !$qstrand || ($qstrand == $_->strand('query'))) &&
@@ -197,10 +198,7 @@ sub new {
 sub next_tiling{
     my $self = shift;
     my $type = shift;
-    $type ||= 'query';
-    $self->throw("Unknown type '$type'") unless grep(/^$type$/, qw( hit query subject ));
-    $type = 'hit' if $type eq 'subject';
-    
+    $self->_check_type_arg(\$type);
     return $self->_tiling_iterator($type)->();
 }
 
@@ -219,10 +217,7 @@ sub next_tiling{
 sub rewind_tilings{
     my $self = shift;
     my $type = shift;
-    $type ||= 'query';
-    $self->throw("Unknown type '$type'") unless grep(/^$type$/, qw( hit query subject ));
-    $type = 'hit' if $type eq 'subject';
-    
+    $self->_check_type_arg(\$type);
     return $self->_tiling_iterator($type)->('REWIND');
 }
 
@@ -245,10 +240,8 @@ sub rewind_tilings{
 sub identities{
     my $self = shift;
     my ($type, $action) = @_;
-    $type ||= 'query';
+    $self->_check_type_arg(\$type);
     $action ||= 'exact';
-    $self->throw("Unknown type '$type'") unless grep(/^$type$/, qw( hit query subject ));
-    $type = 'hit' if $type eq 'subject';
     $self->throw("Unknown action '$action'") unless grep(/^$action$/, qw( exact est max ));    
     if (!defined $self->{"identities_${type}_${action}"}) {
 	$self->_calc_stats($type, $action);
@@ -273,10 +266,8 @@ sub identities{
 sub conserved{
     my $self = shift;
     my ($type, $action) = @_;
-    $type ||= 'query';
+    $self->_check_type_arg(\$type);
     $action ||= 'exact';
-    $self->throw("Unknown type '$type'") unless grep(/^$type$/, qw( hit query subject ));
-    $type = 'hit' if $type eq 'subject';
     $self->throw("Unknown action '$action'") unless grep(/^$action$/, qw( exact est max ));    
     if (!defined $self->{"conserved_${type}_${action}"}) {
 	$self->_calc_stats($type, $action);
@@ -302,10 +293,9 @@ sub conserved{
 sub length{
     my $self = shift;
     my ($type,$action) = @_;
-    $type ||= 'query';
+    $self->_check_type_arg(\$type);
+
     $action ||= 'exact';
-    $self->throw("Unknown type '$type'") unless grep(/^$type$/, qw( hit query subject ));
-    $type = 'hit' if $type eq 'subject';
     $self->throw("Unknown action '$action'") unless grep(/^$action$/, qw( exact est max ));    
     if (!defined $self->{"length_${type}_${action}"}) {
 	$self->_calc_stats($type, $action);
@@ -348,13 +338,66 @@ sub hit{
 sub coverage_map{
     my $self = shift;
     my $type = shift;
-    $type ||= 'query';
-    $self->throw("Unknown type '$type'") unless grep(/^$type$/, qw( hit query subject ));
-    $type = 'hit' if $type eq 'subject';
+    $self->_check_type_arg(\$type);
     if (!defined $self->{"coverage_map_$type"}) {
 	$self->_calc_coverage_map($type);
     }
     return @{$self->{"coverage_map_$type"}};
+}
+
+=head2 coverage_map_as_text
+
+ Title   : coverage_map_as_text
+ Usage   : $tiling->coverage_map_as_text($type, $legend_flag)
+ Function: Format a text-graphic representation of the
+           coverage map
+ Returns : an array of scalar strings, suitable for printing
+ Args    : $type: one of 'query', 'hit', 'subject'
+           $legend_flag: boolean; print a legend indicating
+            the actual interval coordinates for each component
+            interval and hsp (in the $type sequence context)
+ Example : print $tiling->coverage_map_as_text('query',1);
+
+=cut
+
+sub coverage_map_as_text{
+    my $self = shift;
+    my $type = shift;
+    my $legend_q = shift;
+    $self->_check_type_arg(\$type);
+    my @map = $self->coverage_map($type);
+    my @ret;
+    my @hsps = $self->hit->hsps;
+    my %hsps_i;
+    require Tie::RefHash;
+    tie %hsps_i, 'Tie::RefHash';
+    @hsps_i{@hsps} = (0..$#hsps);
+    my @mx;
+    foreach (0..$#map) {
+	my @hspx = ('') x @hsps;
+	my @these_hsps = @{$map[$_]->[1]};
+	@hspx[@hsps_i{@these_hsps}] = ('*') x @these_hsps;
+	$mx[$_] = \@hspx;
+    }
+    untie %hsps_i;
+
+    push @ret, "\tIntvl\n";
+    push @ret, "HSPS\t", join ("\t", (0..$#map)), "\n";
+    foreach my $h (0..$#hsps) {
+	push @ret, join("\t", $h, map { $mx[$_][$h] } (0..$#map)  ),"\n";
+    }
+    if ($legend_q) {
+	push @ret, "Interval legend\n";
+	foreach (0..$#map) {
+	    push @ret, sprintf("%d\t[%d, %d]\n", $_, @{$map[$_][0]});
+	}
+	push @ret, "HSP legend\n";
+	my @ints = get_intervals_from_hsps($type,@hsps);
+	foreach (0..$#hsps) {
+	    push @ret, sprintf("%d\t[%d, %d]\n", $_, @{$ints[$_]});
+	}
+    }
+    return @ret;
 }
 
 =head2 hsps
@@ -389,11 +432,29 @@ sub hsps{
 sub strand{
     my $self = shift;
     my $type = shift;
-    $type ||= 'query';
-    $self->throw("Unknown type '$type'") unless grep(/^$type$/, qw( hit query subject ));
-    $type = 'hit' if $type eq 'subject';
+    $self->_check_type_arg(\$type);
     $self->warn("Getter only") if @_; 
     return $self->{"strand_$type"};
+}
+
+=head2 frame
+
+ Title   : frame
+ Usage   : $tiling->frame
+ Function: Retrieve the frame value filtering the invocant's hit
+ Example : 
+ Returns : value of strand (-2, -1, 0, +1, +2)
+ Args    : 
+ Note    : getter only
+
+=cut
+
+sub frame{
+    my $self = shift;
+    my $type = shift;
+    $self->_check_type_arg(\$type);
+    $self->warn("Getter only") if @_; 
+    return $self->{"frame_$type"};
 }
 
 =head2 "PRIVATE" METHODS
@@ -423,9 +484,7 @@ sub strand{
 sub _calc_coverage_map {
     my $self = shift;
     my ($type) = @_;
-    $type ||= 'query';
-    $self->throw("Unknown type '$type'") unless grep( /^$type$/, qw( hit subject query ));
-    $type = 'hit' if $type eq 'subject';
+    $self->_check_type_arg(\$type);
 
     # obtain the [start, end] intervals for all hsps in the hit (relative
     # to the type)
@@ -497,10 +556,10 @@ sub _calc_coverage_map {
 sub _calc_stats {
     my $self = shift;
     my ($type, $action) = @_;
-    $type ||= 'query';
+    $self->_check_type_arg(\$type);
+
     $action ||= 'exact';
-    $self->throw("Unknown type '$type'") unless grep( /^$type$/, qw( hit subject query ));
-    $type = 'hit' if $type eq 'subject';
+    $self->throw("Unknown action '$action'") unless grep(/^$action$/, qw( exact est max ));    
 
     $self->_calc_coverage_map($type) unless $self->coverage_map($type);
     
@@ -586,9 +645,7 @@ sub _make_tiling_iterator {
     ### create the urns
     my $self = shift;
     my $type = shift;
-    $type ||= 'query';
-    $self->throw("Unrecognized type '$type'") unless
-	( grep /^$type$/, qw( hit subject query ) );
+    $self->_check_type_arg(\$type);
 
     # initialize the urns
     my @urns = map { [0,  $$_[1]] } $self->coverage_map($type);
@@ -653,9 +710,8 @@ sub _make_tiling_iterator {
 sub _tiling_iterator {
     my $self = shift;
     my $type = shift;
-    $type ||= 'query';
-    $self->throw("Unknown type '$type'") unless grep(/^$type$/, qw( hit query subject ));
-    $type = 'hit' if $type eq 'subject';
+    $self->_check_type_arg(\$type);
+
     if (!defined $self->{"_tiling_iterator_$type"}) {
 	$self->_make_tiling_iterator($type);
     }
@@ -706,18 +762,18 @@ sub _allowable_filters {
     return;
 }
 
-=head2 _check_args
+=head2 _check_new_args
 
- Title   : _check_args
- Usage   : _check_args($qstrand, $hstrand, $qframe, $hframe)
+ Title   : _check_new_args
+ Usage   : _check_new_args($qstrand, $hstrand, $qframe, $hframe)
  Function: Throw if strand/frame parms out of bounds or set
            uselessly for the underlying algorithm
  Returns : True on success
  Args    : requested filter arguments to constructor
 
 =cut
-no strict qw( refs );
-sub _check_args {
+
+sub _check_new_args {
     my ($self, $qstrand, $hstrand, $qframe, $hframe) = @_;
     $self->throw("Strand filter arguments must be +1 or -1")
 	if ( $qstrand && !(abs($qstrand)==1) or
@@ -733,6 +789,16 @@ sub _check_args {
 		if ( eval "\$${t}${f}" && !($allowed && $f =~ /^$allowed/) );
 	}
     }
+    return 1;
+}
+
+
+sub _check_type_arg {
+    my $self = shift;
+    my $typeref = shift;
+    $$typeref ||= 'query';
+    $self->throw("Unknown type '$$typeref'") unless grep(/^$$typeref$/, qw( hit query subject ));    
+    $$typeref = 'hit' if $$typeref eq 'subject';
     return 1;
 }
 
