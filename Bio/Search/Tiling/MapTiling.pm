@@ -345,7 +345,8 @@ sub length{
 sub frac_identical {
     my ($self, $type, $denom) = @_;
     if (@_ == 1) {
-	_check_type_arg(\$type); # set default
+	$type = '';
+	$self->_check_type_arg(\$type); # set default
 	$denom = 'total'; # is this the right default?
     }
     elsif (@_ == 2) {
@@ -355,14 +356,14 @@ sub frac_identical {
 	elsif (grep /^$type$/, qw( total aligned )) {
 	    $denom = $type;
 	    $type = '';
-	    _check_type_arg(\$type); # set default
+	    $self->_check_type_arg(\$type); # set default
 	}
 	else {
 	    $self->throw("Can't understand argument '$type'");
 	}
     }
     else {
-	_check_type_arg(\$type);
+	$self->_check_type_arg(\$type);
 	unless (grep /^$denom/, qw( total aligned )) {
 	    $self->throw("Denominator selection must be one of ('total', 'aligned'), not '$denom'");
 	}
@@ -370,18 +371,21 @@ sub frac_identical {
     if (!defined $self->{"frac_identical_${type}_${denom}"}) {
 	for ($denom) {
 	    /total/ && do {
-		return $self->{"frac_identical_${type}_${denom}"} =
-		    $self->identities($type)/$self->length($type);
+		$self->{"frac_identical_${type}_${denom}"} =
+		    $self->identities($type)/$self->_reported_length($type);
+		last;
 	    };
 	    /aligned/ && do {
-		return $self->{"frac_identical_${type}_${denom}"} =
-		    $self->identities($type)/$self->_reported_length($type);
+		$self->{"frac_identical_${type}_${denom}"} =
+		    $self->identities($type)/$self->length($type);
+		last;
 	    };
 	    do {
 		$self->throw("What are YOU doing here?");
 	    };
 	}
     }
+    return $self->{"frac_identical_${type}_${denom}"};
 }
 
 =head2 frac_conserved
@@ -402,7 +406,8 @@ sub frac_identical {
 sub frac_conserved{
     my ($self, $type, $denom) = @_;
     if (@_ == 1) {
-	_check_type_arg(\$type); # set default
+	$type = '';
+	$self->_check_type_arg(\$type); # set default
 	$denom = 'total'; # is this the right default?
     }
     elsif (@_ == 2) {
@@ -412,14 +417,14 @@ sub frac_conserved{
 	elsif (grep /^$type$/, qw( total aligned )) {
 	    $denom = $type;
 	    $type = '';
-	    _check_type_arg(\$type); # set default
+	    $self->_check_type_arg(\$type); # set default
 	}
 	else {
 	    $self->throw("Can't understand argument '$type'");
 	}
     }
     else {
-	_check_type_arg(\$type);
+	$self->_check_type_arg(\$type);
 	unless (grep /^$denom/, qw( total aligned )) {
 	    $self->throw("Denominator selection must be one of ('total', 'aligned'), not '$denom'");
 	}
@@ -427,18 +432,22 @@ sub frac_conserved{
     if (!defined $self->{"frac_conserved_${type}_${denom}"}) {
 	for ($denom) {
 	    /total/ && do {
-		return $self->{"frac_conserved_${type}_${denom}"} =
-		    $self->conserved($type)/$self->length($type);
+		$self->{"frac_conserved_${type}_${denom}"} =
+		    $self->conserved($type)/$self->_reported_length($type);
+		last;
 	    };
 	    /aligned/ && do {
-		return $self->{"frac_conserved_${type}_${denom}"} =
-		    $self->conserved($type)/$self->_reported_length($type);
+		$self->{"frac_conserved_${type}_${denom}"} =
+		    $self->conserved($type)/$self->length($type);
+		last;
 	    };
 	    do {
 		$self->throw("What are YOU doing here?");
+		last;
 	    };
 	}
     }
+    return  $self->{"frac_conserved_${type}_${denom}"};
 }
 
 =head2 frac_aligned
@@ -454,7 +463,7 @@ sub frac_conserved{
 
 sub frac_aligned{
     my ($self, $type, @args) = @_;
-    _check_type_arg(\$type);
+    $self->_check_type_arg(\$type);
     if (!$self->{"frac_aligned_${type}"}) {
 	$self->{"frac_aligned_${type}"} = $self->num_aligned($type)/$self->_reported_length($type);
     }
@@ -495,7 +504,7 @@ sub num_unaligned {
     my $self = shift;
     my $type = shift;
     my $ret;
-    _check_type_arg(\$type);
+    $self->_check_type_arg(\$type);
     if (!defined $self->{"num_unaligned_${type}"}) {
 	$self->{"num_unaligned_${type}"} = $self->_reported_length($type)-$self->num_aligned($type);
     }
@@ -516,9 +525,9 @@ sub num_unaligned {
 
 sub range {
     my ($self, $type, @args) = @_;
-    _check_type_arg(\$type);
+    $self->_check_type_arg(\$type);
     my @a = $self->_contig_intersection($type);
-    return ($a[0]->[0], $a[-1]->[1]);
+    return ($a[0]->[0][0], $a[-1]->[0][1]);
 }
 
 
@@ -692,7 +701,7 @@ sub frame{
 sub mapping{
     my $self = shift;
     my $type = shift;
-    _check_type_arg(\$type);
+    $self->_check_type_arg(\$type);
     return $self->{"_mapping_${type}"};
 }
 
@@ -1129,7 +1138,7 @@ sub _contig_intersection {
     if (!defined $self->{"_contig_intersection_${type}"}) {
 	$self->_calc_coverage_map($type);
     }
-    return $self->{"_contig_intersection_${type}"};
+    return @{$self->{"_contig_intersection_${type}"}};
 }
 
 =head2 _reported_length
@@ -1154,7 +1163,7 @@ sub _contig_intersection {
 sub _reported_length {
     my $self = shift;
     my $type = shift;
-    _check_type_arg(\$type);
+    $self->_check_type_arg(\$type);
     my $key = uc( $type."_LENGTH" );
     return ($self->hsps)[0]->{$key};
 }
