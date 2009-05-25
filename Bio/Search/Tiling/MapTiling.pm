@@ -29,6 +29,9 @@ algorithm, with methods to obtain frequently-requested statistics
  $subject_length = $tiling->length('subject'); # or...
  $subject_length = $tiling->length('hit');
 
+ # get a visual on the coverage map
+ print $tiling->coverage_map_as_text('query','LEGEND');
+
  # tilings
  @covering_hsps_for_subject = $tiling->next_tiling('subject');
  @covering_hsps_for_query   = $tiling->next_tiling('query');
@@ -49,7 +52,17 @@ This module will execute a tiling algorithm on a given hit based on an
 interval decomposition I'm calling the "coverage map". Internal object
 methods compute the various statistics, which are then stored in
 appropriately-named public object attributes. See
-L<Bio::Search::Tiling::MapTileUtils> for more info on the algorithm.
+L<Bio::Search::Tiling::MapTileUtils> for more info on the algorithm. 
+
+=head1 DESIGN NOTE
+
+The major calculations are made just-in-time, and then memoized. So,
+for example, for a given MapTiling object, a coverage map would
+usually be calculated only once (for the query), and at most twice (if
+the subject perspective is also desired), and then only when a
+statistic is first accessed. Afterward, the map and/or any statistic
+is read from storage. So feel free to call the statistic methods
+frequently if it suits you.
 
 =head1 FEEDBACK
 
@@ -109,27 +122,35 @@ use Bio::Search::Tiling::MapTileUtils;
 use base qw(Bio::Root::Root Bio::Search::Tiling::TilingI);
 
 # fast, clear, nasty, brutish and short.
-# for _allowable_filters()
+# for _allowable_filters(), _set_mapping()
 # covers BLAST, FAST families
 # FASTA is ambiguous (nt or aa) based on alg name only
 
-my $filter_lookup = {
+my $alg_lookup = {
     'N'  => { 'q' => qr/[s]/,
-	      'h' => qr/[s]/ },
+	      'h' => qr/[s]/,
+	      'mapping' => [1,1]},
     'P'  => { 'q' => '',
-	      'h' => '' },
+	      'h' => '',
+	      'mapping' => [1,1] },
     'X'  => { 'q' => qr/[sf]/, 
-	      'h' => '' },
+	      'h' => '',
+	      'mapping' => [3, 1]},
     'Y'  => { 'q' => qr/[sf]/, 
-	      'h' => '' },
+	      'h' => '',
+              'mapping' => [3, 1]},
     'TA' => { 'q' => '',
-	      'h' => qr/[sf]/ },
+	      'h' => qr/[sf]/,
+              'mapping' => [1, 3]},
     'TN' => { 'q' => '',
-	      'h' => qr/[sf]/ },
+	      'h' => qr/[sf]/,
+	      'mapping' => [1, 3]},
     'TX' => { 'q' => qr/[sf]/, 
-	      'h' => qr/[sf]/ },
+	      'h' => qr/[sf]/,
+              'mapping' => [3, 3]}, # correct?
     'TY' => { 'q' => qr/[sf]/,
-	      'h' => qr/[sf]/ } 
+	      'h' => qr/[sf]/,
+	      'mapping' => [3, 3]} 
 };
    
 	    
@@ -145,7 +166,12 @@ my $filter_lookup = {
            filtering args for nucleotide data: 
            -qstrand => [[ 1 | -1 ]]
            -hstrand => [[ 1 | -1 ]]
-           (frame specs to come, hopefully)
+           -qframe  => [[ -2 | -1 | 0 | 1 | 2 ]]
+           -hframe  => [[ -2 | -1 | 0 | 1 | 2 ]]
+ Note    : Not all filters are valid for all BLAST/FAST 
+           algorithms. The constructor will warn when, 
+           e.g., -qstrand is set for BLASTP data.
+           
 
 =cut
 
@@ -170,6 +196,7 @@ sub new {
     }
     $self->warn("No HSPs present in hit after filtering") unless (@hsps);
     $self->hsps(\@hsps);
+    $self->_set_mapping();
     $self->{"strand_query"} = $qstrand;
     $self->{"strand_hit"}   = $hstrand;
     $self->{"frame_query"}  = $qframe;
@@ -221,7 +248,7 @@ sub rewind_tilings{
     return $self->_tiling_iterator($type)->('REWIND');
 }
 
-=head2 ACCESSORS
+=head2 STATISTICS
 
 =head2 identities
 
@@ -241,8 +268,7 @@ sub identities{
     my $self = shift;
     my ($type, $action) = @_;
     $self->_check_type_arg(\$type);
-    $action ||= 'exact';
-    $self->throw("Unknown action '$action'") unless grep(/^$action$/, qw( exact est max ));    
+    $self->_check_action_arg(\$action);
     if (!defined $self->{"identities_${type}_${action}"}) {
 	$self->_calc_stats($type, $action);
     }
@@ -267,8 +293,7 @@ sub conserved{
     my $self = shift;
     my ($type, $action) = @_;
     $self->_check_type_arg(\$type);
-    $action ||= 'exact';
-    $self->throw("Unknown action '$action'") unless grep(/^$action$/, qw( exact est max ));    
+    $self->_check_action_arg(\$action);
     if (!defined $self->{"conserved_${type}_${action}"}) {
 	$self->_calc_stats($type, $action);
     }
@@ -279,7 +304,8 @@ sub conserved{
 
  Title   : length
  Usage   : $tiling->length($type, $action)
- Function: Retrieve the total length in residues for the invocant
+ Function: Retrieve the total length of aligned residues for 
+           the seq $type
  Example : 
  Returns : value of length (a scalar)
  Args    : scalar $type: one of 'hit', 'subject', 'query'
@@ -294,14 +320,210 @@ sub length{
     my $self = shift;
     my ($type,$action) = @_;
     $self->_check_type_arg(\$type);
-
-    $action ||= 'exact';
-    $self->throw("Unknown action '$action'") unless grep(/^$action$/, qw( exact est max ));    
+    $self->_check_action_arg(\$action);
     if (!defined $self->{"length_${type}_${action}"}) {
 	$self->_calc_stats($type, $action);
     }
     return $self->{"length_${type}_${action}"};
 }
+
+=head2 frac_identical
+ 
+ Title   : frac_identical
+ Usage   : $tiling->frac_identical($type, $denom)
+ Function: Return the fraction of sequence length consisting
+           of identical pairs, with respect to $denom
+ Returns : scalar float
+ Args    : scalar $type, one of 'hit', 'subject', 'query'
+           scalar $denom, one of 'total', 'aligned'
+ Note    : $denom == 'aligned', return identities/num_aligned
+           $denom == 'total', return identities/_reported_length
+             (i.e., length of the original input sequences)
+
+=cut
+
+sub frac_identical {
+    my ($self, $type, $denom) = @_;
+    if (@_ == 1) {
+	_check_type_arg(\$type); # set default
+	$denom = 'total'; # is this the right default?
+    }
+    elsif (@_ == 2) {
+	if (grep /^$type$/, qw( query hit subject )) {
+	    $denom = 'total';
+	}
+	elsif (grep /^$type$/, qw( total aligned )) {
+	    $denom = $type;
+	    $type = '';
+	    _check_type_arg(\$type); # set default
+	}
+	else {
+	    $self->throw("Can't understand argument '$type'");
+	}
+    }
+    else {
+	_check_type_arg(\$type);
+	unless (grep /^$denom/, qw( total aligned )) {
+	    $self->throw("Denominator selection must be one of ('total', 'aligned'), not '$denom'");
+	}
+    }
+    if (!defined $self->{"frac_identical_${type}_${denom}"}) {
+	for ($denom) {
+	    /total/ && do {
+		return $self->{"frac_identical_${type}_${denom}"} =
+		    $self->identities($type)/$self->length($type);
+	    };
+	    /aligned/ && do {
+		return $self->{"frac_identical_${type}_${denom}"} =
+		    $self->identities($type)/$self->_reported_length($type);
+	    };
+	    do {
+		$self->throw("What are YOU doing here?");
+	    };
+	}
+    }
+}
+
+=head2 frac_conserved
+ 
+ Title   : frac_conserved
+ Usage   : $tiling->frac_conserved($type, $denom)
+ Function: Return the fraction of sequence length consisting
+           of conserved pairs, with respect to $denom
+ Returns : scalar float
+ Args    : scalar $type, one of 'hit', 'subject', 'query'
+           scalar $denom, one of 'total', 'aligned'
+ Note    : $denom == 'aligned', return conserved/num_aligned
+           $denom == 'total', return conserved/_reported_length
+             (i.e., length of the original input sequences)
+
+=cut
+
+sub frac_conserved{
+    my ($self, $type, $denom) = @_;
+    if (@_ == 1) {
+	_check_type_arg(\$type); # set default
+	$denom = 'total'; # is this the right default?
+    }
+    elsif (@_ == 2) {
+	if (grep /^$type$/, qw( query hit subject )) {
+	    $denom = 'total';
+	}
+	elsif (grep /^$type$/, qw( total aligned )) {
+	    $denom = $type;
+	    $type = '';
+	    _check_type_arg(\$type); # set default
+	}
+	else {
+	    $self->throw("Can't understand argument '$type'");
+	}
+    }
+    else {
+	_check_type_arg(\$type);
+	unless (grep /^$denom/, qw( total aligned )) {
+	    $self->throw("Denominator selection must be one of ('total', 'aligned'), not '$denom'");
+	}
+    }
+    if (!defined $self->{"frac_conserved_${type}_${denom}"}) {
+	for ($denom) {
+	    /total/ && do {
+		return $self->{"frac_conserved_${type}_${denom}"} =
+		    $self->conserved($type)/$self->length($type);
+	    };
+	    /aligned/ && do {
+		return $self->{"frac_conserved_${type}_${denom}"} =
+		    $self->conserved($type)/$self->_reported_length($type);
+	    };
+	    do {
+		$self->throw("What are YOU doing here?");
+	    };
+	}
+    }
+}
+
+=head2 frac_aligned
+ 
+ Title   : frac_aligned
+ Usage   : $tiling->frac_aligned($type)
+ Function: Return the fraction of input sequence length
+           that was aligned by the algorithm
+ Returns : scalar float
+ Args    : scalar $type, one of 'hit', 'subject', 'query'
+
+=cut
+
+sub frac_aligned{
+    my ($self, $type, @args) = @_;
+    _check_type_arg(\$type);
+    if (!$self->{"frac_aligned_${type}"}) {
+	$self->{"frac_aligned_${type}"} = $self->num_aligned($type)/$self->_reported_length($type);
+    }
+    return $self->{"frac_aligned_${type}"};
+}
+
+=head2 num_aligned
+
+ Title   : num_aligned
+ Usage   : $tiling->num_aligned($type)
+ Function: Return the number of residues of sequence $type
+           that were aligned by the algorithm
+ Returns : scalar int
+ Args    : scalar $type, one of 'hit', 'subject', 'query'
+ Note    : Since this is calculated from reported coordinates,
+           not symbol string counts, it is already in terms of
+           "logical length"
+
+=cut
+
+sub num_aligned { shift->length( @_ ) };
+
+=head2 num_unaligned
+
+ Title   : num_unaligned
+ Usage   : $tiling->num_unaligned($type)
+ Function: Return the number of residues of sequence $type
+           that were left unaligned by the algorithm
+ Returns : scalar int
+ Args    : scalar $type, one of 'hit', 'subject', 'query'
+ Note    : Since this is calculated from reported coordinates,
+           not symbol string counts, it is already in terms of
+           "logical length"
+
+=cut
+
+sub num_unaligned {
+    my $self = shift;
+    my $type = shift;
+    my $ret;
+    _check_type_arg(\$type);
+    if (!defined $self->{"num_unaligned_${type}"}) {
+	$self->{"num_unaligned_${type}"} = $self->_reported_length($type)-$self->num_aligned($type);
+    }
+    return $self->{"num_unaligned_${type}"};
+}
+	
+
+=head2 range
+ 
+ Title   : range
+ Usage   : $tiling->range($type)
+ Function: Returns the extent of the longest tiling
+           as ($min_coord, $max_coord)
+ Returns : array of two scalar integers
+ Args    : scalar $type, one of 'hit', 'subject', 'query'
+
+=cut
+
+sub range {
+    my ($self, $type, @args) = @_;
+    _check_type_arg(\$type);
+    my @a = $self->_contig_intersection($type);
+    return ($a[0]->[0], $a[-1]->[1]);
+}
+
+
+
+=head2 ACCESSORS
 
 =head2 hit
 
@@ -353,7 +575,7 @@ sub coverage_map{
            coverage map
  Returns : an array of scalar strings, suitable for printing
  Args    : $type: one of 'query', 'hit', 'subject'
-           $legend_flag: boolean; print a legend indicating
+           $legend_flag: boolean; add a legend indicating
             the actual interval coordinates for each component
             interval and hsp (in the $type sequence context)
  Example : print $tiling->coverage_map_as_text('query',1);
@@ -420,11 +642,11 @@ sub hsps{
 =head2 strand
 
  Title   : strand
- Usage   : $tiling->strand
+ Usage   : $tiling->strand($type)
  Function: Retrieve the strand value filtering the invocant's hit
  Example : 
  Returns : value of strand (a scalar, +1 or -1)
- Args    : 
+ Args    : $type: one of 'query', 'hit', 'subject'
  Note    : getter only
 
 =cut
@@ -433,18 +655,17 @@ sub strand{
     my $self = shift;
     my $type = shift;
     $self->_check_type_arg(\$type);
-    $self->warn("Getter only") if @_; 
     return $self->{"strand_$type"};
 }
 
 =head2 frame
 
  Title   : frame
- Usage   : $tiling->frame
+ Usage   : $tiling->frame($type)
  Function: Retrieve the frame value filtering the invocant's hit
  Example : 
  Returns : value of strand (-2, -1, 0, +1, +2)
- Args    : 
+ Args    : $type: one of 'query', 'hit', 'subject'
  Note    : getter only
 
 =cut
@@ -453,11 +674,34 @@ sub frame{
     my $self = shift;
     my $type = shift;
     $self->_check_type_arg(\$type);
-    $self->warn("Getter only") if @_; 
     return $self->{"frame_$type"};
 }
 
+=head2 mapping
+
+ Title   : mapping
+ Usage   : $tiling->mapping($type)
+ Function: Retrieve the query-subject residue mapping pair for 
+           the underlying algorithm
+ Returns : Residue mapping pair as arrayref
+ Args    : $type: one of 'query', 'hit', 'subject'
+ Note    : getter only (set in constructor)
+
+=cut
+
+sub mapping{
+    my $self = shift;
+    my $type = shift;
+    _check_type_arg(\$type);
+    return $self->{"_mapping_${type}"};
+}
+
 =head2 "PRIVATE" METHODS
+
+=head2 Calculators
+
+See L<Bio::Search::Tiling::MapTileUtils> for lower level
+calculation methods.
 
 =head2 _calc_coverage_map
 
@@ -499,6 +743,9 @@ sub _calc_coverage_map {
     # determine the minimal set of disjoint intervals that cover the
     # set of hsp intervals
     my @dj_set = interval_tiling(\@intervals);
+
+    # set the _contig_intersection attribute here (side effect)
+    $self->{"_contig_intersection_${type}"} = [@dj_set];
 
     # decompose each disjoint interval into another set of disjoint 
     # intervals, each of which is completely contained within the
@@ -556,13 +803,12 @@ sub _calc_coverage_map {
 sub _calc_stats {
     my $self = shift;
     my ($type, $action) = @_;
+    # need to check args here, in case method is called internally.
     $self->_check_type_arg(\$type);
-
-    $action ||= 'exact';
-    $self->throw("Unknown action '$action'") unless grep(/^$action$/, qw( exact est max ));    
+    $self->_check_action_arg(\$action);
 
     $self->_calc_coverage_map($type) unless $self->coverage_map($type);
-    
+
     # calculate identities/conserved sites in tiling
     # estimate based on the fraction of the component interval covered
     # and ident/cons reported by the HSPs
@@ -614,7 +860,9 @@ sub _calc_stats {
     return 1;
 }
 
-# getting tilings
+=head2 Tiling Helper Methods
+
+=cut
 
 # coverage_map is of the form
 # ( [ $interval, \@containing_hsps ], ... )
@@ -718,6 +966,8 @@ sub _tiling_iterator {
     return $self->{"_tiling_iterator_$type"};
 }
 
+=head2 Construction Helper Methods
+
 =head2 _allowable_filters
     
  Title   : _allowable_filters
@@ -750,10 +1000,10 @@ sub _allowable_filters {
 	    return qr/[s]/;
 	};
 	/(.?)BLAST(.?)/i && do {
-	    return $$filter_lookup{$1.$2}{$type};
+	    return $$alg_lookup{$1.$2}{$type};
 	};
 	/(.?)FAST(.?)/ && do {
-	    return $$filter_lookup{$1.$2}{$type};
+	    return $$alg_lookup{$1.$2}{$type};
 	};
 	do { # unrecognized
 	    last;
@@ -762,6 +1012,46 @@ sub _allowable_filters {
     return;
 }
 
+=head2 _set_mapping
+
+ Title   : _set_mapping
+ Usage   : $tiling->_set_mapping()
+ Function: Sets the "mapping" attribute for invocant
+           according to algorithm name
+ Returns : Mapping arrayref as set
+ Args    : none
+ Note    : See mapping() for explanation of this attribute
+
+=cut
+
+sub _set_mapping {
+    my $self = shift;
+    my $alg = $self->hit->algorithm;
+    
+    for ($alg) {
+	/MEGABLAST/i && do {
+	    ($self->{_mapping_query},$self->{_mapping_hit}) = (1,1);
+	    last;
+	};
+	/(.?)BLAST(.?)/i && do {
+	    ($self->{_mapping_query},$self->{_mapping_hit}) = 
+		@{$$alg_lookup{$1.$2}{mapping}};
+	    last;
+	};
+	/(.?)FAST(.?)/ && do {
+	    ($self->{_mapping_query},$self->{_mapping_hit}) = 
+		@{$$alg_lookup{$1.$2}{mapping}};
+	    last;
+	};
+	do { # unrecognized
+	    $self->warn("Unrecognized algorithm '$alg'; returning (1,1)");
+	    ($self->{_mapping_query},$self->{_mapping_hit}) = (1,1);
+	    last;
+	};
+    }
+    return ($self->{_mapping_query},$self->{_mapping_hit});
+}
+           
 =head2 _check_new_args
 
  Title   : _check_new_args
@@ -800,6 +1090,73 @@ sub _check_type_arg {
     $self->throw("Unknown type '$$typeref'") unless grep(/^$$typeref$/, qw( hit query subject ));    
     $$typeref = 'hit' if $$typeref eq 'subject';
     return 1;
+}
+
+sub _check_action_arg {
+    my $self = shift;
+    my $actionref = shift;
+    my $has_seq_data = (($self->hit->hsps)[0]->seq_str('match') ? 1 : 0);
+    if (!$$actionref) {
+	$$actionref = ($has_seq_data ? 'exact' : 'est');
+    }
+    else {
+	$self->throw("Calc action '$$actionref' unrecognized") unless grep /^$$actionref$/, qw( exact est max );
+	if ($$actionref ne 'est' and !$has_seq_data) {
+	    $self->warn("Blast file did not possess sequence data; defaulting to 'est' action");
+	    $$actionref = 'est';
+	}
+    }
+    return 1;
+}
+
+=head2 Private Accessors
+
+=head2 _contig_intersection
+
+ Title   : _contig_intersection
+ Usage   : $tiling->_contig_intersection($type)
+ Function: Return the minimal set of $type coordinate intervals
+           covered by the invocant's HSPs
+ Returns : array of intervals (2-member arrayrefs; see MapTileUtils)
+ Args    : scalar $type: one of 'query', 'hit', 'subject'
+
+=cut
+
+sub _contig_intersection {
+    my $self = shift;
+    my $type = shift;
+    _check_type_arg(\$type);
+    if (!defined $self->{"_contig_intersection_${type}"}) {
+	$self->_calc_coverage_map($type);
+    }
+    return $self->{"_contig_intersection_${type}"};
+}
+
+=head2 _reported_length
+
+ Title   : _reported_length
+ Usage   : $tiling->_reported_length($type)
+ Function: Get the total length of the seq $type
+           for the invocant's hit object, as reported
+           by (not calculated from) the input data file
+ Returns : scalar int
+ Args    : scalar $type: one of 'query', 'hit', 'subject'
+ Note    : This is kludgy; the hit object does not currently
+           maintain accessors for these values, but the 
+           hsps possess these attributes. This is a wrapper
+           that allows a consistent access method in the 
+           MapTiling code.
+ Note    : Since this number is based on a reported length,
+           it is already a "logical length". 
+
+=cut
+
+sub _reported_length {
+    my $self = shift;
+    my $type = shift;
+    _check_type_arg(\$type);
+    my $key = uc( $type."_LENGTH" );
+    return ($self->hsps)[0]->{$key};
 }
 
 1;

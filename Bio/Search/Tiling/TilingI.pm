@@ -199,7 +199,7 @@ sub conserved{
 }
 
 #HSPI synonym
-sub num_conserved { sub shift->conserved( @_ ) }
+sub num_conserved { shift->conserved( @_ ) }
 
 =head2 length
 
@@ -207,7 +207,7 @@ sub num_conserved { sub shift->conserved( @_ ) }
  Usage   : $max_length = $tiling->length($type)
  Function: Return the total number of residues of the subject or query
            sequence covered by the tiling
- Returns : number of "raw" residues covered (see logical_length() )
+ Returns : number of "logical" residues covered
  Args    : scalar $type, one of 'hit', 'subject', 'query'
 
 =cut
@@ -287,7 +287,6 @@ sub percent_conserved {
     return $self->frac_conserved($type, @args) * 100;
 }
 
-
 =head2 frac_aligned
  
  Title   : frac_aligned
@@ -316,31 +315,13 @@ sub frac_aligned_hit { shift->frac_aligned('hit', @_) }
  Title   : range
  Usage   : $tiling->range($type)
  Function: Returns the extent of the longest tiling
-           as ($start_coord, $end_coord)
+           as ($min_coord, $max_coord)
  Returns : array of two scalar integers
  Args    : scalar $type, one of 'hit', 'subject', 'query'
 
 =cut
 
 sub range {
-    my ($self, $type, @args) = @_;
-    $self->throw_not_implemented;
-}
-
-=head2 logical_length
- 
- Title   : logical_length
- Usage   : $tiling->logical_length($type)
- Function: Get the logical length of the hit sequence, 
-           i.e., the length of the pretranslated nucleotide
-           sequence if necessary.
- Returns : scalar integer
- Argument: scalar $type, one of 'hit', 'subject', 'query'
- Comments  : This is a key internal function for the frac_* methods.
-
-=cut
-
-sub logical_length{
     my ($self, $type, @args) = @_;
     $self->throw_not_implemented;
 }
