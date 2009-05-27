@@ -1,5 +1,5 @@
 # -*-Perl-*- Test Harness script for Bioperl
-# $Id: SearchIO_blast.t 14995 2008-11-16 06:20:00Z cjfields $
+# $Id$
 
 # convert to use MapTiling.t / maj
 
