@@ -121,39 +121,6 @@ use Bio::Search::Tiling::MapTileUtils;
 # use base qw(Bio::Root::Root Bio::Search::Tiling::TilingI);
 use base qw(Bio::Root::Root Bio::Search::Tiling::TilingI);
 
-# fast, clear, nasty, brutish and short.
-# for _allowable_filters(), _set_mapping()
-# covers BLAST, FAST families
-# FASTA is ambiguous (nt or aa) based on alg name only
-
-my $alg_lookup = {
-    'N'  => { 'q' => qr/[s]/,
-	      'h' => qr/[s]/,
-	      'mapping' => [1,1]},
-    'P'  => { 'q' => '',
-	      'h' => '',
-	      'mapping' => [1,1] },
-    'X'  => { 'q' => qr/[sf]/, 
-	      'h' => '',
-	      'mapping' => [3, 1]},
-    'Y'  => { 'q' => qr/[sf]/, 
-	      'h' => '',
-              'mapping' => [3, 1]},
-    'TA' => { 'q' => '',
-	      'h' => qr/[sf]/,
-              'mapping' => [1, 3]},
-    'TN' => { 'q' => '',
-	      'h' => qr/[sf]/,
-	      'mapping' => [1, 3]},
-    'TX' => { 'q' => qr/[sf]/, 
-	      'h' => qr/[sf]/,
-              'mapping' => [3, 3]}, # correct?
-    'TY' => { 'q' => qr/[sf]/,
-	      'h' => qr/[sf]/,
-	      'mapping' => [3, 3]} 
-};
-   
-	    
 =head2 CONSTRUCTOR
 
 =head2 new
@@ -836,20 +803,22 @@ sub _calc_stats {
 		    last;
 		};
 		($_ eq 'max') && do {
-		    my ($inc_i, $inc_c) = $hsp->matches(
-			-SEQ   => $type, 
-			-START => $$intvl[0], 
-			-STOP  => $$intvl[1]
+		    my ($inc_i, $inc_c) = $hsp->matches_MT(
+			-type   => $type,
+			-action => 'searchutils',
+			-start => $$intvl[0], 
+			-end   => $$intvl[1]
 			);
 		    $acc_i = ($acc_i > $inc_i) ? $acc_i : $inc_i;
 		    $acc_c = ($acc_c > $inc_c) ? $acc_c : $inc_c;
 		    last;
 		};
 		(!$_ || ($_ eq 'exact')) && do {
-		    my ($inc_i, $inc_c) = $hsp->matches(
-			-SEQ   => $type, 
-			-START => $$intvl[0], 
-			-STOP  => $$intvl[1]
+		    my ($inc_i, $inc_c) = $hsp->matches_MT(
+			-type   => $type, 
+			-action => 'searchutils',
+			-start  => $$intvl[0], 
+			-end    => $$intvl[1]
 			);
 		    $acc_i += $inc_i;
 		    $acc_c += $inc_c;
@@ -977,90 +946,8 @@ sub _tiling_iterator {
 
 =head2 Construction Helper Methods
 
-=head2 _allowable_filters
-    
- Title   : _allowable_filters
- Usage   : _allowable_filters($Bio_Search_Hit_HitI, $type)
- Function: Return the HSP filters (strand, frame) allowed, 
-           based on the reported algorithm
- Returns : String encoding allowable filters: 
-           s = strand, f = frame
-           Empty string if no filters allowed
-           undef if algorithm unrecognized
- Args    : A Bio::Search::Hit::HitI object,
-           scalar $type, one of 'hit', 'subject', 'query';
-           default is 'query'
+See also L<Bio::Search::Tiling::MapTileUtils>.
 
-=cut
-
-sub _allowable_filters {
-    my $hit = shift;
-    my $type = shift;
-    $type ||= 'q';
-    unless (grep /^$type$/, qw( h q s ) ) {
-	warn("Unknown type '$type'; returning ''");
-	return '';
-    }
-    $type = 'h' if $type eq 's';
-    my $alg = $hit->algorithm;
-    
-    for ($alg) {
-	/MEGABLAST/i && do {
-	    return qr/[s]/;
-	};
-	/(.?)BLAST(.?)/i && do {
-	    return $$alg_lookup{$1.$2}{$type};
-	};
-	/(.?)FAST(.?)/ && do {
-	    return $$alg_lookup{$1.$2}{$type};
-	};
-	do { # unrecognized
-	    last;
-	};
-    }
-    return;
-}
-
-=head2 _set_mapping
-
- Title   : _set_mapping
- Usage   : $tiling->_set_mapping()
- Function: Sets the "mapping" attribute for invocant
-           according to algorithm name
- Returns : Mapping arrayref as set
- Args    : none
- Note    : See mapping() for explanation of this attribute
-
-=cut
-
-sub _set_mapping {
-    my $self = shift;
-    my $alg = $self->hit->algorithm;
-    
-    for ($alg) {
-	/MEGABLAST/i && do {
-	    ($self->{_mapping_query},$self->{_mapping_hit}) = (1,1);
-	    last;
-	};
-	/(.?)BLAST(.?)/i && do {
-	    ($self->{_mapping_query},$self->{_mapping_hit}) = 
-		@{$$alg_lookup{$1.$2}{mapping}};
-	    last;
-	};
-	/(.?)FAST(.?)/ && do {
-	    ($self->{_mapping_query},$self->{_mapping_hit}) = 
-		@{$$alg_lookup{$1.$2}{mapping}};
-	    last;
-	};
-	do { # unrecognized
-	    $self->warn("Unrecognized algorithm '$alg'; returning (1,1)");
-	    ($self->{_mapping_query},$self->{_mapping_hit}) = (1,1);
-	    last;
-	};
-    }
-    return ($self->{_mapping_query},$self->{_mapping_hit});
-}
-           
 =head2 _check_new_args
 
  Title   : _check_new_args

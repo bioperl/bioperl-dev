@@ -6,7 +6,12 @@ use Exporter;
 
 BEGIN {
     our @ISA = qw( Exporter );
-    our @EXPORT = qw( get_intervals_from_hsps interval_tiling decompose_interval );
+    our @EXPORT = qw( get_intervals_from_hsps 
+                      interval_tiling 
+                      decompose_interval
+                      _allowable_filters 
+                      _set_mapping
+                      _mapping_coeff);
 }
 
 # tiling trials
@@ -222,4 +227,282 @@ sub get_intervals_from_hsps {
     }
     return @ret;
 }
+
+# fast, clear, nasty, brutish and short.
+# for _allowable_filters(), _set_mapping()
+# covers BLAST, FAST families
+# FASTA is ambiguous (nt or aa) based on alg name only
+
+my $alg_lookup = {
+    'N'  => { 'q' => qr/[s]/,
+	      'h' => qr/[s]/,
+	      'mapping' => [1,1]},
+    'P'  => { 'q' => '',
+	      'h' => '',
+	      'mapping' => [1,1] },
+    'X'  => { 'q' => qr/[sf]/, 
+	      'h' => '',
+	      'mapping' => [3, 1]},
+    'Y'  => { 'q' => qr/[sf]/, 
+	      'h' => '',
+              'mapping' => [3, 1]},
+    'TA' => { 'q' => '',
+	      'h' => qr/[sf]/,
+              'mapping' => [1, 3]},
+    'TN' => { 'q' => '',
+	      'h' => qr/[sf]/,
+	      'mapping' => [1, 3]},
+    'TX' => { 'q' => qr/[sf]/, 
+	      'h' => qr/[sf]/,
+              'mapping' => [3, 3]}, # correct?
+    'TY' => { 'q' => qr/[sf]/,
+	      'h' => qr/[sf]/,
+	      'mapping' => [3, 3]} 
+};
+   
+=head2 _allowable_filters
+    
+ Title   : _allowable_filters
+ Usage   : _allowable_filters($Bio_Search_Hit_HitI, $type)
+ Function: Return the HSP filters (strand, frame) allowed, 
+           based on the reported algorithm
+ Returns : String encoding allowable filters: 
+           s = strand, f = frame
+           Empty string if no filters allowed
+           undef if algorithm unrecognized
+ Args    : A Bio::Search::Hit::HitI object,
+           scalar $type, one of 'hit', 'subject', 'query';
+           default is 'query'
+
+=cut
+
+sub _allowable_filters {
+    my $hit = shift;
+    my $type = shift;
+    $type ||= 'q';
+    unless (grep /^$type$/, qw( h q s ) ) {
+	warn("Unknown type '$type'; returning ''");
+	return '';
+    }
+    $type = 'h' if $type eq 's';
+    for ($hit->algorithm) {
+	/MEGABLAST/i && do {
+	    return qr/[s]/;
+	};
+	/(.?)BLAST(.?)/i && do {
+	    return $$alg_lookup{$1.$2}{$type};
+	};
+	/(.?)FAST(.?)/ && do {
+	    return $$alg_lookup{$1.$2}{$type};
+	};
+	do { # unrecognized
+	    last;
+	};
+    }
+    return;
+}
+
+=head2 _set_mapping
+
+ Title   : _set_mapping
+ Usage   : $tiling->_set_mapping()
+ Function: Sets the "mapping" attribute for invocant
+           according to algorithm name
+ Returns : Mapping arrayref as set
+ Args    : none
+ Note    : See mapping() for explanation of this attribute
+
+=cut
+
+sub _set_mapping {
+    my $self = shift;
+    my $alg = $self->hit->algorithm;
+    
+    for ($alg) {
+	/MEGABLAST/i && do {
+	    ($self->{_mapping_query},$self->{_mapping_hit}) = (1,1);
+	    last;
+	};
+	/(.?)BLAST(.?)/i && do {
+	    ($self->{_mapping_query},$self->{_mapping_hit}) = 
+		@{$$alg_lookup{$1.$2}{mapping}};
+	    last;
+	};
+	/(.?)FAST(.?)/ && do {
+	    ($self->{_mapping_query},$self->{_mapping_hit}) = 
+		@{$$alg_lookup{$1.$2}{mapping}};
+	    last;
+	};
+	do { # unrecognized
+	    $self->warn("Unrecognized algorithm '$alg'; returning (1,1)");
+	    ($self->{_mapping_query},$self->{_mapping_hit}) = (1,1);
+	    last;
+	};
+    }
+    return ($self->{_mapping_query},$self->{_mapping_hit});
+}
+           
+sub _mapping_coeff {
+    my $obj = shift;
+    my $type = shift;
+    my %type_i = ( 'query' => 0, 'hit' => 1 );
+    unless ( ref($obj) && $obj->can('algorithm') ) {
+	$obj->warn("Object type unrecognized");
+	return undef;
+    }
+    $type ||= 'query';
+    unless ( grep(/^$type$/, qw( query hit subject ) ) ) {
+	$obj->warn("Sequence type unrecognized");
+	return undef;
+    }
+    $type = 'hit' if $type eq 'subject';
+    
+    for ($obj->algorithm) {
+	/MEGABLAST/i && do {
+	    return 1;
+	};
+	/(.?)BLAST(.?)/i && do {
+	    return $$alg_lookup{$1.$2}{'mapping'}[$type_i{$type}];
+	};
+	/(.?)FAST(.?)/ && do {
+	    return $$alg_lookup{$1.$2}{'mapping'}[$type_i{$type}];
+	};
+	do { # unrecognized
+	    last;
+	};
+    }
+    return;
+}
+
+1;
+# need our own subsequencer for hsps. 
+
+package Bio::Search::HSP::HSPI;
+
+use strict;
+use warnings;
+
+=head2 matches_MT
+
+ Title   : matches_MT
+ Usage   : $hsp->matches($type, $action, $start, $end)
+ Purpose   : Get the total number of identical or conserved matches 
+             in the query or sbjct sequence for the given HSP. Optionally can
+             report data within a defined interval along the seq.
+ Returns   : scalar int 
+ Args      : 
+ Comments  : Relies on seq_str('match') to get the string of alignment symbols
+             between the query and sbjct lines which are used for determining
+             the number of identical and conservative matches.
+ Note      : Modeled on Bio::Search::HSP::HSPI::matches
+
+=cut
+
+sub matches_MT {
+    my( $self, @args ) = @_;
+    my($type, $action, $beg, $end) = $self->_rearrange( [qw(TYPE ACTION START END)], @args);
+    my @actions = qw( identities conserved searchutils );
+
+    # prep $type
+    $self->throw("Type not specified") if !defined $type;
+    $self->throw("Type '$type' unrecognized") unless grep(/^$type$/,qw(query hit subject));
+    $type = 'hit' if $type eq 'subject';
+
+    # prep $action
+    $self->throw("Action not specified") if !defined $action;
+    $self->throw("Action '$action' unrecognized") unless grep(/^$action$/, @actions);
+
+    if ( (!defined($beg) && !defined($end)) ) {
+        ## Get data for the whole alignment.
+	for ($action) {
+	    $_ eq 'identities'  && do {
+		return $self->num_identical;
+	    };
+	    $_ eq 'conserved'   && do {
+		return $self->num_conserved;
+	    };
+	    $_ eq 'searchutils' && do {
+		return ($self->num_identical, $self->num_conserved);
+	    };
+	    do {
+		$self->throw("What are YOU doing here?");
+	    };
+	}
+    }
+    elsif (!$self->seq_str('match')) {
+	$self->warn("Sequence data not present in report; returning data for entire HSP");
+	for ($action) {
+	    $_ eq 'identities'  && do {
+		return $self->num_identical;
+	    };
+	    $_ eq 'conserved'   && do {
+		return $self->num_conserved;
+	    };
+	    $_ eq 'searchutils' && do {
+		return ($self->num_identical, $self->num_conserved);
+	    };
+	    do {
+		$self->throw("What are YOU doing here?");
+	    };
+	}
+    }
+    elsif ((defined $beg && !defined $end) || (!defined $beg && defined $end)) {
+	$self->throw("Both start and end are required");
+    }
+    else {
+        ## Get the substring representing the desired sub-section of aln.
+        my($start,$stop) = $self->range($type);
+	if ( $beg < $start or $stop < $end ) {
+	    $self->throw("Start/stop out of range [$start, $stop]");
+	}
+
+	# now with gap handling! /maj
+	my $match_str = $self->seq_str('match');
+	if ($self->gaps) {
+	    # strip the homology string of gap positions relative
+	    # to the target type
+	    $match_str = $self->seq_str('match');
+	    my $tgt   = $self->seq_str($type);
+	    my $encode = $match_str ^ $tgt;
+	    my $zap = '-'^' ';
+	    $encode =~ s/$zap//g;
+	    $tgt =~ s/-//g;
+	    $match_str = $tgt ^ $encode;
+	    # match string is now the correct length for substr'ing below,
+	    # given that start and end are gapless coordinates in the 
+	    # blast report
+	}
+
+        my $seq = "";
+	$seq = substr( $match_str, 
+		       int( ($beg-$start)/Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self, $type) ),
+		       int( ($end-$beg+1)/Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self, $type) ) 
+	    );
+
+        if(!CORE::length $seq) {
+            $self->throw("Undefined sub-sequence ($beg,$end). Valid range = $start - $stop");
+        }
+
+        $seq =~ s/ //g;  # remove space (no info).
+        my $len_cons = (CORE::length $seq)*(Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self,$type));
+        $seq =~ s/\+//g;  # remove '+' characters (conservative substitutions)
+        my $len_id = (CORE::length $seq)*(Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self,$type));
+	for ($action) {
+	    $_ eq 'identities' && do {
+		return $len_id;
+	    };
+	    $_ eq 'conserved' && do {
+		return $len_cons;
+	    };
+	    $_ eq 'searchutils' && do {
+		return ($len_id, $len_cons);
+	    };
+	    do {
+		$self->throw("What are YOU doing here?");
+	    };
+	}
+    }
+}
+
+	
 1;
