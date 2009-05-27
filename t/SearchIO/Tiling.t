@@ -3,6 +3,7 @@
 use strict;
 BEGIN {
     use lib '.';
+    use lib '../..';
     use Bio::Root::Test;
     test_begin(-tests => 1000 );
 }
@@ -13,6 +14,7 @@ use_ok('Bio::SearchIO');
 use_ok('Bio::Search::Hit::BlastHit');
 use_ok('File::Spec');
 
+chdir('../..');
 
 ok( my $parser = new Bio::SearchIO( 
 	-file=>test_input_file('dcr1_sp.WUBLASTP'),
@@ -104,17 +106,46 @@ my %examples = (
     'TFASTX' => undef
     );
 
+my %results;
+
 foreach (keys %examples) {
     next unless $examples{$_};
     ok( my $blio = Bio::SearchIO->new( -format=>$examples{$_}[0],
 				       -file  =>test_input_file($examples{$_}[1])), 
 	"$_ data file");
-    my $hit = $blio->next_result->next_hit;
+    my $hit = ($results{$_} = $blio->next_result)->next_hit;
     ok( $tiling = Bio::Search::Tiling::MapTiling->new($hit, @{$examples{$_}[2]}), "tiling object created for $_ hit");
     dies_ok { Bio::Search::Tiling::MapTiling->new($hit, @{$examples{$_}[3]}) } "tiling object arg exception check for $_ hit";
     1;
 }
 
+# tricky wu-blast
+ok (my $blio = Bio::SearchIO->new( -format=>'blast', 
+			       -file=>test_input_file('tricky.wublast')),
+    'tricky.wublast')
+ok( $tiling = Bio::Search::Tiling::MapTiling->new($blio->next_result->next_hit), 'tricky tiling');
+my @map = $tiling->coverage_map_as_text('query',1);
+@map = $tiling->coverage_map_as_text('hit',1);
+
+ok (my $blio = Bio::SearchIO->new( -format=>'blast', 
+			       -file=>test_input_file('frac_problems.blast')),
+    'frac_problems.blast')
+ok( $tiling = Bio::Search::Tiling::MapTiling->new($blio->next_result->next_hit), 'frac_problems tiling');
+
+ok (my $blio = Bio::SearchIO->new( -format=>'blast', 
+			       -file=>test_input_file('frac_problems.blast')),
+    'frac_problems2.blast')
+ok( $tiling = Bio::Search::Tiling::MapTiling->new($blio->next_result->next_hit), 'frac_problems2 tiling');
+
+ok (my $blio = Bio::SearchIO->new( -format=>'blast', 
+			       -file=>test_input_file('frac_problems.blast')),
+    'frac_problems3.blast')
+ok( $tiling = Bio::Search::Tiling::MapTiling->new($blio->next_result->next_hit), 'frac_problems3 tiling');
+
+# old blast.t tiling tests
+
+
+1;
 
     
 
