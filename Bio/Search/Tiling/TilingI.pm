@@ -366,4 +366,22 @@ sub rewind_tilings{
 #alias
 sub rewind { shift->rewind_tilings(@_) }
 
+=head2 INFORMATIONAL ACCESSORS
+
+=head2 algorithm
+
+ Title   : algorithm
+ Usage   : $tiling->algorithm
+ Function: Retrieve the algorithm name associated with the 
+           invocant's hit object
+ Returns : scalar string 
+ Args    : 
+
+=cut
+
+sub algorithm{
+    my ($self, @args) = @_;
+    $self->throw_not_implemented;
+}
+
 1;
