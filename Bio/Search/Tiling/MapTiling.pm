@@ -54,6 +54,30 @@ methods compute the various statistics, which are then stored in
 appropriately-named public object attributes. See
 L<Bio::Search::Tiling::MapTileUtils> for more info on the algorithm. 
 
+=head2 STRAND/FRAME CONTEXTS
+
+In BLASTX, TBLASTN, and TBLASTX reports, strand and frame information
+are reported for the query, subject, or query and subject,
+respectively, for each HSP. Tilings for these sequence types are only
+meaningful when they include HSPs in the same strand and frame, or 
+"context". So, in these situations, the context must be specified
+in the method calls or the methods will throw. 
+
+Contexts are specified as strings: C<[ 'all' | [m|p][_|0|1|2] ]>, where
+C<all> = all HSPs (will throw if context must be specified), C<m> = minus
+strand, C<p> = plus strand, and C<_> = no frame info, C<0,1,2> = respective
+(absolute) frame. The L<_context()> method will convert a (strand,
+frame) specification to a context string, e.g.:
+
+    $context = $self->_context(-strand=>-1, -frame=>-2);
+
+returns C<m2>.
+
+The contexts present among the HSPs in a hit are identified and stored
+for convenience upon object construction. These are accessed off the
+object with the L<contexts()> method. If contexts don't apply for the
+given report, this returns C<('all')>. 
+
 =head1 DESIGN NOTE
 
 The major calculations are made just-in-time, and then memoized. So,
@@ -112,7 +136,7 @@ use strict;
 use warnings;
 
 # Object preamble - inherits from Bio::Root::Root
-use lib '../../..';
+#use lib '../../..';
 
 use Bio::Root::Root;
 use Bio::Search::Tiling::TilingI;
@@ -130,44 +154,59 @@ use base qw(Bio::Root::Root Bio::Search::Tiling::TilingI);
  Function: Builds a new Bio::Search::Tiling::GenericTiling object 
  Returns : an instance of Bio::Search::Tiling::GenericTiling
  Args    : -hit    => $a_Bio_Search_Hit_HitI_object
-           filtering args for nucleotide data: 
-           -qstrand => [[ 1 | -1 ]]
-           -hstrand => [[ 1 | -1 ]]
-           -qframe  => [[ -2 | -1 | 0 | 1 | 2 ]]
-           -hframe  => [[ -2 | -1 | 0 | 1 | 2 ]]
- Note    : Not all filters are valid for all BLAST/FAST 
-           algorithms. The constructor will warn when, 
-           e.g., -qstrand is set for BLASTP data.
-           
+           general filter function:
+           -hsp_filter => sub { my $this_hsp = shift; 
+                                ...;
+                                return 1 if $wanted;
+                                return 0; }
 
 =cut
 
 sub new {
     my $class = shift;
     my @args = @_;
-    my $self = $class->SUPER::new;
-    my($hit, $qstrand, $hstrand, $qframe, $hframe) = $self->_rearrange( [qw( HIT QSTRAND HSTRAND QFRAME HFRAME )],@args );
+    my $self = $class->SUPER::new(@args);
+    my($hit, $filter) = $self->_rearrange( [qw( HIT HSP_FILTER)],@args );
 
     $self->throw("HitI object required") unless $hit;
     $self->throw("Argument must be HitI object") unless ( ref $hit && $hit->isa('Bio::Search::Hit::HitI') );
     $self->{hit} = $hit;
+    $self->_set_mapping();
+    $self->{"_algorithm"} = $hit->algorithm;
 
     my @hsps;
-    $self->_check_new_args($qstrand, $hstrand, $qframe, $hframe);
-    # filter if requested 
-    while (local $_ = $hit->next_hsp) { 
-	push @hsps, $_ if ( ( !$qstrand || ($qstrand == $_->strand('query'))) &&
-			    ( !$hstrand || ($hstrand == $_->strand('hit'))  ) &&
-			    ( !defined $qframe  || ($qframe  == $_->frame('query')) ) &&
-			    ( !defined $hframe  || ($hframe  == $_->frame('hit'))   ) );
+    # apply filter function if requested
+    if ( defined $filter ) {
+	if ( ref($filter) eq 'CODE' ) {
+	    @hsps = map { $filter->($_) ? $_ : () } @hsps;
+	}
+	else {
+	    $self->warn("-filter is not a coderef; ignoring");
+	}
     }
+    else {
+	@hsps = $hit->hsps;
+    }
+    
+    # identify available contexts
+    for my $t qw( query hit ) {
+	my %contexts;
+	if ($self->_has_logical_length($t)) {
+	    for my $i (0..$#hsps) {
+		my $ctxt = $self->_context(-strand => $hsps[$i]->strand($t),
+					   -frame  => $hsps[$i]->frame($t));
+		$contexts{$ctxt} ||= [];
+		push @{$contexts{$ctxt}}, $i;
+	    }
+	}
+	else {
+	    $contexts{'all'} = [(0..$#hsps)];
+	}
+	$self->{"_contexts_${t}"} = \%contexts;
+    }
+
     $self->warn("No HSPs present in hit after filtering") unless (@hsps);
     $self->hsps(\@hsps);
-    $self->_set_mapping();
-    $self->{"strand_query"} = $qstrand;
-    $self->{"strand_hit"}   = $hstrand;
-    $self->{"frame_query"}  = $qframe;
-    $self->{"strand_hit"}   = $hframe;
     return $self;
 }
 
@@ -220,26 +259,29 @@ sub rewind_tilings{
 =head2 identities
 
  Title   : identities
- Usage   : $tiling->identities($type, $action)
+ Usage   : $tiling->identities($type, $action, $context)
  Function: Retrieve the calculated number of identities for the invocant
  Example : 
  Returns : value of identities (a scalar)
  Args    : scalar $type: one of 'hit', 'subject', 'query'
            default is 'query'
-           option scalar $action: one of 'exact', 'est', 'max'
+           option scalar $action: one of 'exact', 'est', 'fast', 'max'
            default is 'exact'
+           option scalar $context: strand/frame context string
  Note    : getter only
+
 =cut
 
 sub identities{
     my $self = shift;
-    my ($type, $action) = @_;
+    my ($type, $action, $context) = @_;
     $self->_check_type_arg(\$type);
     $self->_check_action_arg(\$action);
-    if (!defined $self->{"identities_${type}_${action}"}) {
-	$self->_calc_stats($type, $action);
+    $self->_check_context_arg($type, \$context);
+    if (!defined $self->{"identities_${type}_${action}_${context}"}) {
+	$self->_calc_stats($type, $action, $context);
     }
-    return $self->{"identities_${type}_${action}"};
+    return $self->{"identities_${type}_${action}_${context}"};
 }
 
 =head2 conserved
@@ -251,203 +293,230 @@ sub identities{
  Returns : value of conserved (a scalar)
  Args    : scalar $type: one of 'hit', 'subject', 'query'
            default is 'query'
-           option scalar $action: one of 'exact', 'est', 'max'
+           option scalar $action: one of 'exact', 'est', 'fast', 'max'
            default is 'exact'
+           option scalar $context: strand/frame context string
  Note    : getter only 
 =cut
 
 sub conserved{
     my $self = shift;
-    my ($type, $action) = @_;
+    my ($type, $action, $context) = @_;
     $self->_check_type_arg(\$type);
     $self->_check_action_arg(\$action);
-    if (!defined $self->{"conserved_${type}_${action}"}) {
-	$self->_calc_stats($type, $action);
+    $self->_check_context_arg($type, \$context);
+    if (!defined $self->{"conserved_${type}_${action}_${context}"}) {
+	$self->_calc_stats($type, $action, $context);
     }
-    return $self->{"conserved_${type}_${action}"};
+    return $self->{"conserved_${type}_${action}_${context}"};
 }
 
 =head2 length
 
  Title   : length
- Usage   : $tiling->length($type, $action)
+ Usage   : $tiling->length($type, $action, $context)
  Function: Retrieve the total length of aligned residues for 
            the seq $type
  Example : 
  Returns : value of length (a scalar)
  Args    : scalar $type: one of 'hit', 'subject', 'query'
            default is 'query'
-           option scalar $action: one of 'exact', 'est', 'max'
+           option scalar $action: one of 'exact', 'est', 'fast', 'max'
            default is 'exact'
+           option scalar $context: strand/frame context string
  Note    : getter only 
 
 =cut
 
 sub length{
     my $self = shift;
-    my ($type,$action) = @_;
+    my ($type,$action,$context) = @_;
     $self->_check_type_arg(\$type);
     $self->_check_action_arg(\$action);
-    if (!defined $self->{"length_${type}_${action}"}) {
-	$self->_calc_stats($type, $action);
+    $self->_check_context_arg($type, \$context);
+    if (!defined $self->{"length_${type}_${action}_${context}"}) {
+	$self->_calc_stats($type, $action, $context);
     }
-    return $self->{"length_${type}_${action}"};
+    return $self->{"length_${type}_${action}_${context}"};
+}
+
+=head2 frac
+ 
+ Title   : frac
+ Usage   : $tiling->frac($type, $denom, $action, $context, $method)
+ Function: Return the fraction of sequence length consisting
+           of desired kinds of pairs (given by $method), 
+           with respect to $denom
+ Returns : scalar float
+ Args    : -type => one of 'hit', 'subject', 'query'
+           -denom => one of 'total', 'aligned'
+           -action => one of 'exact', 'est', 'fast', 'max'
+           -context => strand/frame context string
+           -method => one of 'identical', 'conserved'
+ Note    : $denom == 'aligned', return desired_stat/num_aligned
+           $denom == 'total', return desired_stat/_reported_length
+             (i.e., length of the original input sequences)
+ Note    : In keeping with the spirit of Bio::Search::HSP::HSPI, 
+           reported lengths of translated dna are reduced by 
+           a factor of 3, to provide fractions relative to 
+           amino acid coordinates. 
+           
+=cut
+
+sub frac {
+    my $self = shift;
+    my @args = @_;
+    my ($type, $denom, $action, $context, $method) = $self->_rearrange([qw(TYPE DENOM ACTION CONTEXT METHOD)],@args);
+    $self->_check_type_arg(\$type);
+    $self->_check_action_arg(\$action);
+    $self->_check_context_arg($type, \$context);
+    unless ($method and grep(/^$method$/, qw( identical conserved ))) {
+	$self->throw("-method must specified; one of ('identical', 'conserved')");
+    }
+    $denom ||= 'total';
+    unless (grep /^$denom/, qw( total aligned )) {
+	$self->throw("Denominator selection must be one of ('total', 'aligned'), not '$denom'");
+    }
+    my $key = "frac_${method}_${type}_${denom}_${action}_${context}";
+    my $stat;
+    for ($method) {
+	$_ eq 'identical' && do {
+	    $stat = $self->identities($type, $action, $context);
+	    last;
+	};
+	$_ eq 'conserved' && do {
+	    $stat = $self->conserved($type, $action, $context);
+	    last;
+	};
+	do {
+	    $self->throw("What are YOU doing here?");
+	};
+    }
+    if (!defined $self->{$key}) {
+	for ($denom) {
+	    /total/ && do {
+		$self->{$key} =
+		    $stat/$self->_reported_length($type); # need fudge fac??
+		last;
+	    };
+	    /aligned/ && do {
+		$self->{$key} =
+		    $stat/$self->length($type,$action,$context);
+		last;
+	    };
+	    do {
+		$self->throw("What are YOU doing here?");
+	    };
+	}
+    }
+    return $self->{$key};
 }
 
 =head2 frac_identical
  
  Title   : frac_identical
- Usage   : $tiling->frac_identical($type, $denom)
+ Usage   : $tiling->frac_identical($type, $denom, $action, $context)
  Function: Return the fraction of sequence length consisting
            of identical pairs, with respect to $denom
  Returns : scalar float
- Args    : scalar $type, one of 'hit', 'subject', 'query'
-           scalar $denom, one of 'total', 'aligned'
- Note    : $denom == 'aligned', return identities/num_aligned
-           $denom == 'total', return identities/_reported_length
+ Args    : -type => one of 'hit', 'subject', 'query'
+           -denom => one of 'total', 'aligned'
+           -action => one of 'exact', 'est', 'fast', 'max'
+           -context => strand/frame context string
+ Note    : $denom == 'aligned', return conserved/num_aligned
+           $denom == 'total', return conserved/_reported_length
              (i.e., length of the original input sequences)
+ Note    : In keeping with the spirit of Bio::Search::HSP::HSPI, 
+           reported lengths of translated dna are reduced by 
+           a factor of 3, to provide fractions relative to 
+           amino acid coordinates. 
+ Note    : This an alias that calls frac()
 
 =cut
 
-sub frac_identical {
-    my ($self, $type, $denom) = @_;
-    if (@_ == 1) {
-	$type = '';
-	$self->_check_type_arg(\$type); # set default
-	$denom = 'total'; # is this the right default?
-    }
-    elsif (@_ == 2) {
-	if (grep /^$type$/, qw( query hit subject )) {
-	    $denom = 'total';
-	}
-	elsif (grep /^$type$/, qw( total aligned )) {
-	    $denom = $type;
-	    $type = '';
-	    $self->_check_type_arg(\$type); # set default
-	}
-	else {
-	    $self->throw("Can't understand argument '$type'");
-	}
-    }
-    else {
-	$self->_check_type_arg(\$type);
-	unless (grep /^$denom/, qw( total aligned )) {
-	    $self->throw("Denominator selection must be one of ('total', 'aligned'), not '$denom'");
-	}
-    }
-    if (!defined $self->{"frac_identical_${type}_${denom}"}) {
-	for ($denom) {
-	    /total/ && do {
-		$self->{"frac_identical_${type}_${denom}"} =
-		    $self->identities($type)/$self->_reported_length($type);
-		last;
-	    };
-	    /aligned/ && do {
-		$self->{"frac_identical_${type}_${denom}"} =
-		    $self->identities($type)/$self->length($type);
-		last;
-	    };
-	    do {
-		$self->throw("What are YOU doing here?");
-	    };
-	}
-    }
-    return $self->{"frac_identical_${type}_${denom}"};
+sub frac_identical{
+    my $self = shift;
+    my @args = @_;
+    my ($type, $denom, $action,$context) = $self->_rearrange( [qw[ TYPE DENOM ACTION CONTEXT]],@args );
+    $self->frac( -type=>$type, -denom=>$denom, -action=>$action, -method=>'identical', -context=>$context);
 }
 
 =head2 frac_conserved
  
  Title   : frac_conserved
- Usage   : $tiling->frac_conserved($type, $denom)
+ Usage   : $tiling->frac_conserved($type, $denom, $action, $context)
  Function: Return the fraction of sequence length consisting
            of conserved pairs, with respect to $denom
  Returns : scalar float
- Args    : scalar $type, one of 'hit', 'subject', 'query'
-           scalar $denom, one of 'total', 'aligned'
+ Args    : -type => one of 'hit', 'subject', 'query'
+           -denom => one of 'total', 'aligned'
+           -action => one of 'exact', 'est', 'fast', 'max'
+           -context => strand/frame context string
  Note    : $denom == 'aligned', return conserved/num_aligned
            $denom == 'total', return conserved/_reported_length
              (i.e., length of the original input sequences)
+ Note    : In keeping with the spirit of Bio::Search::HSP::HSPI, 
+           reported lengths of translated dna are reduced by 
+           a factor of 3, to provide fractions relative to 
+           amino acid coordinates. 
+ Note    : This an alias that calls frac()
 
 =cut
 
 sub frac_conserved{
-    my ($self, $type, $denom) = @_;
-    if (@_ == 1) {
-	$type = '';
-	$self->_check_type_arg(\$type); # set default
-	$denom = 'total'; # is this the right default?
-    }
-    elsif (@_ == 2) {
-	if (grep /^$type$/, qw( query hit subject )) {
-	    $denom = 'total';
-	}
-	elsif (grep /^$type$/, qw( total aligned )) {
-	    $denom = $type;
-	    $type = '';
-	    $self->_check_type_arg(\$type); # set default
-	}
-	else {
-	    $self->throw("Can't understand argument '$type'");
-	}
-    }
-    else {
-	$self->_check_type_arg(\$type);
-	unless (grep /^$denom/, qw( total aligned )) {
-	    $self->throw("Denominator selection must be one of ('total', 'aligned'), not '$denom'");
-	}
-    }
-    if (!defined $self->{"frac_conserved_${type}_${denom}"}) {
-	for ($denom) {
-	    /total/ && do {
-		$self->{"frac_conserved_${type}_${denom}"} =
-		    $self->conserved($type)/$self->_reported_length($type);
-		last;
-	    };
-	    /aligned/ && do {
-		$self->{"frac_conserved_${type}_${denom}"} =
-		    $self->conserved($type)/$self->length($type);
-		last;
-	    };
-	    do {
-		$self->throw("What are YOU doing here?");
-		last;
-	    };
-	}
-    }
-    return  $self->{"frac_conserved_${type}_${denom}"};
+    my $self = shift;
+    my @args = @_;
+    my ($type, $denom, $action, $context) = $self->_rearrange( [qw[ TYPE DENOM ACTION CONTEXT]],@args );
+    $self->frac( -type=>$type, -denom=>$denom, -action=>$action, -context=>$context, -method=>'conserved');
 }
 
 =head2 frac_aligned
  
  Title   : frac_aligned
- Usage   : $tiling->frac_aligned($type)
+ Aliases : frac_aligned_query - frac_aligned(-type=>'query',...)
+           frac_aligned_hit   - frac_aligned(-type=>'hit',...)
+ Usage   : $tiling->frac_aligned(-type=>$type,
+                                 -action=>$action,
+                                 -context=>$context)
  Function: Return the fraction of input sequence length
            that was aligned by the algorithm
  Returns : scalar float
- Args    : scalar $type, one of 'hit', 'subject', 'query'
+ Args    : -type => one of 'hit', 'subject', 'query'
+           -action => one of 'exact', 'est', 'fast', 'max'
+           -context => strand/frame context string
 
 =cut
 
 sub frac_aligned{
-    my ($self, $type, @args) = @_;
+    my ($self, @args) = @_;
+    my ($type, $action, $context) = $self->_rearrange([qw(TYPE ACTION CONTEXT)],@args);
     $self->_check_type_arg(\$type);
-    if (!$self->{"frac_aligned_${type}"}) {
-	$self->{"frac_aligned_${type}"} = $self->num_aligned($type)/$self->_reported_length($type);
+    $self->_check_action_arg(\$action);
+    $self->_check_context_arg($type, \$context);
+    if (!$self->{"frac_aligned_${type}_${action}_${context}"}) {
+	$self->{"frac_aligned_${type}_${action}_${context}"} = $self->num_aligned($type,$action,$context)/$self->_reported_length($type);
     }
-    return $self->{"frac_aligned_${type}"};
+    return $self->{"frac_aligned_${type}_${action}_${context}"};
 }
+
+sub frac_aligned_query { shift->frac_aligned(-type=>'query', @_) }
+sub frac_aligned_hit { shift->frac_aligned(-type=>'hit', @_) }
+    
 
 =head2 num_aligned
 
  Title   : num_aligned
- Usage   : $tiling->num_aligned($type)
+ Usage   : $tiling->num_aligned(-type=>$type)
  Function: Return the number of residues of sequence $type
            that were aligned by the algorithm
  Returns : scalar int
- Args    : scalar $type, one of 'hit', 'subject', 'query'
+ Args    : -type => one of 'hit', 'subject', 'query'
+           -action => one of 'exact', 'est', 'fast', 'max'
+           -context => strand/frame context string
  Note    : Since this is calculated from reported coordinates,
            not symbol string counts, it is already in terms of
            "logical length"
+ Note    : Aliases length()
 
 =cut
 
@@ -456,11 +525,13 @@ sub num_aligned { shift->length( @_ ) };
 =head2 num_unaligned
 
  Title   : num_unaligned
- Usage   : $tiling->num_unaligned($type)
+ Usage   : $tiling->num_unaligned(-type=>$type)
  Function: Return the number of residues of sequence $type
            that were left unaligned by the algorithm
  Returns : scalar int
- Args    : scalar $type, one of 'hit', 'subject', 'query'
+ Args    : -type => one of 'hit', 'subject', 'query'
+           -action => one of 'exact', 'est', 'fast', 'max'
+           -context => strand/frame context string
  Note    : Since this is calculated from reported coordinates,
            not symbol string counts, it is already in terms of
            "logical length"
@@ -469,54 +540,41 @@ sub num_aligned { shift->length( @_ ) };
 
 sub num_unaligned {
     my $self = shift;
-    my $type = shift;
+    my ($type,$action,$context) = @_;
     my $ret;
     $self->_check_type_arg(\$type);
-    if (!defined $self->{"num_unaligned_${type}"}) {
-	$self->{"num_unaligned_${type}"} = $self->_reported_length($type)-$self->num_aligned($type);
+    $self->_check_action_arg(\$action);
+    $self->_check_context_arg($type, \$context);
+    if (!defined $self->{"num_unaligned_${type}_${action}_${context}"}) {
+	$self->{"num_unaligned_${type}_${action}_${context}"} = $self->_reported_length($type)-$self->num_aligned($type,$action,$context);
     }
-    return $self->{"num_unaligned_${type}"};
+    return $self->{"num_unaligned_${type}_${action}_${context}"};
 }
 	
 
 =head2 range
  
  Title   : range
- Usage   : $tiling->range($type)
+ Usage   : $tiling->range(-type=>$type)
  Function: Returns the extent of the longest tiling
            as ($min_coord, $max_coord)
  Returns : array of two scalar integers
- Args    : scalar $type, one of 'hit', 'subject', 'query'
+ Args    : -type => one of 'hit', 'subject', 'query'
+           -context => strand/frame context string
 
 =cut
 
 sub range {
-    my ($self, $type, @args) = @_;
+    my ($self, $type, $context) = @_;
     $self->_check_type_arg(\$type);
-    my @a = $self->_contig_intersection($type);
-    return ($a[0]->[0][0], $a[-1]->[0][1]);
+    $self->_check_context_arg($type, \$context);
+    my @a = $self->_contig_intersection($type,$context);
+    return ($a[0][0], $a[-1][1]);
 }
 
 
 
 =head2 ACCESSORS
-
-=head2 hit
-
- Title   : hit
- Usage   : $tiling->hit
- Function: 
- Example : 
- Returns : The HitI object associated with the invocant
- Args    : none
- Note    : getter only 
-=cut
-
-sub hit{
-    my $self = shift;
-    $self->warn("Getter only") if @_;
-    return $self->{'hit'};
-}
 
 =head2 coverage_map
 
@@ -529,18 +587,27 @@ sub hit{
  Returns : value of coverage_map_$type as an array
  Args    : scalar $type: one of 'hit', 'subject', 'query'
            default is 'query'
- Note    : getter only
+ Note    : getter 
 
 =cut
 
 sub coverage_map{
     my $self = shift;
-    my $type = shift;
+    my ($type, $context) = @_;
     $self->_check_type_arg(\$type);
-    if (!defined $self->{"coverage_map_$type"}) {
-	$self->_calc_coverage_map($type);
+    $self->_check_context_arg($type, \$context);
+
+    if (!defined $self->{"coverage_map_${type}_${context}"}) {
+	# following calculates coverage maps in all strands/frames
+	# if necessary
+	$self->_calc_coverage_map($type, $context);
     }
-    return @{$self->{"coverage_map_$type"}};
+    # if undef is returned, then there were no hsps for given strand/frame
+    if (!defined $self->{"coverage_map_${type}_${context}"}) {
+	$self->warn("No HSPS present for type '$type' in context '$context' for this hit");
+	return undef;
+    }
+    return @{$self->{"coverage_map_${type}_${context}"}};
 }
 
 =head2 coverage_map_as_text
@@ -551,6 +618,7 @@ sub coverage_map{
            coverage map
  Returns : an array of scalar strings, suitable for printing
  Args    : $type: one of 'query', 'hit', 'subject'
+           $context: strand/frame context string
            $legend_flag: boolean; add a legend indicating
             the actual interval coordinates for each component
             interval and hsp (in the $type sequence context)
@@ -560,10 +628,11 @@ sub coverage_map{
 
 sub coverage_map_as_text{
     my $self = shift;
-    my $type = shift;
-    my $legend_q = shift;
+    my ($type, $context, $legend_q) = @_;
     $self->_check_type_arg(\$type);
-    my @map = $self->coverage_map($type);
+    $self->_check_context_arg($type, \$context);
+
+    my @map = $self->coverage_map($type, $context);
     my @ret;
     my @hsps = $self->hit->hsps;
     my %hsps_i;
@@ -598,6 +667,23 @@ sub coverage_map_as_text{
     return @ret;
 }
 
+=head2 hit
+
+ Title   : hit
+ Usage   : $tiling->hit
+ Function: 
+ Example : 
+ Returns : The HitI object associated with the invocant
+ Args    : none
+ Note    : getter only 
+=cut
+
+sub hit{
+    my $self = shift;
+    $self->warn("Getter only") if @_;
+    return $self->{'hit'};
+}
+
 =head2 hsps
 
  Title   : hsps
@@ -615,42 +701,29 @@ sub hsps{
     return @{$self->{'hsps'}};
 }
 
-=head2 strand
+=head2 contexts
 
- Title   : strand
- Usage   : $tiling->strand($type)
- Function: Retrieve the strand value filtering the invocant's hit
- Example : 
- Returns : value of strand (a scalar, +1 or -1)
+ Title   : contexts
+ Usage   : @contexts = $tiling->context($type) or
+           @indices = $tiling->context($type, $context)
+ Function: Retrieve the set of available contexts in the hit,
+           or the indices of hsps having the given context
+           (integer indices for the array returned by $self->hsps)
+ Returns : array of scalar context strings or 
+           array of scalar positive integers
+           undef if no hsps in given context
  Args    : $type: one of 'query', 'hit', 'subject'
- Note    : getter only
+           optional $context: context string
 
 =cut
 
-sub strand{
+sub contexts{
     my $self = shift;
-    my $type = shift;
+    my ($type, $context) = @_;
     $self->_check_type_arg(\$type);
-    return $self->{"strand_$type"};
-}
-
-=head2 frame
-
- Title   : frame
- Usage   : $tiling->frame($type)
- Function: Retrieve the frame value filtering the invocant's hit
- Example : 
- Returns : value of strand (-2, -1, 0, +1, +2)
- Args    : $type: one of 'query', 'hit', 'subject'
- Note    : getter only
-
-=cut
-
-sub frame{
-    my $self = shift;
-    my $type = shift;
-    $self->_check_type_arg(\$type);
-    return $self->{"frame_$type"};
+    return keys %{$self->{"_contexts_$type"}} unless defined $context;
+    return undef unless $self->{"_contexts_$type"}{$context};
+    return @{$self->{"_contexts_$type"}{$context}};
 }
 
 =head2 mapping
@@ -670,6 +743,24 @@ sub mapping{
     my $type = shift;
     $self->_check_type_arg(\$type);
     return $self->{"_mapping_${type}"};
+}
+
+=head2 algorithm
+
+ Title   : algorithm
+ Usage   : $tiling->algorithm
+ Function: Retrieve the algorithm name associated with the 
+           invocant's hit object
+ Returns : scalar string 
+ Args    : none
+ Note    : getter only (set in constructor)
+
+=cut
+
+sub algorithm{
+    my $self = shift;
+    $self->warn("Getter only") if @_;
+    return $self->{"_algorithm"};
 }
 
 =head2 "PRIVATE" METHODS
@@ -698,6 +789,8 @@ calculation methods.
            The set of $component_interval's is a disjoint decomposition
            of the minimum set of minimal intervals that completely
            cover the hit's HSPs (from the perspective of the $type)
+ Note    : This calculates the map for all strand/frame contexts available
+           in the hit
 
 =cut
 
@@ -713,51 +806,81 @@ sub _calc_coverage_map {
 	return;
     }
 
-    my @map;
-    my @intervals = get_intervals_from_hsps( $type, $self->hsps );
-
-    # determine the minimal set of disjoint intervals that cover the
-    # set of hsp intervals
-    my @dj_set = interval_tiling(\@intervals);
-
-    # set the _contig_intersection attribute here (side effect)
-    $self->{"_contig_intersection_${type}"} = [@dj_set];
-
-    # decompose each disjoint interval into another set of disjoint 
-    # intervals, each of which is completely contained within the
-    # original hsp intervals with which it overlaps
-    my $i=0;
-    my @decomp;
-    for my $dj_elt (@dj_set) {
-	my ($covering, $indices) = @$dj_elt;
-	my @covering_hsps = ($self->hsps)[@$indices];
-	my @coverers = get_intervals_from_hsps($type, @covering_hsps);
-	@decomp = decompose_interval( \@coverers );
-	for (@decomp) {
-	    my ($component, $container_indices) = @{$_};
-	    push @map, [ $component, 
-			 [@covering_hsps[@$container_indices]] ];
-	}
-	1;
-    }
+    my (@map, @hsps, %filters, @intervals);
     
-    # sort the map on the interval left-ends
-    @map = sort { $a->[0][0]<=>$b->[0][0] } @map;
-    $self->{"coverage_map_$type"} = [@map];
+
+    # conversion here?
+    my $c = $self->mapping($type);
+    
+    # create the possible maps 
+    for my $context ($self->contexts($type)) {
+	@map = ();
+	@hsps = ($self->hsps)[$self->contexts($type, $context)];
+	@intervals = get_intervals_from_hsps( $type, @hsps );
+	# the "frame"
+	my $f = ($intervals[0]->[0] - 1) % $c;
+
+	# convert interval endpoints...
+	for (@intervals) {
+	    $$_[0] = ($$_[0] - $f + $c - 1)/$c;
+	    $$_[1]  = ($$_[1] - $f)/$c;
+	}
+	
+	# determine the minimal set of disjoint intervals that cover the
+	# set of hsp intervals
+	my @dj_set = interval_tiling(\@intervals);
+
+	# decompose each disjoint interval into another set of disjoint 
+	# intervals, each of which is completely contained within the
+	# original hsp intervals with which it overlaps
+	my $i=0;
+	my @decomp;
+	for my $dj_elt (@dj_set) {
+	    my ($covering, $indices) = @$dj_elt;
+	    my @covering_hsps = @hsps[@$indices];
+	    my @coverers = @intervals[@$indices];
+	    @decomp = decompose_interval( \@coverers );
+	    for (@decomp) {
+		my ($component, $container_indices) = @{$_};
+		push @map, [ $component, 
+			     [@covering_hsps[@$container_indices]] ];
+	    }
+	    1;
+	}
+    
+	# unconvert the components:
+#####
+	foreach (@map) {
+	    $$_[0][0] = $c*$$_[0][0] - $c + 1 + $f;
+	    $$_[0][1] = $c*$$_[0][1] + $f;
+	}
+	foreach (@dj_set) {
+	    $$_[0][0] = $c*$$_[0][0] - $c + 1 + $f;
+	    $$_[0][1] = $c*$$_[0][1] + $f;
+	}	    
+
+	# sort the map on the interval left-ends
+	@map = sort { $a->[0][0]<=>$b->[0][0] } @map;
+	$self->{"coverage_map_${type}_${context}"} = [@map];
+	# set the _contig_intersection attribute here (side effect)
+	$self->{"_contig_intersection_${type}_${context}"} = [map { $$_[0] } @dj_set];
+    }
+
     return 1; # success
 }
 
 =head2 _calc_stats
 
  Title   : _calc_stats
- Usage   : $tiling->_calc_stats($type, $action)
+ Usage   : $tiling->_calc_stats($type, $action, $context)
  Function: Calculates [estimated] tiling statistics (identities, conserved sites
            length) and sets the public accessors
  Returns : True on success
  Args    : scalar $type: one of 'hit', 'subject', 'query'
            default is 'query'
            optional scalar $action: requests calculation method
-            currently one of 'exact', 'est', 'max'
+            currently one of 'exact', 'est', 'fast', 'max'
+           option scalar $context: strand/frame context string
  Note    : Action: The statistics are calculated by summing quantities
            over the disjoint component intervals, taking into account
            coverage of those intervals by multiple HSPs. The action
@@ -768,72 +891,105 @@ sub _calc_coverage_map {
             fraction of the HSP overlapped by the component interval
             (see MapTileUtils) by the BLAST-reported identities/postives
             (this may be convenient for BLAST summary report formats)
-           Both exact and est take the average over the number of HSPs
-            that overlap the component interval.
+           * Both exact and est take the average over the number of HSPs
+             that overlap the component interval.
            'max' uses the exact method to calculate the statistics, 
             and returns only the maximum identites/positives over 
             overlapping HSP for the component interval. No averaging
             is involved here.
+           'fast' is doesn't involve tiling at all (hence the name),
+            but it seems like a very good estimate, and uses only
+            reported values, and so does not require sequence data. It
+            calculates an average of reported identities, conserved
+            sites, and lengths, over unmodified hsps in the hit,
+            weighted by the length of the hsps.  
+
 =cut
 
 sub _calc_stats {
     my $self = shift;
-    my ($type, $action) = @_;
+    my ($type, $action, $context) = @_;
     # need to check args here, in case method is called internally.
     $self->_check_type_arg(\$type);
     $self->_check_action_arg(\$action);
+    $self->_check_context_arg($type, \$context);
+    my ($ident, $cons, $length) = (0,0,0);
 
-    $self->_calc_coverage_map($type) unless $self->coverage_map($type);
+    # fast : avoid coverage map altogether, get a pretty damn
+    # good estimate with a weighted average of reported hsp
+    # statistics
+
+    ($action eq 'fast') && do {
+	my @hsps = $self->hit->hsps;
+	@hsps = @hsps[$self->contexts($type, $context)];
+	# weights for averages
+	my @wt = map {$_->length($type)} @hsps;
+	my $sum = eval( join('+',@wt) );
+	$_ /= $sum for (@wt);
+	for (@hsps) { 
+	    my $wt = shift @wt;
+	    $ident  += $wt*$_->matches_MT($type,'identities');
+	    $cons   += $wt*$_->matches_MT($type,'conserved');
+	    $length += $wt*$_->length($type);
+	}
+    };
+
+    # or, do tiling
 
     # calculate identities/conserved sites in tiling
     # estimate based on the fraction of the component interval covered
     # and ident/cons reported by the HSPs
-    my ($ident, $cons, $length);
-    foreach ($self->coverage_map($type)) {
-	my ($intvl, $hsps) = @{$_};
-	my $len = ($$intvl[1]-$$intvl[0]+1);
-	my $ncover = ($action eq 'max') ? 1 : scalar @$hsps;
-	my ($acc_i, $acc_c) = (0,0);
-	foreach my $hsp (@$hsps) {
-	    for ($action) {
-		($_ eq 'est') && do {
-		    my $frac = $len/$hsp->length($type);
-		    $acc_i += $hsp->num_identical * $frac;
-		    $acc_c += $hsp->num_conserved * $frac;
-		    last;
-		};
-		($_ eq 'max') && do {
-		    my ($inc_i, $inc_c) = $hsp->matches_MT(
-			-type   => $type,
-			-action => 'searchutils',
-			-start => $$intvl[0], 
-			-end   => $$intvl[1]
-			);
-		    $acc_i = ($acc_i > $inc_i) ? $acc_i : $inc_i;
-		    $acc_c = ($acc_c > $inc_c) ? $acc_c : $inc_c;
-		    last;
-		};
-		(!$_ || ($_ eq 'exact')) && do {
-		    my ($inc_i, $inc_c) = $hsp->matches_MT(
-			-type   => $type, 
-			-action => 'searchutils',
-			-start  => $$intvl[0], 
-			-end    => $$intvl[1]
-			);
-		    $acc_i += $inc_i;
-		    $acc_c += $inc_c;
-		    last;
-		};
+    ($action ne 'fast') && do {
+	foreach ($self->coverage_map($type, $context)) {
+	    my ($intvl, $hsps) = @{$_};
+	    my $len = ($$intvl[1]-$$intvl[0]+1);
+	    my $ncover = ($action eq 'max') ? 1 : scalar @$hsps;
+	    my ($acc_i, $acc_c) = (0,0);
+	    foreach my $hsp (@$hsps) {
+		for ($action) {
+		    ($_ eq 'est') && do {
+			my ($inc_i, $inc_c) = $hsp->matches_MT(
+			    -type   => $type,
+			    -action => 'searchutils',
+			    );
+			my $frac = $len/$hsp->length($type);
+			$acc_i += $inc_i * $frac;
+			$acc_c += $inc_c * $frac;
+			last;
+		    };
+		    ($_ eq 'max') && do {
+			my ($inc_i, $inc_c) = $hsp->matches_MT(
+			    -type   => $type,
+			    -action => 'searchutils',
+			    -start => $$intvl[0], 
+			    -end   => $$intvl[1]
+			    );
+			$acc_i = ($acc_i > $inc_i) ? $acc_i : $inc_i;
+			$acc_c = ($acc_c > $inc_c) ? $acc_c : $inc_c;
+			last;
+		    };
+		    (!$_ || ($_ eq 'exact')) && do {
+			my ($inc_i, $inc_c) = $hsp->matches_MT(
+			    -type   => $type, 
+			    -action => 'searchutils',
+			    -start  => $$intvl[0], 
+			    -end    => $$intvl[1]
+			    );
+			$acc_i += $inc_i;
+			$acc_c += $inc_c;
+			last;
+		    };
+		}
 	    }
+	    $ident += ($acc_i/$ncover);
+	    $cons  += ($acc_c/$ncover);
+	    $length += $len;
 	}
-	$ident += ($acc_i/$ncover);
-	$cons  += ($acc_c/$ncover);
-	$length += $len;
-    }
+    };
     
-    $self->{"identities_${type}_${action}"} = $ident;
-    $self->{"conserved_${type}_${action}"} = $cons;
-    $self->{"length_${type}_${action}"} = $length;
+    $self->{"identities_${type}_${action}_${context}"} = $ident;
+    $self->{"conserved_${type}_${action}_${context}"} = $cons;
+    $self->{"length_${type}_${action}_${context}"} = $length;
     
     return 1;
 }
@@ -870,11 +1026,12 @@ sub _calc_stats {
 sub _make_tiling_iterator {
     ### create the urns
     my $self = shift;
-    my $type = shift;
+    my ($type, $context) = @_;
     $self->_check_type_arg(\$type);
+    $self->_check_context_arg($type, \$context);
 
     # initialize the urns
-    my @urns = map { [0,  $$_[1]] } $self->coverage_map($type);
+    my @urns = map { [0,  $$_[1]] } $self->coverage_map($type, $context);
 
     my $FINISHED = 0;
     my $iter = sub {
@@ -915,69 +1072,42 @@ sub _make_tiling_iterator {
         return @ret;
     };
 
-    $self->{"_tiling_iterator_$type"} = $iter;
+    $self->{"_tiling_iterator_${type}_${context}"} = $iter;
     return 1;
 }
 
 =head2 _tiling_iterator
 
  Title   : _tiling_iterator
- Usage   : $tiling->_tiling_iterator($type)
+ Usage   : $tiling->_tiling_iterator($type,$context)
  Function: Retrieve the tiling iterator coderef for the requested 
            $type ('hit', 'subject', 'query')
  Example : 
  Returns : coderef to the desired iterator
  Args    : scalar $type, one of 'hit', 'subject', 'query'
            default is 'query'
+           option scalar $context: strand/frame context string
  Note    : getter only
 
 =cut
 
 sub _tiling_iterator {
     my $self = shift;
-    my $type = shift;
+    my ($type, $context) = @_;
     $self->_check_type_arg(\$type);
+    $self->_check_context_arg($type, \$context);
 
-    if (!defined $self->{"_tiling_iterator_$type"}) {
-	$self->_make_tiling_iterator($type);
+    if (!defined $self->{"_tiling_iterator_${type}_${context}"}) {
+	$self->_make_tiling_iterator($type,$context);
     }
-    return $self->{"_tiling_iterator_$type"};
+    return $self->{"_tiling_iterator_${type}_${context}"};
 }
 
 =head2 Construction Helper Methods
 
 See also L<Bio::Search::Tiling::MapTileUtils>.
 
-=head2 _check_new_args
-
- Title   : _check_new_args
- Usage   : _check_new_args($qstrand, $hstrand, $qframe, $hframe)
- Function: Throw if strand/frame parms out of bounds or set
-           uselessly for the underlying algorithm
- Returns : True on success
- Args    : requested filter arguments to constructor
-
 =cut
-
-sub _check_new_args {
-    my ($self, $qstrand, $hstrand, $qframe, $hframe) = @_;
-    $self->throw("Strand filter arguments must be +1 or -1")
-	if ( $qstrand && !(abs($qstrand)==1) or
-	     $hstrand && !(abs($hstrand)==1) );
-    $self->throw("Frame filter arguments must be one of (-2,-1,0,1,2)")
-	if ( $qframe && !(grep {abs($qframe)} (0, 1, 2)) or
-	     $hframe && !(grep {abs($hframe)} (0, 1, 2)) );
-
-    for my $t qw( q h ) {
-	for my $f qw( strand frame ) {
-	    my $allowed = _allowable_filters($self->hit, $t);
-	    $self->throw("Filter '$t$f' is not useful for ".$self->hit->algorithm." results")
-		if ( eval "\$${t}${f}" && !($allowed && $f =~ /^$allowed/) );
-	}
-    }
-    return 1;
-}
-
 
 sub _check_type_arg {
     my $self = shift;
@@ -991,18 +1121,92 @@ sub _check_type_arg {
 sub _check_action_arg {
     my $self = shift;
     my $actionref = shift;
-    my $has_seq_data = (($self->hit->hsps)[0]->seq_str('match') ? 1 : 0);
     if (!$$actionref) {
-	$$actionref = ($has_seq_data ? 'exact' : 'est');
+	$$actionref = ($self->_has_sequence_data ? 'exact' : 'est');
     }
     else {
-	$self->throw("Calc action '$$actionref' unrecognized") unless grep /^$$actionref$/, qw( exact est max );
-	if ($$actionref ne 'est' and !$has_seq_data) {
+	$self->throw("Calc action '$$actionref' unrecognized") unless grep /^$$actionref$/, qw( est exact fast max );
+	if ($$actionref ne 'est' and !$self->_has_sequence_data) {
 	    $self->warn("Blast file did not possess sequence data; defaulting to 'est' action");
 	    $$actionref = 'est';
 	}
     }
     return 1;
+}
+
+sub _check_context_arg {
+    my $self = shift;
+    my ($type, $contextref) = @_;
+    if (!$$contextref) {
+	$self->throw("Type '$type' requires strand/frame context for algorithm ".$self->algorithm) unless ($self->mapping($type) == 1);
+	# set default 'all'
+	$$contextref = 'all';
+    }
+    else {
+	($$contextref =~ /^[mp]$/) && do { $$contextref .= '_' };
+	$self->throw("Context '$$contextref' unrecognized") unless
+	    $$contextref =~ /all|[mp][0-2_]/;
+    }
+	
+}
+
+=head2 _make_context_key
+
+ Title   : _make_context_key
+ Alias   : _context
+ Usage   : $tiling->_make_context_key(-strand => $strand, -frame => $frame)
+ Function: create a string indicating strand/frame context; serves as 
+           component of memoizing hash keys
+ Returns : scalar string
+ Args    : -strand => one of (1,0,-1)
+           -frame  => one of (-2, 1, 0, 1, -2)
+           called w/o args: returns 'all'
+
+=cut
+
+sub _make_context_key {
+    my $self = shift;
+    my @args = @_;
+    my ($strand, $frame) = $self->_rearrange([qw(STRAND FRAME)], @args);
+    return 'all' unless (defined $strand or defined $frame);
+    if ( defined $strand ) {
+	if (defined $frame) {
+	    return ($strand >= 0 ? 'p' : 'm').abs($frame);
+	}
+	else {
+	    return ($strand >= 0 ? 'p_' : 'm_');
+	}
+    }
+    else {
+	if (defined $frame) {
+	    $self->warn("Frame defined without strand; punting with plus strand");
+	    return 'p'.abs($frame);
+	}
+	else {
+	    return 'all';
+	}
+    }
+}
+
+sub _context { shift->_make_context_key(@_) }
+
+=head2 Predicates
+
+=cut 
+
+sub _has_sequence_data {
+    my $self = shift;
+    $self->throw("Hit attribute  not yet set") unless defined $self->hit;
+    return (($self->hit->hsps)[0]->seq_str('match') ? 1 : 0);
+}
+
+sub _has_logical_length {
+    my $self = shift;
+    my $type = shift;
+    $self->_check_type_arg(\$type);
+    # based on mapping coeff
+    $self->throw("Mapping coefficients not yet set") unless defined $self->mapping($type);
+    return ($self->mapping($type) > 1);
 }
 
 =head2 Private Accessors
@@ -1020,12 +1224,13 @@ sub _check_action_arg {
 
 sub _contig_intersection {
     my $self = shift;
-    my $type = shift;
-    _check_type_arg(\$type);
-    if (!defined $self->{"_contig_intersection_${type}"}) {
+    my ($type, $context) = @_;
+    $self->_check_type_arg(\$type);
+    $self->_check_context_arg($type, \$context);
+    if (!defined $self->{"_contig_intersection_${type}_${context}"}) {
 	$self->_calc_coverage_map($type);
     }
-    return @{$self->{"_contig_intersection_${type}"}};
+    return @{$self->{"_contig_intersection_${type}_${context}"}};
 }
 
 =head2 _reported_length
