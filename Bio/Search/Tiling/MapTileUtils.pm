@@ -140,6 +140,9 @@ sub decompose_interval {
 	}
 	push @flat, $a;
     }
+    if ($flat[-1]-$flat[-2]==1 and @flat % 2) {
+	push @flat, $flat[-1];
+    }
     # component intervals are consecutive pairs
     my @decomp;
     while (my $a = shift @flat) {
@@ -254,7 +257,7 @@ my $alg_lookup = {
 	      'mapping' => [1, 3]},
     'TX' => { 'q' => qr/[sf]/, 
 	      'h' => qr/[sf]/,
-              'mapping' => [3, 3]}, # correct?
+              'mapping' => [3, 3]}, 
     'TY' => { 'q' => qr/[sf]/,
 	      'h' => qr/[sf]/,
 	      'mapping' => [3, 3]} 
@@ -285,6 +288,11 @@ sub _allowable_filters {
 	return '';
     }
     $type = 'h' if $type eq 's';
+    my $alg = $hit->algorithm;
+
+    # pretreat (i.e., kludge it)
+    $alg =~ /^RPS/ and ($alg) = ($alg =~ /\(([^)]+)\)/);
+
     for ($hit->algorithm) {
 	/MEGABLAST/i && do {
 	    return qr/[s]/;
@@ -317,6 +325,9 @@ sub _allowable_filters {
 sub _set_mapping {
     my $self = shift;
     my $alg = $self->hit->algorithm;
+
+    # pretreat (i.e., kludge it)
+    $alg =~ /^RPS/ and ($alg) = ($alg =~ /\(([^)]+)\)/);
     
     for ($alg) {
 	/MEGABLAST/i && do {
@@ -356,8 +367,12 @@ sub _mapping_coeff {
 	return undef;
     }
     $type = 'hit' if $type eq 'subject';
+    my $alg = $obj->algorithm;
+
+    # pretreat (i.e., kludge it)
+    $alg =~ /^RPS/ and ($alg) = ($alg =~ /\(([^)]+)\)/);
     
-    for ($obj->algorithm) {
+    for ($alg) {
 	/MEGABLAST/i && do {
 	    return 1;
 	};
@@ -402,7 +417,7 @@ sub matches_MT {
     my( $self, @args ) = @_;
     my($type, $action, $beg, $end) = $self->_rearrange( [qw(TYPE ACTION START END)], @args);
     my @actions = qw( identities conserved searchutils );
-
+    
     # prep $type
     $self->throw("Type not specified") if !defined $type;
     $self->throw("Type '$type' unrecognized") unless grep(/^$type$/,qw(query hit subject));
@@ -412,42 +427,30 @@ sub matches_MT {
     $self->throw("Action not specified") if !defined $action;
     $self->throw("Action '$action' unrecognized") unless grep(/^$action$/, @actions);
 
-    if ( (!defined($beg) && !defined($end)) ) {
-        ## Get data for the whole alignment.
-	for ($action) {
-	    $_ eq 'identities'  && do {
-		return $self->num_identical;
-	    };
-	    $_ eq 'conserved'   && do {
-		return $self->num_conserved;
-	    };
-	    $_ eq 'searchutils' && do {
-		return ($self->num_identical, $self->num_conserved);
-	    };
-	    do {
-		$self->throw("What are YOU doing here?");
-	    };
-	}
-    }
-    elsif (!$self->seq_str('match')) {
-	$self->warn("Sequence data not present in report; returning data for entire HSP");
-	for ($action) {
-	    $_ eq 'identities'  && do {
-		return $self->num_identical;
-	    };
-	    $_ eq 'conserved'   && do {
-		return $self->num_conserved;
-	    };
-	    $_ eq 'searchutils' && do {
-		return ($self->num_identical, $self->num_conserved);
-	    };
-	    do {
-		$self->throw("What are YOU doing here?");
-	    };
-	}
-    }
-    elsif ((defined $beg && !defined $end) || (!defined $beg && defined $end)) {
+    my ($len_id, $len_cons);
+    my $c = Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self, $type);
+    if ((defined $beg && !defined $end) || (!defined $beg && defined $end)) {
 	$self->throw("Both start and end are required");
+    }
+    elsif ( (!defined($beg) && !defined($end)) || !$self->seq_str('match') ) {
+        ## Get data for the whole alignment.
+	# the reported values x mapping 
+	$self->debug("Sequence data not present in report; returning data for entire HSP") unless $self->seq_str('match');
+	($len_id, $len_cons) = map { $c*$_ } ($self->num_identical, $self->num_conserved);
+	for ($action) {
+	    $_ eq 'identities'  && do {
+		return $len_id;
+	    };
+	    $_ eq 'conserved'   && do {
+		return $len_cons;
+	    };
+	    $_ eq 'searchutils' && do {
+		return ($len_id, $len_cons);
+	    };
+	    do {
+		$self->throw("What are YOU doing here?");
+	    };
+	}
     }
     else {
         ## Get the substring representing the desired sub-section of aln.
@@ -476,7 +479,7 @@ sub matches_MT {
         my $seq = "";
 	$seq = substr( $match_str, 
 		       int( ($beg-$start)/Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self, $type) ),
-		       int( ($end-$beg+1)/Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self, $type) ) 
+		       int( 1+($end-$beg)/Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self, $type) ) 
 	    );
 
         if(!CORE::length $seq) {
@@ -484,9 +487,9 @@ sub matches_MT {
         }
 
         $seq =~ s/ //g;  # remove space (no info).
-        my $len_cons = (CORE::length $seq)*(Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self,$type));
+        $len_cons = (CORE::length $seq)*(Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self,$type));
         $seq =~ s/\+//g;  # remove '+' characters (conservative substitutions)
-        my $len_id = (CORE::length $seq)*(Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self,$type));
+        $len_id = (CORE::length $seq)*(Bio::Search::Tiling::MapTileUtils::_mapping_coeff($self,$type));
 	for ($action) {
 	    $_ eq 'identities' && do {
 		return $len_id;
@@ -504,5 +507,33 @@ sub matches_MT {
     }
 }
 
+package Bio::Search::Tiling::MapTileUtils;
+
+sub ints_as_text {
+    my $ints = shift;
+    my @ints = @$ints;
+    my %pos;
+    for (@ints) {
+	$pos{$$_[0]}++;
+	$pos{$$_[1]}++;
+    }
+    
+    my @pos = sort {$a<=>$b} keys %pos;
+    @pos = map {sprintf("%03d",$_)} @pos;
+#header
+    my $max=0;
+    $max = (length > $max) ? length : $max for (@pos);
+    for my $j (0..$max-1) {
+	my $i = $max-1-$j; 
+	my @line = map { substr($_, $j, 1) || '0' } @pos;
+	print join('', @line), "\n";
+    }
+    print '-' x @pos, "\n";
+    undef %pos;
+    @pos{map {sprintf("%d",$_)} @pos} = (0..@pos);
+    foreach (@ints) {
+	print ' ' x $pos{$$_[0]}, '[', ' ' x ($pos{$$_[1]}-$pos{$$_[0]}-1), ']', ' ' x (@pos-$pos{$$_[1]}), "\n";
+    }
+}
 	
 1;
