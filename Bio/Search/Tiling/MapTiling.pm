@@ -230,9 +230,10 @@ sub new {
 
 sub next_tiling{
     my $self = shift;
-    my $type = shift;
+    my ($type, $context) = @_;
     $self->_check_type_arg(\$type);
-    return $self->_tiling_iterator($type)->();
+    $self->_check_context_arg($type, \$context);
+    return $self->_tiling_iterator($type, $context)->();
 }
 
 =head2 rewind_tilings
@@ -249,9 +250,10 @@ sub next_tiling{
 
 sub rewind_tilings{
     my $self = shift;
-    my $type = shift;
+    my ($type,$context) = @_
     $self->_check_type_arg(\$type);
-    return $self->_tiling_iterator($type)->('REWIND');
+    $self->_check_context_arg($type, \$context);
+    return $self->_tiling_iterator($type, $context)->('REWIND');
 }
 
 =head2 STATISTICS
@@ -897,7 +899,7 @@ sub _calc_coverage_map {
             and returns only the maximum identites/positives over 
             overlapping HSP for the component interval. No averaging
             is involved here.
-           'fast' is doesn't involve tiling at all (hence the name),
+           'fast' doesn't involve tiling at all (hence the name),
             but it seems like a very good estimate, and uses only
             reported values, and so does not require sequence data. It
             calculates an average of reported identities, conserved
