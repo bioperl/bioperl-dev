@@ -30,11 +30,13 @@ algorithm, with methods to obtain frequently-requested statistics
  $subject_length = $tiling->length('hit');
 
  # get a visual on the coverage map
- print $tiling->coverage_map_as_text('query','LEGEND');
+ print $tiling->coverage_map_as_text('query',$context,'LEGEND');
 
  # tilings
- @covering_hsps_for_subject = $tiling->next_tiling('subject');
- @covering_hsps_for_query   = $tiling->next_tiling('query');
+ $context = $tiling->_context( -type => 'subject', -strand=> 1, -frame=>1);
+ @covering_hsps_for_subject = $tiling->next_tiling('subject',$context);
+ $context = $tiling->_context( -type => 'query', -strand=> -1, -frame=>0);
+ @covering_hsps_for_query   = $tiling->next_tiling('query', $context);
 
 =head1 DESCRIPTION
 
@@ -69,7 +71,7 @@ strand, C<p> = plus strand, and C<_> = no frame info, C<0,1,2> = respective
 (absolute) frame. The L<_context()> method will convert a (strand,
 frame) specification to a context string, e.g.:
 
-    $context = $self->_context(-strand=>-1, -frame=>-2);
+    $context = $self->_context(-type=>'query', -strand=>-1, -frame=>-2);
 
 returns C<m2>.
 
@@ -191,16 +193,13 @@ sub new {
     # identify available contexts
     for my $t qw( query hit ) {
 	my %contexts;
-	if ($self->_has_logical_length($t)) {
-	    for my $i (0..$#hsps) {
-		my $ctxt = $self->_context(-strand => $hsps[$i]->strand($t),
-					   -frame  => $hsps[$i]->frame($t));
-		$contexts{$ctxt} ||= [];
-		push @{$contexts{$ctxt}}, $i;
-	    }
-	}
-	else {
-	    $contexts{'all'} = [(0..$#hsps)];
+	for my $i (0..$#hsps) {
+	    my $ctxt = $self->_context(
+		-type => $t,
+		-strand => $hsps[$i]->strand($t),
+		-frame  => $hsps[$i]->frame($t));
+	    $contexts{$ctxt} ||= [];
+	    push @{$contexts{$ctxt}}, $i;
 	}
 	$self->{"_contexts_${t}"} = \%contexts;
     }
@@ -250,7 +249,7 @@ sub next_tiling{
 
 sub rewind_tilings{
     my $self = shift;
-    my ($type,$context) = @_
+    my ($type,$context) = @_;
     $self->_check_type_arg(\$type);
     $self->_check_context_arg($type, \$context);
     return $self->_tiling_iterator($type, $context)->('REWIND');
@@ -732,9 +731,9 @@ sub contexts{
 
  Title   : mapping
  Usage   : $tiling->mapping($type)
- Function: Retrieve the query-subject residue mapping pair for 
-           the underlying algorithm
- Returns : Residue mapping pair as arrayref
+ Function: Retrieve the mapping coefficient for the sequence type
+           based on the underlying algorithm
+ Returns : scalar integer (mapping coefficient)
  Args    : $type: one of 'query', 'hit', 'subject'
  Note    : getter only (set in constructor)
 
@@ -745,6 +744,25 @@ sub mapping{
     my $type = shift;
     $self->_check_type_arg(\$type);
     return $self->{"_mapping_${type}"};
+}
+
+=head2 default_context
+
+ Title   : default_context
+ Usage   : $tiling->default_context($type)
+ Function: Retrieve the default strand/frame context string
+           for the sequence type based on the underlying algorithm
+ Returns : scalar string (context string)
+ Args    : $type: one of 'query', 'hit', 'subject'
+ Note    : getter only (set in constructor)
+
+=cut
+
+sub default_context{
+    my $self = shift;
+    my $type = shift;
+    $self->_check_type_arg(\$type);
+    return $self->{"_def_context_${type}"};
 }
 
 =head2 algorithm
@@ -1141,8 +1159,8 @@ sub _check_context_arg {
     my ($type, $contextref) = @_;
     if (!$$contextref) {
 	$self->throw("Type '$type' requires strand/frame context for algorithm ".$self->algorithm) unless ($self->mapping($type) == 1);
-	# set default 'all'
-	$$contextref = 'all';
+	# set default according to default_context attrib
+	$$contextref = $self->default_context($type);
     }
     else {
 	($$contextref =~ /^[mp]$/) && do { $$contextref .= '_' };
@@ -1160,7 +1178,8 @@ sub _check_context_arg {
  Function: create a string indicating strand/frame context; serves as 
            component of memoizing hash keys
  Returns : scalar string
- Args    : -strand => one of (1,0,-1)
+ Args    : -type => one of ('query', 'hit', 'subject')
+           -strand => one of (1,0,-1)
            -frame  => one of (-2, 1, 0, 1, -2)
            called w/o args: returns 'all'
 
@@ -1169,10 +1188,11 @@ sub _check_context_arg {
 sub _make_context_key {
     my $self = shift;
     my @args = @_;
-    my ($strand, $frame) = $self->_rearrange([qw(STRAND FRAME)], @args);
+    my ($strand, $frame) = $self->_rearrange([qw(TYPE STRAND FRAME)], @args);
+    _check_type_arg(\$type);
     return 'all' unless (defined $strand or defined $frame);
-    if ( defined $strand ) {
-	if (defined $frame) {
+    if ( defined $strand && $self->_has_strand($type) ) {
+	if (defined $frame && $self->_has_frame($type) {
 	    return ($strand >= 0 ? 'p' : 'm').abs($frame);
 	}
 	else {
@@ -1180,7 +1200,7 @@ sub _make_context_key {
 	}
     }
     else {
-	if (defined $frame) {
+	if (defined $frame && $self->_has_frame($type)) {
 	    $self->warn("Frame defined without strand; punting with plus strand");
 	    return 'p'.abs($frame);
 	}
@@ -1194,6 +1214,12 @@ sub _context { shift->_make_context_key(@_) }
 
 =head2 Predicates
 
+Most based on a reading of the algorithm name with a configuration lookup.
+
+=over
+
+=item _has_sequence_data()
+
 =cut 
 
 sub _has_sequence_data {
@@ -1201,6 +1227,10 @@ sub _has_sequence_data {
     $self->throw("Hit attribute  not yet set") unless defined $self->hit;
     return (($self->hit->hsps)[0]->seq_str('match') ? 1 : 0);
 }
+
+=item _has_logical_length()
+
+=cut
 
 sub _has_logical_length {
     my $self = shift;
@@ -1210,6 +1240,30 @@ sub _has_logical_length {
     $self->throw("Mapping coefficients not yet set") unless defined $self->mapping($type);
     return ($self->mapping($type) > 1);
 }
+
+=item _has_strand()
+
+=cut
+
+sub _has_strand {
+    my $self = shift;
+    my $type = shift;
+    $self->_check_type_arg(\$type);
+    return $self->{"_has_strand_${type}"};
+}
+
+=item _has_frame()
+
+=cut
+
+sub _has_frame {
+    my $self = shift;
+    my $type = shift;
+    $self->_check_type_arg(\$type);
+    return $self->{"_has_frame_${type}"};
+}
+
+=back
 
 =head2 Private Accessors
 

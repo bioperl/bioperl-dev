@@ -237,30 +237,39 @@ sub get_intervals_from_hsps {
 # FASTA is ambiguous (nt or aa) based on alg name only
 
 my $alg_lookup = {
-    'N'  => { 'q' => qr/[s]/,
-	      'h' => qr/[s]/,
-	      'mapping' => [1,1]},
-    'P'  => { 'q' => '',
-	      'h' => '',
-	      'mapping' => [1,1] },
-    'X'  => { 'q' => qr/[sf]/, 
-	      'h' => '',
-	      'mapping' => [3, 1]},
-    'Y'  => { 'q' => qr/[sf]/, 
-	      'h' => '',
-              'mapping' => [3, 1]},
-    'TA' => { 'q' => '',
-	      'h' => qr/[sf]/,
-              'mapping' => [1, 3]},
+    'N'  => { 'mapping' => [1,1],
+              'def_context' => ['p_','p_'],
+	      'has_strand' => [1, 1],
+              'has_frame' => [0, 0]},
+    'P'  => { 'mapping' => [1,1],
+              'def_context' => ['all','all'],
+	      'has_strand' => [0, 0],
+	      'has_frame' => [0, 0]} 
+    'X'  => { 'mapping' => [3, 1],
+              'def_context' => [undef,'all'],
+	      'has_strand' => [1, 0],
+	      'has_frame' => [1, 0]}, 
+    'Y'  => { 'mapping' => [3, 1],
+              'def_context' => [undef,'all'],
+	      'has_strand' => [1, 0],
+	      'has_frame' => [1, 0]}, 
+    'TA' => { 'mapping' => [1, 3],
+              'def_context' => ['all',undef],
+	      'has_strand' => [0, 1],
+	      'has_frame' => [0, 1]}, 
     'TN' => { 'q' => '',
 	      'h' => qr/[sf]/,
-	      'mapping' => [1, 3]},
-    'TX' => { 'q' => qr/[sf]/, 
-	      'h' => qr/[sf]/,
-              'mapping' => [3, 3]}, 
-    'TY' => { 'q' => qr/[sf]/,
-	      'h' => qr/[sf]/,
-	      'mapping' => [3, 3]} 
+	      'mapping' => [1, 3],
+              'def_context' => ['p_',undef]},
+	      'has_frame' => [0, 1]}, 
+    'TX' => { 'mapping' => [3, 3],
+              'def_context' => [undef,undef],
+	      'has_strand' => [1, 1],
+	      'has_frame' => [1, 1]}, 
+    'TY' => { 'mapping' => [3, 3],
+              'def_context' => [undef,undef],
+	      'has_strand' => [1, 1],
+	      'has_frame' => [1, 1]}
 };
    
 =head2 _allowable_filters
@@ -310,19 +319,21 @@ sub _allowable_filters {
     return;
 }
 
-=head2 _set_mapping
 
- Title   : _set_mapping
- Usage   : $tiling->_set_mapping()
- Function: Sets the "mapping" attribute for invocant
-           according to algorithm name
- Returns : Mapping arrayref as set
+=head2 _set_attributes
+
+ Title   : _set_attributes
+ Usage   : $tiling->_set_attributes()
+ Function: Sets attributes for invocant
+           that depend on algorithm name
+ Returns : True on success
  Args    : none
- Note    : See mapping() for explanation of this attribute
+ Note    : setting based on the configuration table
+           %alg_lookup
 
 =cut
 
-sub _set_mapping {
+sub _set_attributes {
     my $self = shift;
     my $alg = $self->hit->algorithm;
 
@@ -332,25 +343,50 @@ sub _set_mapping {
     for ($alg) {
 	/MEGABLAST/i && do {
 	    ($self->{_mapping_query},$self->{_mapping_hit}) = (1,1);
+	    ($self->{_def_context_query},$self->{_def_context_hit}) =
+		('p_','p_');
+	    ($self->{_has_frame_query},$self->{_has_frame_hit}) =
+		(0, 0);
+	    ($self->{_has_strand_query},$self->{_has_strand_hit}) =
+		(1, 1);
 	    last;
 	};
 	/(.?)BLAST(.?)/i && do {
 	    ($self->{_mapping_query},$self->{_mapping_hit}) = 
 		@{$$alg_lookup{$1.$2}{mapping}};
+	    ($self->{_def_context_query},$self->{_def_context_hit}) =
+		@{$$alg_lookup{$1.$2}{def_context}};
+	    ($self->{_has_frame_query},$self->{_has_frame_hit}) =	    
+		@{$$alg_lookup{$1.$2}{has_frame}};
+	    ($self->{_has_strand_query},$self->{_has_strand_hit}) =	    
+		@{$$alg_lookup{$1.$2}{has_strand}};
 	    last;
 	};
 	/(.?)FAST(.?)/ && do {
 	    ($self->{_mapping_query},$self->{_mapping_hit}) = 
 		@{$$alg_lookup{$1.$2}{mapping}};
+	    ($self->{_def_context_query},$self->{_def_context_hit}) =
+		@{$$alg_lookup{$1.$2}{def_context}};
+	    ($self->{_has_frame_query},$self->{_has_frame_hit}) =	    
+		@{$$alg_lookup{$1.$2}{has_frame}};
+	    ($self->{_has_strand_query},$self->{_has_strand_hit}) =	    
+		@{$$alg_lookup{$1.$2}{has_strand}};
 	    last;
 	};
 	do { # unrecognized
-	    $self->warn("Unrecognized algorithm '$alg'; returning (1,1)");
+	    $self->warn("Unrecognized algorithm '$alg'; defaults may not work");
 	    ($self->{_mapping_query},$self->{_mapping_hit}) = (1,1);
+	    ($self->{_def_context_query},$self->{_def_context_hit}) =
+		('all','all');
+	    ($self->{_has_frame_query},$self->{_has_frame_hit}) =	    
+		(0,0);
+	    ($self->{_has_strand_query},$self->{_has_strand_hit}) =	    
+		(0,0);
+	    return 0;
 	    last;
 	};
     }
-    return ($self->{_mapping_query},$self->{_mapping_hit});
+    return 1;
 }
            
 sub _mapping_coeff {
@@ -459,7 +495,7 @@ sub matches_MT {
 	    $self->throw("Start/stop out of range [$start, $stop]");
 	}
 
-	# now with gap handling! /maj
+	# handle gaps
 	my $match_str = $self->seq_str('match');
 	if ($self->gaps) {
 	    # strip the homology string of gap positions relative
@@ -509,7 +545,8 @@ sub matches_MT {
 
 package Bio::Search::Tiling::MapTileUtils;
 
-sub ints_as_text {
+# a graphical depiction of a set of intervals
+sub _ints_as_text {
     my $ints = shift;
     my @ints = @$ints;
     my %pos;
