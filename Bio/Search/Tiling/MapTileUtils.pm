@@ -259,6 +259,7 @@ my $alg_lookup = {
 	      'has_frame' => [0, 1]}, 
     'TN' => { 'mapping' => [1, 3],
               'def_context' => ['p_',undef],
+	      'has_strand' => [1,1],
 	      'has_frame' => [0, 1]}, 
     'TX' => { 'mapping' => [3, 3],
               'def_context' => [undef,undef],
