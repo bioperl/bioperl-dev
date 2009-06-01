@@ -173,7 +173,7 @@ sub new {
     $self->throw("HitI object required") unless $hit;
     $self->throw("Argument must be HitI object") unless ( ref $hit && $hit->isa('Bio::Search::Hit::HitI') );
     $self->{hit} = $hit;
-    $self->_set_mapping();
+    $self->_set_attributes();
     $self->{"_algorithm"} = $hit->algorithm;
 
     my @hsps;
@@ -1188,11 +1188,11 @@ sub _check_context_arg {
 sub _make_context_key {
     my $self = shift;
     my @args = @_;
-    my ($strand, $frame) = $self->_rearrange([qw(TYPE STRAND FRAME)], @args);
+    my ($type, $strand, $frame) = $self->_rearrange([qw(TYPE STRAND FRAME)], @args);
     _check_type_arg(\$type);
     return 'all' unless (defined $strand or defined $frame);
     if ( defined $strand && $self->_has_strand($type) ) {
-	if (defined $frame && $self->_has_frame($type) {
+	if (defined $frame && $self->_has_frame($type)) {
 	    return ($strand >= 0 ? 'p' : 'm').abs($frame);
 	}
 	else {

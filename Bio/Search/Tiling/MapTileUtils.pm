@@ -10,7 +10,7 @@ BEGIN {
                       interval_tiling 
                       decompose_interval
                       _allowable_filters 
-                      _set_mapping
+                      _set_attributes
                       _mapping_coeff);
 }
 
@@ -244,7 +244,7 @@ my $alg_lookup = {
     'P'  => { 'mapping' => [1,1],
               'def_context' => ['all','all'],
 	      'has_strand' => [0, 0],
-	      'has_frame' => [0, 0]} 
+	      'has_frame' => [0, 0]},
     'X'  => { 'mapping' => [3, 1],
               'def_context' => [undef,'all'],
 	      'has_strand' => [1, 0],
@@ -257,10 +257,8 @@ my $alg_lookup = {
               'def_context' => ['all',undef],
 	      'has_strand' => [0, 1],
 	      'has_frame' => [0, 1]}, 
-    'TN' => { 'q' => '',
-	      'h' => qr/[sf]/,
-	      'mapping' => [1, 3],
-              'def_context' => ['p_',undef]},
+    'TN' => { 'mapping' => [1, 3],
+              'def_context' => ['p_',undef],
 	      'has_frame' => [0, 1]}, 
     'TX' => { 'mapping' => [3, 3],
               'def_context' => [undef,undef],
