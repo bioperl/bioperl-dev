@@ -1,11 +1,15 @@
 #-*-perl-*-
 #$Id$
 use strict;
+use warnings;
+    use vars qw($EXHAUSTIVE);
 BEGIN {
     use lib '.';
     use lib '../..';
+
     use Bio::Root::Test;
-    test_begin(-tests => 6488 );
+    $EXHAUSTIVE = $ENV{BIOPERL_TILING_EXHAUSTIVE_TESTS};
+    test_begin(-tests => ($EXHAUSTIVE ? 6471 : 1093) );
 }
 
 use_ok('Bio::Search::Tiling::MapTiling');
@@ -13,6 +17,8 @@ use_ok('Bio::Search::Tiling::MapTileUtils');
 use_ok('Bio::SearchIO');
 use_ok('Bio::Search::Hit::BlastHit');
 use_ok('File::Spec');
+
+chdir('../..');
 
 my ($blio, $result, $hit, $tiling, $hsp);
 my @normal_formats = qw( blast  wublast
@@ -26,10 +32,12 @@ my @xltd_formats  = qw(  blastx wublastx
                          tblastn wutblastn
                          tblastx wutblastx );
                          
-                         
+                 
+# an exhaustive listing of search reports in 
+# t/data 
+        
 my %test_files = (
     'blast' => [qw(
-               ecolitst.bls
                ecolitst.bls
                frac_problems.blast
                frac_problems2.blast
@@ -94,6 +102,52 @@ my %test_files = (
                )]
     );
 
+# a subset of search reports for 
+# run-o-the-mill regression tests
+
+my %example_files = (
+    'blast' => [qw(
+               ecolitst.bls
+               )],
+    'blastn' => [qw(
+               a_thaliana.blastn
+               )],
+    'wublastn' =>[qw(
+               brassica_ATH.WUBLASTN
+               )],
+    'blastp' => [qw(
+               no_hsps.blastp
+               catalase-webblast.BLASTP
+               )],
+    'wublastp' => [qw(
+               dcr1_sp.WUBLASTP
+               )],
+    'blastx' => [qw(
+               bl2seq.blastx.out
+               )],
+    'wublastx' => [qw(
+               dnaEbsub_ecoli.wublastx
+               )],
+    'wublast' => [qw(
+               tricky.wublast
+               )],
+    'tblastn' => [qw(
+               tblastn.out
+               )],
+    'wutblastn' => [qw(
+               dnaEbsub_ecoli.wutblastn
+               )],
+    'tblastx' => [qw(
+               HUMBETGLOA.tblastx
+               )],
+    'wutblastx' => [qw(
+               dnaEbsub_ecoli.wutblastx
+               )],
+    'megablast' => [qw(
+               503384.MEGABLAST.2
+               )]
+    );
+
 ok( $blio = new Bio::SearchIO( 
 	-file=>test_input_file('dcr1_sp.WUBLASTP'),
 	-format=>'blast'), 'parse data file');
@@ -149,35 +203,6 @@ $tiling->rewind('subject');
 while ($tiling->next_tiling('subject')) {$sn++};
 is ($sn, 256, 'tiling iterator regression test(3, rewind)');
 
-# test the filters and filter checking
-# arrays are of the form
-# [$format, $file, \@living_filters, \@dying_filters]
-# @filters = ($qstrand, $hstrand, $qframe, $hframe)
-
-
-# my %examples = (
-#     'BLASTN' => ['blast', 'AE003528_ecoli.bls'],
-#     'BLASTP' => ['blast', 'catalase-webblast.BLASTP'],
-#     'BLASTX' => ['blast', 'dnaEbsub_ecoli.wublastx'],
-#     'TBLASTN'=> ['blast', 'dnaEbsub_ecoli.wutblastn'],
-#     'TBLASTX'=> ['blast', 'dnaEbsub_ecoli.wutblastx'],
-#     'FASTA'  => ['fasta', 'cysprot_vs_gadfly.FASTA'],
-#     'FASTXY'  => ['fasta', '5X_1895.FASTXY'],
-#     'MEGABLAST' => ['blast', '503384.MEGABLAST.2'],
-#     'TFASTA' => undef,
-#     'TFASTX' => undef
-#     );
-
-# my %results;
-
-# foreach (keys %examples) {
-#     next unless $examples{$_};
-#     ok( $blio = Bio::SearchIO->new( -format=>$examples{$_}[0],
-# 				       -file  =>test_input_file($examples{$_}[1])), 
-# 	"$_ data file");
-#     my $hit = ($results{$_} = $blio->next_result)->next_hit;
-# }
-
 diag("Old blast.t tiling tests");
 
 ok($blio = Bio::SearchIO->new(
@@ -221,7 +246,7 @@ ok( $blio = Bio::SearchIO->new(
     ), "dnaEbsub_ecoli.wublastx");
 
 $hit = $blio->next_result->next_hit;
-my $tiling = Bio::Search::Tiling::MapTiling->new($hit);
+$tiling = Bio::Search::Tiling::MapTiling->new($hit);
 is(sprintf("%.3f",$tiling->frac_identical(-type=>'query',-denom=>'aligned',-context=>'p2')), '0.364');
 is(sprintf("%.3f",$tiling->frac_identical(-type=>'hit',-denom=>'aligned',-context=>'all')), '0.366');
 is(sprintf("%.3f",$tiling->frac_conserved(-type=>'query',-denom=>'aligned',-context=>'p2')), '0.537');
@@ -243,77 +268,14 @@ is(sprintf("%.2f",$tiling->frac_aligned_hit), '0.91','tricky.wublast(4)');
 
 diag("New tiling tests");
 
-foreach my $alg (@normal_formats) {
-    diag("*******$alg files*******");
-    foreach my $tf (@{$test_files{$alg}}) {
-	ok( $blio = Bio::SearchIO->new( -format=>'blast', 
-					-file=>test_input_file($tf)
-	    ), "$tf" );
-	$result = $blio->next_result;
-	my $hit_count = 0;
-	# compare the per-aligned-base identity avg over hsps
-	# with frac_identical (bzw, conserved)
+# select test file set based on the environment variable
+# BIOPERL_TILING_EXHAUSTIVE_TESTS
 
-      HIT:
-	while ( $hit = $result->next_hit ) {
-	    ++$hit_count;
-	    # quiet the "No HSPs" warning with -verbose => -1
-	    ok( $tiling = Bio::Search::Tiling::MapTiling->new(-hit=>$hit,-verbose=>-1), "tile $tf hit $hit_count #hsps ".scalar $tiling->hsps );
-	    my @hsps = $tiling->hsps;
+my $files = ($EXHAUSTIVE ? \%test_files : \%example_files);
 
-	    unless (@hsps) {
-		diag( "--no hsps for $tf hit $hit_count");
-		next HIT;
-	    }
-	    my ($dpct, $est, $fast,$exact, $max);
-	    my $tol = 0.10; # % difference accepted as approx. equal
-
-	    if (@hsps == 1) {
-		# equality
-		($dpct, $est, $fast) = $tiling->cmp_frac('query','identical','aligned', 'est', 'fast');
-		is( $est,$fast, "q id: est ($est) = fast ($fast)");
-		($dpct, $est, $fast) = $tiling->cmp_frac('hit','identical','aligned', 'est', 'fast');
-		is( $est,$fast, "h id: est ($est) = fast ($fast)");
-		($dpct, $est, $fast) = $tiling->cmp_frac('query','conserved','aligned', 'est', 'fast');
-		is( $est,$fast, "q cn: est ($est) = fast ($fast)");
-		($dpct, $est, $fast) = $tiling->cmp_frac('hit','conserved','aligned', 'est', 'fast');
-		is( $est,$fast, "h cn: est ($est) = fast ($fast)");
-	    }
-	    else {
-		# comparisons
-		($dpct, $est, $fast) = $tiling->cmp_frac('query','identical','aligned', 'est', 'fast');
-#		cmp_ok( $dpct, "<", $tol, "q id: est ($est) ~ fast ($fast)");
-		($dpct, $exact, $max) = $tiling->cmp_frac('query','identical','aligned', 'exact', 'max');
-		cmp_ok( abs($exact-$est)/$exact, "<" , $tol, "q id: exact ($exact) ~ est ($est)");
-		cmp_ok( $exact, "<=" , $max, "q id: exact ($exact) <= max ($max)");
-
-		($dpct, $est, $fast) = $tiling->cmp_frac('hit','identical','aligned', 'est', 'fast');
-#		cmp_ok( $dpct, "<", $tol, "h id: est ($est) ~ fast ($fast)");
-		($dpct, $exact, $max) = $tiling->cmp_frac('hit','identical','aligned', 'exact', 'max');
-		cmp_ok(  abs($exact-$est)/$exact, "<" , $tol, "h id: exact ($exact) ~ est ($est)");
-		cmp_ok( $exact, "<=" , $max, "h id: exact ($exact) <= max ($max)");
-
-		($dpct, $est, $fast) = $tiling->cmp_frac('query','conserved','aligned', 'est', 'fast');
-#		cmp_ok( $dpct, "<", $tol, "q cn: est ($est) ~ fast ($fast)");
-		($dpct, $exact, $max) = $tiling->cmp_frac('query','conserved','aligned', 'exact', 'max');
-		cmp_ok(  abs($exact-$est)/$exact, "<" , $tol, "q cn: exact ($exact) ~ est ($est)");
-		cmp_ok( $exact, "<=" , $max, "q cn: exact ($exact) <= max ($max)");
-
-		($dpct, $est, $fast) = $tiling->cmp_frac('hit','conserved','aligned', 'est', 'fast');
-#		cmp_ok( $dpct, "<", $tol, "h cn: est ($est) ~ fast ($fast)");
-		($dpct, $exact, $max) = $tiling->cmp_frac('hit', 'conserved','aligned', 'exact', 'max');
-		cmp_ok(  abs($exact-$est)/$exact, "<=" , $tol, "h cn: exact ($exact) ~ est ($est)");
-		cmp_ok( $exact, "<=" , $max, "h cn: exact ($exact) <= max ($max)");
-	    }
-	}
-    }
-}
-
-# translated formats: deal with strand/frame context...
-
-foreach my $alg (@xltd_formats) {
-    diag("*******$alg files*******");
-    foreach my $tf (@{$test_files{$alg}}) {
+foreach my $alg (@normal_formats, @xltd_formats) {
+    diag("*******$alg files*******") if $files->{$alg};
+    foreach my $tf (@{$files->{$alg}}) {
 	ok( $blio = Bio::SearchIO->new( -format=>'blast', 
 					-file=>test_input_file($tf)
 	    ), "$tf" );
