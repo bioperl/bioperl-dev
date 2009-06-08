@@ -90,6 +90,8 @@ sub next_aln {
     return $self->{'_alns'}->[ $self->{'_alnsiter'}++ ];
 }
 
+#Add sub rewind?
+
 sub _parse {
 	my ($self) = @_;
 
@@ -104,26 +106,25 @@ sub _parse {
  	'-as_project' => '1'
  	);
 
-	my ($start, $end, $name, $seqname, $seq, $seqchar, $entry, 
-		 $tempname, $tempdesc, %align, $desc, $maxlen);
+	my ($start, $end, $seq, $desc);
 	my $aln = Bio::SimpleAlign->new();
+	my $taxa = $proj->get_taxa();
+ 	my $matrices = $proj->get_matrices();
+ 	
+ 	foreach my $matrix (@$matrices) 
+ 	{	
+ 		
 
-	while (my $data_obj = $proj->next()) {
-	    
-	    #check if Bio::Phylo section(not sure if thats the right name) is of the right class
- 		if (ref $data_obj ne 'Bio::Phylo::Matrices::Matrix')
- 		{
- 			next;
- 		}
  		#check if mol_type is something that makes sense to be a seq
- 		my $mol_type = lc($data_obj->get_type());
+ 		my $mol_type = lc($matrix->get_type());
  		unless ($mol_type eq 'dna' || $mol_type eq 'rna' || $mol_type eq 'protein')
  		{
  			next;
  		}
  		
- 		my $rows = $data_obj->get_entities();
- 		my $basename = $data_obj->get_name();
+ 		my $basename = $matrix->get_name();
+ 		
+ 		my $rows = $matrix->get_entities();
  		my $seqNum = 0;
  		foreach my $row (@$rows)
  		{
@@ -136,8 +137,8 @@ sub _parse {
 						  -seq         => $newSeq,
 						  -display_id  => "$seqID",
 						  -description => $desc,
-						  -start       => $start,
-						  -end         => $end,
+						  -start       => $start,   #this is currently undefined, not sure if it needs to be mapped or not
+						  -end         => $end,     #same as above
 						  -alphabet	   => $mol_type,
 						  );
 			#what other data is appropriate to pull over from bio::phylo::matrices::matrix??

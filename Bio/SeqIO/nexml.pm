@@ -77,7 +77,7 @@ package Bio::SeqIO::nexml;
 
 use strict;
 
-use Bio::Seq::SeqFactory;
+
 use Bio::Phylo::IO qw (parse unparse);
 use base qw(Bio::SeqIO);
 
@@ -105,6 +105,8 @@ sub next_seq {
     return $self->{'_seqs'}->[ $self->{'_seqiter'}++ ];
 }
 
+#add sub rewind?
+
 sub _parse {
 	my ($self) = @_;
 
@@ -119,28 +121,25 @@ sub _parse {
  	'-as_project' => '1'
  	);
  
- 	while (my $data_obj = $proj->next())
- 	{
- 		#check if Bio::Phylo section(not sure if thats the right name) is of the right class
- 		if (ref $data_obj ne 'Bio::Phylo::Matrices::Matrix')
- 		{
- 			next;
- 		}
+ 	my $matrices = $proj->get_matrices();
+ 	
+ 	foreach my $matrix (@$matrices) 
+ 	{	
  		#check if mol_type is something that makes sense to be a seq
- 		my $mol_type = lc($data_obj->get_type());
+ 		my $mol_type = lc($matrix->get_type());
  		unless ($mol_type eq 'dna' || $mol_type eq 'rna' || $mol_type eq 'protein')
  		{
  			next;
  		}
  		
- 		my $rows = $data_obj->get_entities();
+ 		my $rows = $matrix->get_entities();
  		my $seqnum = 0;
- 		my $basename = $data_obj->get_name();
+ 		my $basename = $matrix->get_name();
  		foreach my $row (@$rows)
  		{
  			my $newSeq = $row->get_char();
  			$seqnum++;
- 			#generate full sequence id
+ 			#construct full sequence id
  			my $seqID = "$basename.seq_$seqnum";
  			
  			my $seq = Bio::PrimarySeq->new();
