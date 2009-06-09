@@ -145,6 +145,9 @@ sub _parse {
  			my $tree_id = $t->get_name();
  			my $tree = Bio::Tree::Tree->new(-id => "$basename.$tree_id");
  			
+# this is good -- now really need some tests for this code; have a look 
+# at the distribution tests in t/Tree for some data/ideas... /maj
+
  			
  			
  			#process terminals only removing terminals as they get processed 
