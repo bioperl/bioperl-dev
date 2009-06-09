@@ -61,7 +61,7 @@ Email: chmille4@gmail.com
 
 =head1 CONTRIBUTORS
 
-Mark Jenson, maj@fortinbras.us
+Mark Jensen, maj@fortinbras.us
 Rutger Vos, rutgeraldo@gmail.com
 
 =head1 APPENDIX
@@ -140,11 +140,23 @@ sub _parse {
  			my $newSeq = $row->get_char();
  			$seqnum++;
  			#construct full sequence id
+
+# this is good to have somewhere, maybe better in $self->primary_id,
+# rather than $self->id (which maps to $self->display_id) /maj
+
  			my $seqID = "$basename.seq_$seqnum";
- 			
+
+# should we use the factories attached to the object here, rather than
+# building with PrimarySeq object directly? /maj
+			
  			my $seq = Bio::PrimarySeq->new();
  			$seq->seq($newSeq);
  			$seq->alphabet($mol_type);
+
+# I would do $seq->primary_id($seqID), and use any "label" (if it exists)
+# for the id == display_id property. (if there's no label, then default
+# to your $seqID /maj
+
  			$seq->id("$seqID");
  			#what other data is appropriate to pull over from bio::phylo::matrices::matrix??
  		
