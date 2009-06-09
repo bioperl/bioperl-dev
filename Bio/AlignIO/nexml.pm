@@ -48,7 +48,7 @@ Chase Miller
 
 =head1 CONTRIBUTORS
 
-Mark Jenson, maj@fortinbras.us
+Mark Jensen, maj@fortinbras.us
 Rutger Vos, rutgeraldo@gmail.com
 
 =head1 APPENDIX
@@ -131,8 +131,15 @@ sub _parse {
  			my $newSeq = $row->get_char();
  			
  			$seqNum++;
+
+# see comments in Bio::SeqIO::nexml regarding this choice of $seqID /maj
+
  			my $seqID = "$basename.row_$seqNum";
- 	
+
+# I would allow the LocatableSeq constructor to handle setting start and end,
+# you can leave attrs out -- UNLESS nexml has a slot for these coordinates;
+# I would dig around for this. /maj
+
  			$seq = Bio::LocatableSeq->new(
 						  -seq         => $newSeq,
 						  -display_id  => "$seqID",
