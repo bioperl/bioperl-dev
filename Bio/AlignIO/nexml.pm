@@ -107,14 +107,13 @@ sub _parse {
  	);
 
 	my ($start, $end, $seq, $desc);
-	my $aln = Bio::SimpleAlign->new();
 	my $taxa = $proj->get_taxa();
  	my $matrices = $proj->get_matrices();
  	
  	foreach my $matrix (@$matrices) 
  	{	
- 		
-
+		my $aln = Bio::SimpleAlign->new();
+		
  		#check if mol_type is something that makes sense to be a seq
  		my $mol_type = lc($matrix->get_type());
  		unless ($mol_type eq 'dna' || $mol_type eq 'rna' || $mol_type eq 'protein')
@@ -133,6 +132,7 @@ sub _parse {
  			$seqNum++;
 
 # see comments in Bio::SeqIO::nexml regarding this choice of $seqID /maj
+#just noticed these comments when I went to commit. I'll address these asap. /Chase
 
  			my $seqID = "$basename.row_$seqNum";
 
@@ -175,8 +175,51 @@ See L<Bio::Align::AlignI>
 =cut
 
 sub write_aln {
-    # not implemented yet
+	my ($self, $aln, @args) = @_;
+	#most of the code below ripped from Bio::Phylo::Matrices::Matrix::new_from_bioperl()
+	
+	my $factory = Bio::Phylo::Factory->new();
+	
+		if ( Bio::Phylo::Matrices::Matrix::isa( $aln, 'Bio::Align::AlignI' ) ) {
+		    $aln->unmatch;
+		    $aln->map_chars('\.','-');
+		    my @seqs = $aln->each_seq;
+		    my ( $type, $missing, $gap, $matchchar ); 
+		    if ( $seqs[0] ) {
+		    	$type = $seqs[0]->alphabet || $seqs[0]->_guess_alphabet || 'dna';
+		    }
+		    else {
+		    	$type = 'dna';
+		    }
+			my $matrix = $factory->create_matrix( 
+				'-type' => $type,
+				'-special_symbols' => {
+			    	'-missing'   => $aln->missing_char || '?',
+			    	'-matchchar' => $aln->match_char   || '.',
+			    	'-gap'       => $aln->gap_char     || '-',					
+				},
+				@args 
+			);			
+			# XXX create raw getter/setter pairs for annotation, accession, consensus_meta source
+			for my $field ( qw(description accession id annotation consensus_meta score source) ) {
+				$matrix->$field( $aln->$field );
+			}			
+			my $to = $matrix->get_type_object;			
+            for my $seq ( @seqs ) {
+            	my $datum = Bio::Phylo::Matrices::Datum->new_from_bioperl(
+            		$seq, '-type_object' => $to
+            	);                                         	
+                $matrix->insert($datum);
+            }
+            $self->_print($matrix->to_xml());
+            return $matrix;
+		}
+		else {
+			#TODO convert to bioperl debugging
+			#throw 'ObjectMismatch' => 'Not a bioperl alignment!';
+		}
 }
+
 
 
 
