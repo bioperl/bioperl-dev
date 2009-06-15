@@ -77,8 +77,9 @@ package Bio::SeqIO::nexml;
 
 use strict;
 
-
+use Bio::Phylo::Matrices::Datum;
 use Bio::Phylo::IO qw (parse unparse);
+use Bio::Seq;
 use base qw(Bio::SeqIO);
 
 sub _initialize {
@@ -143,13 +144,14 @@ sub _parse {
 
 # this is good to have somewhere, maybe better in $self->primary_id,
 # rather than $self->id (which maps to $self->display_id) /maj
+#just noticed these comments when I went to commit. I'll address these asap. /Chase
 
  			my $seqID = "$basename.seq_$seqnum";
 
 # should we use the factories attached to the object here, rather than
 # building with PrimarySeq object directly? /maj
 			
- 			my $seq = Bio::PrimarySeq->new();
+ 			my $seq = Bio::Seq->new();
  			$seq->seq($newSeq);
  			$seq->alphabet($mol_type);
 
@@ -183,13 +185,54 @@ sub _parse {
 =cut
 
 sub write_seq { #in progress
- #  my ($self,@seq) = @_;
- #  foreach my $seq (@seq) {
- #  		my $dat = Bio::Phylo::Matrices::Datum->new_from_bioperl($seq);
- #  		$self->_print( $dat->to_xml );
- #  }
- #  $self->flush if $self->_flush_on_write && defined $self->_fh;
- #  return 1;
+ 	my ($self,$ seq, @args) = @_;
+	my $type 	= $seq->alphabet || $seq->_guess_alphabet || 'dna';
+   	my $dat 	= Bio::Phylo::Matrices::Datum->new( '-type' => $type);
+        
+	# copy seq string
+    my $seqstring = $seq->seq;
+    if ( $seqstring and $seqstring =~ /\S/ ) {
+        eval { $dat->set_char( $seqstring ) };
+        #TODO convert to Bioperl debugging
+        if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
+        	#$logger->error(
+        	#	"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".
+        	#	$@->description                                                                  .
+        	#	"\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n"           .
+        	#	"I cannot store this string, I will continue instantiating an empty object.\n"   .
+        	#	"---------------------------------- STACK ----------------------------------\n"  .
+        	#	$@->trace->as_string                                                             .
+        	#	"\n--------------------------------------------------------------------------"
+        	#);
+        }
+	}                
+        
+	# copy name
+	my $name = $seq->display_id;
+	$dat->set_name( $name ) if defined $name;
+                
+	# copy desc
+	my $desc = $seq->desc;   
+	$dat->set_desc( $desc ) if defined $desc; 
+	
+	#get features from SeqFeatureI
+	#TODO test SeqFeatures
+	if (my $feat = $seq->get_SeqFeatures()) {
+		
+		my $start = $feat->start;
+		$dat->start($start) if defined $start;
+		
+		my $end = $feat->end;
+		$dat->end($start) if defined $end;
+		
+		my $strand = $feat->strand;
+		$dat->strand($start) if defined $strand;
+	}
+		
+	
+	$self->_print( $dat->to_xml );
+        
+	return 1;
 }
 
 
