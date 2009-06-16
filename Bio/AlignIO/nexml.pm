@@ -122,19 +122,25 @@ sub _parse {
  		}
  		
  		my $basename = $matrix->get_name();
+ 		$aln->id($basename);
  		
  		my $rows = $matrix->get_entities();
  		my $seqNum = 0;
  		foreach my $row (@$rows)
  		{
  			my $newSeq = $row->get_char();
- 			
+ 			my $rowlabel;
  			$seqNum++;
-
-# see comments in Bio::SeqIO::nexml regarding this choice of $seqID /maj
-#just noticed these comments when I went to commit. I'll address these asap. /Chase
-
+ 			
+ 			#constuct seqID based on matrix label and row id
  			my $seqID = "$basename.row_$seqNum";
+ 			
+ 			#Check if theres a row label and if not default to seqID
+ 			if( !defined($rowlabel = $row-get_name())) {$rowlabel = $seqID;}
+ 			
+ 			
+
+ 			
 
 # I would allow the LocatableSeq constructor to handle setting start and end,
 # you can leave attrs out -- UNLESS nexml has a slot for these coordinates;
@@ -143,9 +149,7 @@ sub _parse {
  			$seq = Bio::LocatableSeq->new(
 						  -seq         => $newSeq,
 						  -display_id  => "$seqID",
-						  -description => $desc,
-						  -start       => $start,   #this is currently undefined, not sure if it needs to be mapped or not
-						  -end         => $end,     #same as above
+						  #-description => $desc,
 						  -alphabet	   => $mol_type,
 						  );
 			#what other data is appropriate to pull over from bio::phylo::matrices::matrix??
