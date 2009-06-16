@@ -80,6 +80,8 @@ use strict;
 use Bio::Phylo::Matrices::Datum;
 use Bio::Phylo::IO qw (parse unparse);
 use Bio::Seq;
+use Bio::Seq::SeqFactory;
+
 use base qw(Bio::SeqIO);
 
 sub _initialize {
@@ -139,27 +141,38 @@ sub _parse {
  		foreach my $row (@$rows)
  		{
  			my $newSeq = $row->get_char();
+ 			
  			$seqnum++;
- 			#construct full sequence id
-
-# this is good to have somewhere, maybe better in $self->primary_id,
-# rather than $self->id (which maps to $self->display_id) /maj
-#just noticed these comments when I went to commit. I'll address these asap. /Chase
-
+ 			#construct full sequence id by using bio::phylo "matrix label" and "row id"
  			my $seqID = "$basename.seq_$seqnum";
-
-# should we use the factories attached to the object here, rather than
-# building with PrimarySeq object directly? /maj
-			
- 			my $seq = Bio::Seq->new();
- 			$seq->seq($newSeq);
- 			$seq->alphabet($mol_type);
-
-# I would do $seq->primary_id($seqID), and use any "label" (if it exists)
-# for the id == display_id property. (if there's no label, then default
-# to your $seqID /maj
-
- 			$seq->id("$seqID");
+ 			my $rowlabel;
+ 			#check if there is a label for the row, if not default to seqID
+ 			if (!defined ($rowlabel = $row->get_name())) {$rowlabel = $seqID;}
+ 			
+ 		
+ 			#build the seq object using the factory create method
+ 			#not sure if this is the preferred way, but couldn't get it to work
+ 			#my $seq = $self->sequence_factory->create(
+			#		   -seq         => $newSeq,
+			#		   -id          => $rowlabel,
+			#		   -primary_id  => $seqID,
+			#		   #-desc        => $fulldesc,
+			#		   -alphabet    => $mol_type,
+			#		   -direct      => 1,
+			#		   );
+ 			#did this instead
+ 			my $seqbuilder = new Bio::Seq::SeqFactory('-type' => 'Bio::Seq');
+ 			
+ 			my $seq = $seqbuilder->create(
+					   -seq         => $newSeq,
+					   -id          => $rowlabel,
+					   -primary_id  => $seqID,
+					   #-desc        => $fulldesc,
+					   -alphabet    => $mol_type,
+					   -direct      => 1,
+					   );
+ 			
+ 			
  			#what other data is appropriate to pull over from bio::phylo::matrices::matrix??
  		
  			push @{ $self->{'_seqs'} }, $seq;
