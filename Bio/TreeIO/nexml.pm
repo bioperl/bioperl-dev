@@ -125,7 +125,7 @@ sub _parse {
     
     
     my $proj = parse(
- 	'-file'       => 'data_sets/trees.xml',
+ 	'-file'       => $self->{'_file'},
  	'-format'     => 'nexml',
  	'-as_project' => '1'
  	);
