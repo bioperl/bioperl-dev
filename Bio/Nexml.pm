@@ -94,6 +94,8 @@ use lib '..';
 use Bio::SeqIO::Nexml;
 use Bio::AlignIO::Nexml;
 use Bio::TreeIO::Nexml;
+use Bio::Phylo::IO;
+use Bio::Nexml::Util;
 
 use base qw(Bio::Root::Root);
 
@@ -103,9 +105,13 @@ sub new {
 
 	my %params = @args;
 	
+	
 	$self->{'_seqIO'}  = Bio::SeqIO::nexml->new(@args);
  	$self->{'_alnIO'}  = Bio::AlignIO::nexml->new(@args);
  	$self->{'_treeIO'} = Bio::TreeIO::nexml->new(@args);
+ 	$self->{'_doc'} = Bio::Phylo::IO->parse('-file' => $params{'-file'}, '-format' => 'nexml', '-as_project' => '1');
+ 	
+ 	
  	return $self;
 }
 
@@ -124,19 +130,46 @@ sub alnIO {
 	return $self->{'_alnIO'};	
 }
 
+sub doc {
+	my $self = shift;
+	return $self->{'_doc'};
+}
+
+sub _parse {
+	my ($self) = @_;
+    
+    $self->{'_parsed'}   = 1;
+    $self->{'_treeiter'} = 0;
+    $self->{'_seqiter'} = 0;
+    $self->{'_alniter'} = 0;
+    
+	$self->{'_trees'} = Bio::Nexml::Util->_make_tree($self->doc);
+	$self->{'_alns'}  = Bio::Nexml::Util->_make_aln($self->doc);
+	$self->{'_seqs'}  = Bio::Nexml::Util->_make_seq($self->doc);
+}
+
 sub next_tree {
 	my $self = shift;
-	return $self->treeIO->next_tree();
+	unless ( $self->{'_parsed'} ) {
+        $self->_parse;
+    }
+	return $self->{'_trees'}->[ $self->{'_treeiter'}++ ];
 }
 
 sub next_seq {
 	my $self = shift;
-	return $self->seqIO->next_seq();
+	unless ( $self->{'_parsed'} ) {
+        $self->_parse;
+    }
+	return $self->{'_seqs'}->[ $self->{'_seqiter'}++ ];
 }
 
 sub next_aln {
 	my $self = shift;
-	return $self->alnIO->next_aln();
+	unless ( $self->{'_parsed'} ) {
+        $self->_parse;
+    }
+	return $self->{'_alns'}->[ $self->{'_alniter'}++ ];
 }
 
 1;

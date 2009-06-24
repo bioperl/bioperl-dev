@@ -73,9 +73,11 @@ Internal methods are usually preceded with a _
 package Bio::TreeIO::nexml;
 use strict;
 
+use lib '../..';
 use Bio::Event::EventGeneratorI;
 use IO::String;
 use Bio::Phylo::IO qw (parse unparse);
+use Bio::Nexml::Util;
 
 use base qw(Bio::TreeIO);
 
@@ -119,96 +121,24 @@ sub rewind {
 
 sub _parse {
     my ($self) = @_;
-
+    
     $self->{'_parsed'}   = 1;
     $self->{'_treeiter'} = 0;
     
-    
-    my $proj = parse(
+    my $proj;
+    #eval {
+    	$proj = parse(
  	'-file'       => $self->{'_file'},
  	'-format'     => 'nexml',
  	'-as_project' => '1'
  	);
+   # };
  	
- 	my $taxa = $proj->get_taxa();
- 	my $forests = $proj->get_forests();
- 	
- 	foreach my $forest (@$forests) 
- 	{	
- 	my $basename = $forest->get_name();
- 	my $trees = $forest->get_entities();
- 		
- 
- 		foreach my $t (@$trees)
- 		{
- 			my %created_nodes;
- 			my $tree_id = $t->get_name();
- 			my $tree = Bio::Tree::Tree->new(-id => "$basename.$tree_id");
- 			
-# this is good -- now really need some tests for this code; have a look 
-# at the distribution tests in t/Tree for some data/ideas... /maj
-#just noticed these comments when I went to commit. I'll address these asap. /Chase
-
- 			
- 			
- 			#process terminals only removing terminals as they get processed 
- 			#which inturn creates new terminals to process until the entire tree has been processed
- 			my $terminals = $t->get_terminals();
- 			for(my $i=0; $i<@$terminals; $i++)
- 			{
- 				my $terminal = $$terminals[$i];
- 				my $new_node_id = $terminal->get_name();
- 				my $newNode;
- 				
- 				if(exists $created_nodes{$new_node_id})
- 				{
- 					$newNode = $created_nodes{$new_node_id};
- 				}
- 				else
- 				{
- 					$newNode = Bio::Tree::Node->new(-id => $new_node_id);
- 					$created_nodes{$new_node_id} = $newNode;
- 				}
- 				
- 				#transfer attributes that apply to all nodes
- 				#check if taxa data exists for the current node ($terminal)
- 				if(my $taxon = $terminal->get_taxon()) {
- 					$newNode->add_tag_value("taxon", $taxon->get_name());
- 				}
- 				
- 				#check if you've reached the root of the tree and if so, stop.
- 				if($terminal->is_root()) {
- 					$tree->set_root_node($newNode);
- 					last;
- 				}
- 				
- 				#transfer attributes that apply to non-root only nodes
- 				$newNode->branch_length($terminal->get_branch_length());
- 				
- 				my $parent = $terminal->get_parent();
- 				my $parentID = $parent->get_name();
- 				if(exists $created_nodes{$parentID})
- 				{
- 					$created_nodes{$parentID}->add_Descendent($newNode);
- 				}
- 				else
- 				{
- 					my $parent_node = Bio::Tree::Node->new(-id => $parentID);
- 					$parent_node->add_Descendent($newNode);
- 					$created_nodes{$parentID} = $parent_node; 
- 				}
- 				#remove processed node from tree
- 				$parent->prune_child($terminal);
- 				
- 				#check if the parent of the removed node is now a terminal node and should be added for processing
- 				if($parent->is_terminal())
- 				{
- 					push(@$terminals, $terminal->get_parent());
- 				}
- 			}
-			push @{ $self->{'_trees'} }, $tree;
- 		}
- 	}
+ 	#if ($@)
+ 	#{
+ 	#	print "caught";
+ 	#}
+ 	$self->{'_trees'} = Bio::Nexml::Util->_make_tree($proj);
 }
 
 =head2 write_tree
@@ -241,8 +171,7 @@ sub write_tree {
 		$tree->set_score( $score ) if defined $score;
 	}
 	else {
-		#TODO need to convert to Bioperl debugging
-		#throw 'ObjectMismatch' => 'Not a bioperl tree!';
+		$self->throw('Not a bioperl tree!');
 	}
 	
 	$self->_print($tree->to_xml());

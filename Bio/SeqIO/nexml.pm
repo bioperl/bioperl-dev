@@ -77,10 +77,12 @@ package Bio::SeqIO::nexml;
 
 use strict;
 
+use lib '../..';
 use Bio::Phylo::Matrices::Datum;
 use Bio::Phylo::IO qw (parse unparse);
 use Bio::Seq;
 use Bio::Seq::SeqFactory;
+use Bio::Nexml::Util;
 
 use base qw(Bio::SeqIO);
 
@@ -124,60 +126,11 @@ sub _parse {
  	'-as_project' => '1'
  	);
  
- 	my $matrices = $proj->get_matrices();
  	
- 	foreach my $matrix (@$matrices) 
- 	{	
- 		#check if mol_type is something that makes sense to be a seq
- 		my $mol_type = lc($matrix->get_type());
- 		unless ($mol_type eq 'dna' || $mol_type eq 'rna' || $mol_type eq 'protein')
- 		{
- 			next;
- 		}
  		
- 		my $rows = $matrix->get_entities();
- 		my $seqnum = 0;
- 		my $basename = $matrix->get_name();
- 		foreach my $row (@$rows)
- 		{
- 			my $newSeq = $row->get_char();
- 			
- 			$seqnum++;
- 			#construct full sequence id by using bio::phylo "matrix label" and "row id"
- 			my $seqID = "$basename.seq_$seqnum";
- 			my $rowlabel;
- 			#check if there is a label for the row, if not default to seqID
- 			if (!defined ($rowlabel = $row->get_name())) {$rowlabel = $seqID;}
- 			
+ 	$self->{'_seqs'} = Bio::Nexml::Util->_make_seq($proj);
  		
- 			#build the seq object using the factory create method
- 			#not sure if this is the preferred way, but couldn't get it to work
- 			#my $seq = $self->sequence_factory->create(
-			#		   -seq         => $newSeq,
-			#		   -id          => $rowlabel,
-			#		   -primary_id  => $seqID,
-			#		   #-desc        => $fulldesc,
-			#		   -alphabet    => $mol_type,
-			#		   -direct      => 1,
-			#		   );
- 			#did this instead
- 			my $seqbuilder = new Bio::Seq::SeqFactory('-type' => 'Bio::Seq');
- 			
- 			my $seq = $seqbuilder->create(
-					   -seq         => $newSeq,
-					   -id          => $rowlabel,
-					   -primary_id  => $seqID,
-					   #-desc        => $fulldesc,
-					   -alphabet    => $mol_type,
-					   -direct      => 1,
-					   );
- 			
- 			
- 			#what other data is appropriate to pull over from bio::phylo::matrices::matrix??
- 		
- 			push @{ $self->{'_seqs'} }, $seq;
- 		}
- 	}
+ 	
  	unless(@{ $self->{'_seqs'} } == 0)
  	{
 # 		self->debug("no seqs in $self->{_file}");
