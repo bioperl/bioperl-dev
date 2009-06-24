@@ -63,8 +63,10 @@ methods. Internal methods are usually preceded with a _
 package Bio::AlignIO::nexml;
 
 use strict;
+use lib '../..';
 use Bio::Phylo::IO qw(parse unparse);
 use Bio::LocatableSeq;
+use Bio::Nexml::Util;
 use base qw(Bio::AlignIO);
 
 
@@ -106,60 +108,7 @@ sub _parse {
  	'-as_project' => '1'
  	);
 
-	my ($start, $end, $seq, $desc);
-	my $taxa = $proj->get_taxa();
- 	my $matrices = $proj->get_matrices();
- 	
- 	foreach my $matrix (@$matrices) 
- 	{	
-		my $aln = Bio::SimpleAlign->new();
-		
- 		#check if mol_type is something that makes sense to be a seq
- 		my $mol_type = lc($matrix->get_type());
- 		unless ($mol_type eq 'dna' || $mol_type eq 'rna' || $mol_type eq 'protein')
- 		{
- 			next;
- 		}
- 		
- 		my $basename = $matrix->get_name();
- 		$aln->id($basename);
- 		
- 		my $rows = $matrix->get_entities();
- 		my $seqNum = 0;
- 		foreach my $row (@$rows)
- 		{
- 			my $newSeq = $row->get_char();
- 			my $rowlabel;
- 			$seqNum++;
- 			
- 			#constuct seqID based on matrix label and row id
- 			my $seqID = "$basename.row_$seqNum";
- 			
- 			#Check if theres a row label and if not default to seqID
- 			if( !defined($rowlabel = $row-get_name())) {$rowlabel = $seqID;}
- 			
- 			
-
- 			
-
-# I would allow the LocatableSeq constructor to handle setting start and end,
-# you can leave attrs out -- UNLESS nexml has a slot for these coordinates;
-# I would dig around for this. /maj
-
- 			$seq = Bio::LocatableSeq->new(
-						  -seq         => $newSeq,
-						  -display_id  => "$seqID",
-						  #-description => $desc,
-						  -alphabet	   => $mol_type,
-						  );
-			#what other data is appropriate to pull over from bio::phylo::matrices::matrix??
-		    $aln->add_seq($seq);
-		    $self->debug("Reading r$seqID\n");
- 		
- 			
- 		}
- 		push @{ $self->{'_alns'} }, $aln;
- 	}
+	$self->{'_alns'} = Bio::Nexml::Util->_make_aln($proj);
  	if(@{ $self->{'_alns'} } == 0)
  	{
  		self->debug("no seqs in $self->{_file}");
@@ -219,8 +168,7 @@ sub write_aln {
             return $matrix;
 		}
 		else {
-			#TODO convert to bioperl debugging
-			#throw 'ObjectMismatch' => 'Not a bioperl alignment!';
+			$self->throw('Not a bioperl alignment!');
 		}
 }
 
