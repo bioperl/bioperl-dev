@@ -11,7 +11,7 @@ use_ok('Bio::TreeIO::nexml'); # checks that your module is there and loads ok
 
 
  # this passes if $object gets defined without throws by the constructor
- ok( my $TreeStream = Bio::TreeIO->new(-file => test_input_file('trees.nexml.xml'), -format => 'Nexml') );
+ ok( my $TreeStream = Bio::TreeIO->new(-file => test_input_data('trees.nexml.xml'), -format => 'Nexml') );
  
 
  	
@@ -46,5 +46,34 @@ use_ok('Bio::TreeIO::nexml'); # checks that your module is there and loads ok
 		is( $leaf->get_tag_values('taxon'), $expected_leaves{$leaf->id()}, "$leafID taxon");
 	}
 	
+	
+#Checking ability to write files
+
+	ok( my $outTreeStream = Bio::TreeIO->new(-file => test_output_data('>treesOut.xml'), -format => 'nexml'), 'Begin Tests for writing tree files');;
+	ok( $outTreeStream->write_tree($tree_obj));
+	
+	my $inTreeStream = Bio::TreeIO->new(-file => test_input_data('treesOut.xml'), -format => 'nexml');
+	
+	#checking first tree object
+	ok($tree_obj = $inTreeStream->next_tree() );
+	isa_ok($tree_obj, 'Bio::Tree::Tree');
+	is( $tree_obj->get_root_node()->id(), 'n1', "root node");
+	my @outnodes = $tree_obj->get_nodes();
+	is( @outnodes, 9, "number of nodes");
+	ok ( $node7 = $tree_obj->find_node('n7') );
+	is( $node7->branch_length, 0.3247, "branch length");
+	is( $node7->ancestor->id, 'n3');
+	is( $node7->ancestor->branch_length, '0.34534');
+	
+	#Check leaf nodes and taxa
+	
+	ok( my @outleaves = $tree_obj->get_leaf_nodes() );
+	is( @outleaves, 5, "number of leaf nodes");
+	foreach my $leaf (@outleaves)
+	{
+		my $leafID = $leaf->id();
+		ok( exists $expected_leaves{$leaf->id()}, "$leafID exists"  );
+		is( $leaf->get_tag_values('taxon'), $expected_leaves{$leaf->id()}, "$leafID taxon");
+	}
 	
 	
