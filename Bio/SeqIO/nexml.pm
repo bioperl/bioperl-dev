@@ -150,55 +150,8 @@ sub _parse {
 
 =cut
 
-sub write_seq { #in progress
- 	my ($self,$ seq, @args) = @_;
-	my $type 	= $seq->alphabet || $seq->_guess_alphabet || 'dna';
-   	my $dat 	= Bio::Phylo::Matrices::Datum->new( '-type' => $type);
-        
-	# copy seq string
-    my $seqstring = $seq->seq;
-    if ( $seqstring and $seqstring =~ /\S/ ) {
-        eval { $dat->set_char( $seqstring ) };
-        #TODO convert to Bioperl debugging
-        if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
-        	#$logger->error(
-        	#	"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".
-        	#	$@->description                                                                  .
-        	#	"\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n"           .
-        	#	"I cannot store this string, I will continue instantiating an empty object.\n"   .
-        	#	"---------------------------------- STACK ----------------------------------\n"  .
-        	#	$@->trace->as_string                                                             .
-        	#	"\n--------------------------------------------------------------------------"
-        	#);
-        }
-	}                
-        
-	# copy name
-	my $name = $seq->display_id;
-	$dat->set_name( $name ) if defined $name;
-                
-	# copy desc
-	my $desc = $seq->desc;   
-	$dat->set_desc( $desc ) if defined $desc; 
-	
-	#get features from SeqFeatureI
-	#TODO test SeqFeatures
-	if (my $feat = $seq->get_SeqFeatures()) {
-		
-		my $start = $feat->start;
-		$dat->start($start) if defined $start;
-		
-		my $end = $feat->end;
-		$dat->end($start) if defined $end;
-		
-		my $strand = $feat->strand;
-		$dat->strand($start) if defined $strand;
-	}
-		
-	
-	$self->_print( $dat->to_xml );
-        
-	return 1;
+sub write_seq { 
+ 	return (Bio::Nexml::Util->write_seq(@_));
 }
 
 

@@ -96,6 +96,7 @@ use Bio::AlignIO::Nexml;
 use Bio::TreeIO::Nexml;
 use Bio::Phylo::IO;
 use Bio::Nexml::Util;
+use Bio::Phylo::Factory;
 
 use base qw(Bio::Root::Root);
 
@@ -104,16 +105,20 @@ sub new {
  	my $self = $class->SUPER::new(@args);
 
 	my %params = @args;
+	my $file_string = $params{'-file'};
 	
 	
 	$self->{'_seqIO'}  = Bio::SeqIO::nexml->new(@args);
  	$self->{'_alnIO'}  = Bio::AlignIO::nexml->new(@args);
  	$self->{'_treeIO'} = Bio::TreeIO::nexml->new(@args);
- 	$self->{'_doc'} = Bio::Phylo::IO->parse('-file' => $params{'-file'}, '-format' => 'nexml', '-as_project' => '1');
+ 	#unless (m/"^\<"/) {
+ 	#	$self->{'_doc'} = Bio::Phylo::IO->parse('-file' => $params{'-file'}, '-format' => 'nexml', '-as_project' => '1');
+ 	#}
  	
  	
  	return $self;
 }
+
 
 sub treeIO {
 	my $self = shift;
@@ -170,6 +175,26 @@ sub next_aln {
         $self->_parse;
     }
 	return $self->{'_alns'}->[ $self->{'_alniter'}++ ];
+}
+
+
+sub write {
+	my ($self, @args) = @_;
+	
+	my %params = @args;
+	
+	my $trees = $params{'-trees'};
+	my $alns  = $params{'-alns'};
+	my $seqs  = $params{'-seqs'};
+	
+	my $forest = Bio::Phylo::Factory->create_forest();
+	
+	foreach my $tree (@$trees) {
+		$forest->insert(Bio::Nexml::Util->_create_phylo_tree($self, $tree))
+	}
+	
+	print $forest->to_xml();
+	
 }
 
 1;

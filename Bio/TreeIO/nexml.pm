@@ -153,29 +153,7 @@ sub _parse {
 =cut
 
 sub write_tree {
-	my ($self, $bptree) = @_;
-	#most of the code below ripped form Bio::Phylo::Forest::Tree::new_from_bioperl()d
-	my $fac = Bio::Phylo::Factory->new();
-	my $tree = $fac->create_tree;
-	my $class = 'Bio::Phylo::Forest::Tree';
-	if ( Scalar::Util::blessed $bptree && $bptree->isa('Bio::Tree::TreeI') ) {
-		bless $tree, $class;
-		$tree = $tree->_recurse( $bptree->get_root_node );
-			
-		# copy name
-		my $name = $bptree->id;
-		$tree->set_name( $name ) if defined $name;
-			
-		# copy score
-		my $score = $bptree->score;
-		$tree->set_score( $score ) if defined $score;
-	}
-	else {
-		$self->throw('Not a bioperl tree!');
-	}
-	
-	$self->_print($tree->to_xml());
-	return $tree;
+	return (Bio::Nexml::Util->write_tree(@_));
 }
 
 

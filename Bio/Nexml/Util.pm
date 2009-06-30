@@ -75,8 +75,11 @@ package Bio::Nexml::Util;
 
 use strict;
 
+use Bio::Phylo::Matrices::Matrix;
 #not sure that it needs to inerhit from Bio::Nexml
 use base qw(Bio::Nexml);
+
+my $fac = Bio::Phylo::Factory->new();
 
 
 sub _make_aln {
@@ -114,7 +117,11 @@ sub _make_aln {
  			#Check if theres a row label and if not default to seqID
  			if( !defined($rowlabel = $row->get_name())) {$rowlabel = $seqID;}
  			
- 			
+ 			#check if taxon linked to sequence
+ 			if(my $taxon = $row->get_taxon)
+ 			{
+ 				print $taxon->get_name();
+ 			}
 
  			
 
@@ -128,6 +135,8 @@ sub _make_aln {
 						  #-description => $desc,
 						  -alphabet	   => $mol_type,
 						  );
+						  
+			
 			#what other data is appropriate to pull over from bio::phylo::matrices::matrix??
 		    $aln->add_seq($seq);
 		    $self->debug("Reading r$seqID\n");
@@ -276,6 +285,203 @@ sub _make_seq {
  		}
  	}
  	return \@seqs;
+}
+
+sub write_tree {
+	my ($self, $caller, $bptree) = @_;
+	#most of the code below ripped form Bio::Phylo::Forest::Tree::new_from_bioperl()d
+	
+	my $tree = $fac->create_tree;
+	my $taxa = $fac->create_taxa;
+
+	my $class = 'Bio::Phylo::Forest::Tree';
+	
+	if ( Scalar::Util::blessed $bptree && $bptree->isa('Bio::Tree::TreeI') ) {
+		bless $tree, $class;
+		($tree, $taxa) = _copy_tree( $tree, $bptree->get_root_node, "", $taxa);
+		
+		# copy name
+		my $name = $bptree->id;
+		$tree->set_name( $name ) if defined $name;
+			
+		# copy score
+		my $score = $bptree->score;
+		$tree->set_score( $score ) if defined $score;
+	}
+	else {
+		$caller->throw('Not a bioperl tree!');
+	}
+	my $ents2 = $taxa->get_entities();
+	my $forest = $fac->create_forest();
+	$taxa->set_forest($forest);
+	$forest->insert($tree);
+	my $proj = $fac->create_project();
+	$proj->insert($forest);
+	
+	my $ents = $taxa->get_entities();
+	
+	
+	
+	#$caller->_print($taxa->to_xml());
+	#$caller->_print($forest->to_xml());
+	$caller->_print('<?xml version="1.0" encoding="ISO-8859-1"?>');
+	$caller->_print("\n");
+	$caller->_print($proj->to_xml);
+	return $tree;
+}
+
+
+sub _create_phylo_tree {
+	my ($self, $caller, $bptree) = @_;
+	#most of the code below ripped form Bio::Phylo::Forest::Tree::new_from_bioperl()d
+	
+	my $tree = $fac->create_tree;
+	my $taxa = $fac->create_taxa;
+
+	my $class = 'Bio::Phylo::Forest::Tree';
+	
+	if ( Scalar::Util::blessed $bptree && $bptree->isa('Bio::Tree::TreeI') ) {
+		bless $tree, $class;
+		($tree, $taxa) = _copy_tree( $tree, $bptree->get_root_node, "", $taxa);
+		
+		# copy name
+		my $name = $bptree->id;
+		$tree->set_name( $name ) if defined $name;
+			
+		# copy score
+		my $score = $bptree->score;
+		$tree->set_score( $score ) if defined $score;
+	}
+	else {
+		$caller->throw('Not a bioperl tree!');
+	}
+	
+	return $tree;
+}
+
+sub _copy_tree {
+	my ( $tree, $bpnode, $parent, $taxa ) = @_;
+		my $node = Bio::Phylo::Forest::Node->new_from_bioperl($bpnode);
+		my $taxon;
+		if ($parent) {
+			$parent->set_child($node);
+		}
+		if (my $bptaxon = $bpnode->get_tag_values('taxon'))
+		{
+			$taxon = $fac->create_taxon(-name => $bptaxon);
+			$taxa->insert($taxon);
+			$node->set_taxon($taxa->get_by_name($bptaxon));
+		}
+		$tree->insert($node);
+		foreach my $bpchild ( $bpnode->each_Descendent ) {
+			_copy_tree( $tree, $bpchild, $node, $taxa );
+		}
+	 return $tree, $taxa;
+}
+
+sub write_aln {
+	
+	my ($self, $caller, $aln, @args) = @_;
+	
+	#most of the code below ripped from Bio::Phylo::Matrices::Matrix::new_from_bioperl()
+	my $factory = Bio::Phylo::Factory->new();
+	
+	if ( Bio::Phylo::Matrices::Matrix::isa( $aln, 'Bio::Align::AlignI' ) ) {
+		    $aln->unmatch;
+		    $aln->map_chars('\.','-');
+		    my @seqs = $aln->each_seq;
+		    my ( $type, $missing, $gap, $matchchar ); 
+		    if ( $seqs[0] ) {
+		    	$type = $seqs[0]->alphabet || $seqs[0]->_guess_alphabet || 'dna';
+		    }
+		    else {
+		    	$type = 'dna';
+		    }
+			my $matrix = $factory->create_matrix( 
+				'-type' => $type,
+				'-special_symbols' => {
+			    	'-missing'   => $aln->missing_char || '?',
+			    	'-matchchar' => $aln->match_char   || '.',
+			    	'-gap'       => $aln->gap_char     || '-',					
+				},
+				@args 
+			);			
+			# XXX create raw getter/setter pairs for annotation, accession, consensus_meta source
+			for my $field ( qw(description accession id annotation consensus_meta score source) ) {
+				$matrix->$field( $aln->$field );
+			}			
+			my $to = $matrix->get_type_object;			
+            for my $seq ( @seqs ) {
+            	my $datum = Bio::Phylo::Matrices::Datum->new_from_bioperl(
+            		$seq, '-type_object' => $to
+            	);                                         	
+                $matrix->insert($datum);
+            }
+            $self->_print($matrix->to_xml());
+            return $matrix;
+		}
+		else {
+			$self->throw('Not a bioperl alignment!');
+		}
+}
+
+sub write_seq {
+	my ($self, $caller, $seq, @args) = @_;
+	my $type 	= $seq->alphabet || $seq->_guess_alphabet || 'dna';
+	$type = uc($type);
+   	my $dat 	= $fac->create_datum( '-type' => $type);
+        
+	# copy seq string
+    my $seqstring = $seq->seq;
+    if ( $seqstring and $seqstring =~ /\S/ ) {
+        eval { $dat->set_char( $seqstring ) };
+        #TODO Test debuggin
+        if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
+        	$caller->throw(
+        		"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".
+        		$@->description                                                                  .
+        		"\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n"           .
+        		"I cannot store this string, I will continue instantiating an empty object.\n"   .
+        		"---------------------------------- STACK ----------------------------------\n"  .
+        		$@->trace->as_string                                                             .
+        		"\n--------------------------------------------------------------------------"
+        	);
+        }
+	}                
+        
+	# copy name
+	my $name = $seq->display_id;
+	$dat->set_name( $name ) if defined $name;
+                
+	# copy desc
+	my $desc = $seq->desc;   
+	$dat->set_desc( $desc ) if defined $desc; 
+	
+	#get features from SeqFeatureI
+	#TODO test SeqFeatures
+	if (my $feat = $seq->get_SeqFeatures()) {
+		
+		my $start = $feat->start;
+		$dat->start($start) if defined $start;
+		
+		my $end = $feat->end;
+		$dat->end($start) if defined $end;
+		
+		my $strand = $feat->strand;
+		$dat->strand($start) if defined $strand;
+	}
+	
+	my $matrix = $fac->create_matrix(-type => $type);
+	$matrix->set_name($seq->display_name());
+	$matrix->insert($dat);
+	my $proj = $fac->create_project();
+	$proj->insert($matrix);
+	
+	$caller->_print('<?xml version="1.0" encoding="ISO-8859-1"?>');
+	$caller->_print("\n");
+	$caller->_print( $proj->to_xml );
+        
+	return 1;
 }
 
 1;

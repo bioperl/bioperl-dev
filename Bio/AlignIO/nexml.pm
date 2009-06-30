@@ -128,48 +128,8 @@ See L<Bio::Align::AlignI>
 =cut
 
 sub write_aln {
-	my ($self, $aln, @args) = @_;
-	#most of the code below ripped from Bio::Phylo::Matrices::Matrix::new_from_bioperl()
 	
-	my $factory = Bio::Phylo::Factory->new();
-	
-		if ( Bio::Phylo::Matrices::Matrix::isa( $aln, 'Bio::Align::AlignI' ) ) {
-		    $aln->unmatch;
-		    $aln->map_chars('\.','-');
-		    my @seqs = $aln->each_seq;
-		    my ( $type, $missing, $gap, $matchchar ); 
-		    if ( $seqs[0] ) {
-		    	$type = $seqs[0]->alphabet || $seqs[0]->_guess_alphabet || 'dna';
-		    }
-		    else {
-		    	$type = 'dna';
-		    }
-			my $matrix = $factory->create_matrix( 
-				'-type' => $type,
-				'-special_symbols' => {
-			    	'-missing'   => $aln->missing_char || '?',
-			    	'-matchchar' => $aln->match_char   || '.',
-			    	'-gap'       => $aln->gap_char     || '-',					
-				},
-				@args 
-			);			
-			# XXX create raw getter/setter pairs for annotation, accession, consensus_meta source
-			for my $field ( qw(description accession id annotation consensus_meta score source) ) {
-				$matrix->$field( $aln->$field );
-			}			
-			my $to = $matrix->get_type_object;			
-            for my $seq ( @seqs ) {
-            	my $datum = Bio::Phylo::Matrices::Datum->new_from_bioperl(
-            		$seq, '-type_object' => $to
-            	);                                         	
-                $matrix->insert($datum);
-            }
-            $self->_print($matrix->to_xml());
-            return $matrix;
-		}
-		else {
-			$self->throw('Not a bioperl alignment!');
-		}
+	return (Bio::Nexml::Util->write_aln(@_));	
 }
 
 
