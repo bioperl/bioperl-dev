@@ -76,6 +76,8 @@ package Bio::Nexml::Util;
 use strict;
 
 use Bio::Phylo::Matrices::Matrix;
+use Bio::Phylo::Matrices::Datatype::Rna;
+
 #not sure that it needs to inerhit from Bio::Nexml
 use base qw(Bio::Nexml);
 
@@ -116,18 +118,6 @@ sub _make_aln {
  			
  			#Check if theres a row label and if not default to seqID
  			if( !defined($rowlabel = $row->get_name())) {$rowlabel = $seqID;}
- 			
- 			#check if taxon linked to sequence
- 			if(my $taxon = $row->get_taxon)
- 			{
- 				print $taxon->get_name();
- 			}
-
- 			
-
-# I would allow the LocatableSeq constructor to handle setting start and end,
-# you can leave attrs out -- UNLESS nexml has a slot for these coordinates;
-# I would dig around for this. /maj
 
  			$seq = Bio::LocatableSeq->new(
 						  -seq         => $newSeq,
@@ -135,10 +125,25 @@ sub _make_aln {
 						  #-description => $desc,
 						  -alphabet	   => $mol_type,
 						  );
-						  
+			my $feat;			  
+			#check if taxon linked to sequence if so create feature to attach to alignment
+			foreach my $taxa_o (@$taxa)
+			{
+				my $taxa_ents = $taxa_o->get_entities(); 
+				foreach my $taxon (@$taxa_ents)
+				{ 
+ 					if($taxon eq $row->get_taxon)
+ 					{
+ 						my $taxon_name = $taxon->get_name();
+ 						$feat = Bio::SeqFeature::Generic->new();
+ 						$feat->add_tag_value('taxon', "$taxon_name");
+ 						$feat->add_tag_value('id', "$seqID");
+ 					}
+				}
+			}
 			
-			#what other data is appropriate to pull over from bio::phylo::matrices::matrix??
 		    $aln->add_seq($seq);
+		    $aln->add_SeqFeature($feat);
 		    $self->debug("Reading r$seqID\n");
  		
  			
@@ -189,8 +194,12 @@ sub _make_tree {
  				
  				#transfer attributes that apply to all nodes
  				#check if taxa data exists for the current node ($terminal)
- 				if(my $taxon = $terminal->get_taxon()) {
- 					$newNode->add_tag_value("taxon", $taxon->get_name());
+ 				my $taxa_ents = $taxa->[0]->get_entities();
+ 				foreach my $taxon (@$taxa_ents)
+ 				{
+ 					if($taxon eq $terminal->get_taxon()) {
+ 						$newNode->add_tag_value("taxon", $taxon->get_name());
+ 					}
  				}
  				
  				#check if you've reached the root of the tree and if so, stop.
@@ -232,6 +241,7 @@ sub _make_tree {
 sub _make_seq {
 	my($self, $proj) = @_;
 	my $matrices = $proj->get_matrices();
+	my $taxa = $proj->get_taxa();
 	my @seqs;
  	
  	foreach my $matrix (@$matrices) 
@@ -259,16 +269,7 @@ sub _make_seq {
  			
  		
  			#build the seq object using the factory create method
- 			#not sure if this is the preferred way, but couldn't get it to work
- 			#my $seq = $self->sequence_factory->create(
-			#		   -seq         => $newSeq,
-			#		   -id          => $rowlabel,
-			#		   -primary_id  => $seqID,
-			#		   #-desc        => $fulldesc,
-			#		   -alphabet    => $mol_type,
-			#		   -direct      => 1,
-			#		   );
- 			#did this instead
+ 			
  			my $seqbuilder = new Bio::Seq::SeqFactory('-type' => 'Bio::Seq');
  			
  			my $seq = $seqbuilder->create(
@@ -279,7 +280,24 @@ sub _make_seq {
 					   -alphabet    => $mol_type,
 					   -direct      => 1,
 					   );
- 			
+			#check if taxon linked to sequence if so create feature to attach to alignment
+			my $feat;
+			foreach my $taxa_o (@$taxa)
+			{
+				my $taxa_ents = $taxa_o->get_entities(); #TODO handle mutiple taxa
+				foreach my $taxon (@$taxa_ents)
+				{ 
+ 					if($taxon eq $row->get_taxon)
+ 					{
+ 						my $taxon_name = $taxon->get_name();
+ 						$feat = Bio::SeqFeature::Generic->new();
+ 						$feat->add_tag_value('taxon', "$taxon_name");
+ 						$feat->add_tag_value('id', $seqID);
+ 						last;
+ 					}
+				}
+			}
+ 			$seq->add_SeqFeature($feat);
  			push (@seqs, $seq);
  			#what other data is appropriate to pull over from bio::phylo::matrices::matrix??
  		}
@@ -287,8 +305,8 @@ sub _make_seq {
  	return \@seqs;
 }
 
-sub write_tree {
-	my ($self, $caller, $bptree) = @_;
+sub create_bphylo_tree {
+	my ($self, $bptree) = @_;
 	#most of the code below ripped form Bio::Phylo::Forest::Tree::new_from_bioperl()d
 	
 	my $tree = $fac->create_tree;
@@ -309,55 +327,12 @@ sub write_tree {
 		$tree->set_score( $score ) if defined $score;
 	}
 	else {
-		$caller->throw('Not a bioperl tree!');
+		$self->throw('Not a bioperl tree!');
 	}
-	my $ents2 = $taxa->get_entities();
-	my $forest = $fac->create_forest();
-	$taxa->set_forest($forest);
-	$forest->insert($tree);
-	my $proj = $fac->create_project();
-	$proj->insert($forest);
-	
-	my $ents = $taxa->get_entities();
-	
-	
-	
-	#$caller->_print($taxa->to_xml());
-	#$caller->_print($forest->to_xml());
-	$caller->_print('<?xml version="1.0" encoding="ISO-8859-1"?>');
-	$caller->_print("\n");
-	$caller->_print($proj->to_xml);
-	return $tree;
+	return $tree, $taxa;
 }
 
 
-sub _create_phylo_tree {
-	my ($self, $caller, $bptree) = @_;
-	#most of the code below ripped form Bio::Phylo::Forest::Tree::new_from_bioperl()d
-	
-	my $tree = $fac->create_tree;
-	my $taxa = $fac->create_taxa;
-
-	my $class = 'Bio::Phylo::Forest::Tree';
-	
-	if ( Scalar::Util::blessed $bptree && $bptree->isa('Bio::Tree::TreeI') ) {
-		bless $tree, $class;
-		($tree, $taxa) = _copy_tree( $tree, $bptree->get_root_node, "", $taxa);
-		
-		# copy name
-		my $name = $bptree->id;
-		$tree->set_name( $name ) if defined $name;
-			
-		# copy score
-		my $score = $bptree->score;
-		$tree->set_score( $score ) if defined $score;
-	}
-	else {
-		$caller->throw('Not a bioperl tree!');
-	}
-	
-	return $tree;
-}
 
 sub _copy_tree {
 	my ( $tree, $bpnode, $parent, $taxa ) = @_;
@@ -366,6 +341,7 @@ sub _copy_tree {
 		if ($parent) {
 			$parent->set_child($node);
 		}
+		#TODO get taxa label and find a way to relate it to the bioperl tag values so they can be retrieved on the other end
 		if (my $bptaxon = $bpnode->get_tag_values('taxon'))
 		{
 			$taxon = $fac->create_taxon(-name => $bptaxon);
@@ -379,9 +355,9 @@ sub _copy_tree {
 	 return $tree, $taxa;
 }
 
-sub write_aln {
+sub create_bphylo_aln {
 	
-	my ($self, $caller, $aln, @args) = @_;
+	my ($self, $aln, @args) = @_;
 	
 	#most of the code below ripped from Bio::Phylo::Matrices::Matrix::new_from_bioperl()
 	my $factory = Bio::Phylo::Factory->new();
@@ -397,6 +373,7 @@ sub write_aln {
 		    else {
 		    	$type = 'dna';
 		    }
+		    
 			my $matrix = $factory->create_matrix( 
 				'-type' => $type,
 				'-special_symbols' => {
@@ -410,26 +387,33 @@ sub write_aln {
 			for my $field ( qw(description accession id annotation consensus_meta score source) ) {
 				$matrix->$field( $aln->$field );
 			}			
-			my $to = $matrix->get_type_object;			
+			my $to = $matrix->get_type_object;	
+			my @feats = $aln->get_all_SeqFeatures();
+			my $taxa = $factory->create_taxa();		
             for my $seq ( @seqs ) {
-            	my $datum = Bio::Phylo::Matrices::Datum->new_from_bioperl(
-            		$seq, '-type_object' => $to
-            	);                                         	
+            	#create taxa
+            	
+            	my $datum = create_bphylo_datum($seq, \@feats, $taxa, '-type_object' => $to);                                    	
                 $matrix->insert($datum);
             }
-            $self->_print($matrix->to_xml());
-            return $matrix;
+            #$self->_print($matrix->to_xml());
+            return $matrix, $taxa;
 		}
 		else {
 			$self->throw('Not a bioperl alignment!');
 		}
 }
 
-sub write_seq {
-	my ($self, $caller, $seq, @args) = @_;
+sub create_bphylo_seq {
+	my ($self, $seq, @args) = @_;
 	my $type 	= $seq->alphabet || $seq->_guess_alphabet || 'dna';
 	$type = uc($type);
-   	my $dat 	= $fac->create_datum( '-type' => $type);
+   	#my $dat 	= $fac->create_datum( '-type' => $type);
+   	
+	my @feats = $seq->get_all_SeqFeatures();
+	my $taxa = $fac->create_taxa();	
+    
+    my $dat = create_bphylo_datum($seq, \@feats, $taxa, '-type' => $type);  
         
 	# copy seq string
     my $seqstring = $seq->seq;
@@ -437,7 +421,7 @@ sub write_seq {
         eval { $dat->set_char( $seqstring ) };
         #TODO Test debuggin
         if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
-        	$caller->throw(
+        	$self->throw(
         		"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".
         		$@->description                                                                  .
         		"\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n"           .
@@ -451,37 +435,91 @@ sub write_seq {
         
 	# copy name
 	my $name = $seq->display_id;
-	$dat->set_name( $name ) if defined $name;
+	#$dat->set_name( $name ) if defined $name;
                 
 	# copy desc
 	my $desc = $seq->desc;   
 	$dat->set_desc( $desc ) if defined $desc; 
 	
 	#get features from SeqFeatureI
-	#TODO test SeqFeatures
-	if (my $feat = $seq->get_SeqFeatures()) {
-		
-		my $start = $feat->start;
-		$dat->start($start) if defined $start;
-		
-		my $end = $feat->end;
-		$dat->end($start) if defined $end;
-		
-		my $strand = $feat->strand;
-		$dat->strand($start) if defined $strand;
-	}
+	for my $field ( qw(start end strand) ) {
+	    $dat->$field( $seq->$field ) if $seq->can($field);
+    } 
 	
 	my $matrix = $fac->create_matrix(-type => $type);
 	$matrix->set_name($seq->display_name());
+	print $dat->to_xml();
 	$matrix->insert($dat);
-	my $proj = $fac->create_project();
-	$proj->insert($matrix);
+	#my $proj = $fac->create_project();
+	#$proj->insert($matrix);
 	
-	$caller->_print('<?xml version="1.0" encoding="ISO-8859-1"?>');
-	$caller->_print("\n");
-	$caller->_print( $proj->to_xml );
         
-	return 1;
+	return $matrix, $taxa;
+}
+
+sub create_bphylo_taxa {
+	my ($aln, $seq) = @_;
+	
+	#check if tree or aln object
+	#	if ( Bio::Phylo::Matrices::Matrix::isa( $aln, 'Bio::Align::AlignI' ) ) {
+
+	
+}
+
+sub create_bphylo_datum {
+	#ripped from Bio::Phylo::Matrices::Datum::new_from_bioperl()
+	my ( $seq, $feats, $taxa, @args ) = @_;
+	my $class = 'Bio::Phylo::Matrices::Datum';
+	# want $seq type-check here? Allowable: is-a Bio::PrimarySeq, 
+        #  Bio::LocatableSeq /maj
+    	my $type = $seq->alphabet || $seq->_guess_alphabet || 'dna';
+    	my $self = $class->new( '-type' => $type, @args );
+        
+        # copy seq string
+        my $seqstring = $seq->seq;
+        if ( $seqstring and $seqstring =~ /\S/ ) {
+        	eval { $self->set_char( $seqstring ) };
+   
+        	if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
+        		$self->throw(
+        			"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".
+        			$@->description                                                                  .
+        			"\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n"           .
+        			"I cannot store this string, I will continue instantiating an empty object.\n"   .
+        			"---------------------------------- STACK ----------------------------------\n"  .
+        			$@->trace->as_string                                                             .
+        			"\n--------------------------------------------------------------------------"
+        		);
+        	}
+        }                
+        
+        # copy name
+        my $name = $seq->display_id;
+        $self->set_name( $name ) if defined $name;
+        my $taxon;
+        # convert taxa
+        foreach my $feat (@$feats)
+        {
+        	#get sequence id associated with taxa to compare
+        	my $taxa_id = ($feat->get_tag_values('id'))[0];
+        	if ($name eq $taxa_id)
+        	{
+        		my $taxon_name = ($feat->get_tag_values('taxon'))[0];
+        		$taxon = $fac->create_taxon(-name => $taxon_name);
+				$taxa->insert($taxon);
+        		$self->set_taxon($taxa->get_by_name($taxon_name));
+        	}
+        }
+          
+        # copy desc
+        my $desc = $seq->desc;   
+        $self->set_desc( $desc ) if defined $desc;   
+
+	# only Bio::LocatableSeq objs have these fields...
+        for my $field ( qw(start end strand) ) {
+	    $self->$field( $seq->$field ) if $seq->can($field);
+        } 	
+        return $self;
 }
 
 1;

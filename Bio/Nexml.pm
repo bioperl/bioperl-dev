@@ -97,8 +97,9 @@ use Bio::TreeIO::Nexml;
 use Bio::Phylo::IO;
 use Bio::Nexml::Util;
 use Bio::Phylo::Factory;
+use Bio::Phylo::Matrices;
 
-use base qw(Bio::Root::Root);
+use base qw(Bio::Root::IO);
 
 sub new {
  	my($class,@args) = @_;
@@ -111,9 +112,9 @@ sub new {
 	$self->{'_seqIO'}  = Bio::SeqIO::nexml->new(@args);
  	$self->{'_alnIO'}  = Bio::AlignIO::nexml->new(@args);
  	$self->{'_treeIO'} = Bio::TreeIO::nexml->new(@args);
- 	#unless (m/"^\<"/) {
- 	#	$self->{'_doc'} = Bio::Phylo::IO->parse('-file' => $params{'-file'}, '-format' => 'nexml', '-as_project' => '1');
- 	#}
+ 	unless ($file_string =~ m/^\>/) {
+ 		$self->{'_doc'} = Bio::Phylo::IO->parse('-file' => $params{'-file'}, '-format' => 'nexml', '-as_project' => '1');
+ 	}
  	
  	
  	return $self;
@@ -178,7 +179,7 @@ sub next_aln {
 }
 
 
-sub write {
+sub write_doc {
 	my ($self, @args) = @_;
 	
 	my %params = @args;
@@ -187,14 +188,100 @@ sub write {
 	my $alns  = $params{'-alns'};
 	my $seqs  = $params{'-seqs'};
 	
+	my $proj_doc = Bio::Phylo::Factory->create_project();
+	
+	#convert trees to bio::Phylo objects
 	my $forest = Bio::Phylo::Factory->create_forest();
+	my @forests;
+	my @taxas;
+	my $ent;
+	my $taxa_o;
+	my $phylo_tree_o;
+	my $first_taxa;
 	
 	foreach my $tree (@$trees) {
-		$forest->insert(Bio::Nexml::Util->_create_phylo_tree($self, $tree))
+		($phylo_tree_o, $taxa_o) = Bio::Nexml::Util->create_bphylo_tree($tree);
+		#check if taxa exists
+		if (!$first_taxa) {
+			$first_taxa = $taxa_o;
+		}
+		link_taxa($self, $taxa_o, $forest, \@taxas, $first_taxa);
+		
+		$forest->insert($phylo_tree_o);
+	}
+
+	#converts matrices to Bio::Phylo objects
+	my $matrices = Bio::Phylo::Matrices->new();
+	my ($phylo_matrix_o, @matrix_taxas);
+	
+	foreach my $aln (@$alns)
+	{
+		($phylo_matrix_o, $taxa_o) = Bio::Nexml::Util->create_bphylo_aln($aln);
+		#check if taxa exists
+		link_taxa($self, $taxa_o, $phylo_matrix_o, \@matrix_taxas, $first_taxa);
+		$matrices->insert($phylo_matrix_o);
 	}
 	
-	print $forest->to_xml();
+	#convert sequences to Bio::Phylo objects
+	foreach my $seq (@$seqs)
+	{
+		$matrices->insert(Bio::Nexml::Util->create_bphylo_seq($seq));
+	}
 	
+	#Add matrices and forest objects to project object which represents a complete nexml document
+	if($forest->first) {
+		$proj_doc->insert($forest);
+	}
+	while(my $curr_matrix = $matrices->next) {
+		$proj_doc->insert($curr_matrix);
+	}
+	
+	#write nexml document to stream
+	
+	$self->_print($proj_doc->to_xml());
+}
+
+sub link_taxa
+{
+	
+	my ($self, $taxa_o, $phylo_cont_o, $taxas, $first_taxa) = @_;
+	
+	
+	if ($taxa_o->first() && !exists $taxas->[ get_taxa_labels($taxa_o) ]) {
+			$phylo_cont_o->set_taxa($taxa_o);
+			push @$taxas, get_taxa_labels($taxa_o);
+		} 
+		else #TODO make this work for multiple forests with different taxa
+		{
+			my $ents = $taxa_o->get_entities();
+	
+			my $main_taxa = $first_taxa->get_entities();
+			for (my $i = 0; $i < @$ents; $i++)
+			{
+				my $new_label = $ents->[$i]->get_name();
+				my $old_label = $main_taxa->[$i]->get_name();
+				if( $new_label != $old_label) {
+					$self->throw("taxa conversion error - taxa not identical");
+				}
+				my $id = $ents->[$i]->get_xml_id();
+				my $mid = $main_taxa->[$i]->get_xml_id();
+				$ents->[$i]->set_xml_id($mid);
+			}
+		}
+}
+
+sub get_taxa_labels
+{
+	my $taxa = shift(@_);
+	my $ents = $taxa->get_entities();
+	
+	my $label_str = undef;
+	
+	foreach my $ent (@$ents)
+	{
+		$label_str .= $ent->get_name();
+	}
+	return $label_str;
 }
 
 1;

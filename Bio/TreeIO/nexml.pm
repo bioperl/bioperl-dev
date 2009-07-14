@@ -153,7 +153,18 @@ sub _parse {
 =cut
 
 sub write_tree {
-	return (Bio::Nexml::Util->write_tree(@_));
+	my $self = shift(@_);
+	my ($tree, $taxa) = Bio::Nexml::Util->create_bphylo_tree(@_);
+	
+	my $forest = Bio::Phylo::Factory->create_forest();
+	my $nexml_doc = Bio::Phylo::Factory->create_project();
+	
+	$forest->set_taxa($taxa);
+	$forest->insert($tree);
+	
+	$nexml_doc->insert($forest);
+	
+	$self->_print($nexml_doc->to_xml());
 }
 
 

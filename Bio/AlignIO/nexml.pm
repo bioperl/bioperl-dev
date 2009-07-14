@@ -128,8 +128,20 @@ See L<Bio::Align::AlignI>
 =cut
 
 sub write_aln {
+	my $self = shift(@_);
+	my ($matrix, $taxa) = Bio::Nexml::Util->create_bphylo_aln(@_);
+	$matrix->set_taxa($taxa);
 	
-	return (Bio::Nexml::Util->write_aln(@_));	
+	my $matrices = Bio::Phylo::Matrices->new();
+	my $proj = Bio::Phylo::Factory->create_project();
+	
+	$matrices->insert($matrix);
+	$proj->insert($matrix);
+	print $proj->to_xml();
+	$self->_print($proj->to_xml());
+	
+	return 1;
+	#return (Bio::Nexml::Util->write_aln(@_));	
 }
 
 

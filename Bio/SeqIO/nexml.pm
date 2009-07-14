@@ -150,13 +150,18 @@ sub _parse {
 
 =cut
 
-sub write_seq { 
- 	return (Bio::Nexml::Util->write_seq(@_));
+sub write_seq {
+	
+	my $self = shift(@_);
+	my ($matrix, $taxa) = Bio::Nexml::Util->create_bphylo_seq(@_);
+	$matrix->set_taxa($taxa);
+	
+	my $nexml_doc = Bio::Phylo::Factory->create_project();
+	
+	$nexml_doc->insert($matrix);
+	
+	$self->_print($nexml_doc->to_xml());
 }
-
-
-
-
 
 
 1;
