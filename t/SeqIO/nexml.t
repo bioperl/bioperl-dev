@@ -11,7 +11,7 @@ use_ok('Bio::SeqIO::nexml'); # checks that your module is there and loads ok
 
  # this passes if $object gets defined without throws by the constructor
  	# use when droppeded into bioperl
- ok( my $SeqStream = Bio::SeqIO->new(-file => test_input_file("characters.nexml.xml"), -format => 'nexml'));
+ ok( my $SeqStream = Bio::SeqIO->new(-file => test_input_file("../../code/data_sets/characters.nexml.xml"), -format => 'nexml'));
  
 
  
@@ -45,10 +45,10 @@ use_ok('Bio::SeqIO::nexml'); # checks that your module is there and loads ok
 	
 #Start tests for writing to a file
 	
-	ok( my $outSeqStream = Bio::SeqIO->new(-file => test_output_file('>charactersSeqsOut.xml'), -format => 'nexml'), 'Begin Tests for writing tree files');;
+ 	ok( my $outSeqStream = Bio::SeqIO->new(-file => test_output_data('>../../code/data_sets/charactersSeqsOut.xml'), -format => 'nexml'), 'Begin Tests for writing tree files');;
 	ok( $outSeqStream->write_seq($seq_obj));
 	
-	my $inSeqStream = Bio::SeqIO->new(-file => test_input_file('charactersSeqsOut.xml'), -format => 'nexml');
+	my $inSeqStream = Bio::SeqIO->new(-file => test_input_data('../../code/data_sets/charactersSeqsOut.xml'), -format => 'nexml');
 	
 	#TODO when writing multiple seqs works this will be useful
 =head not done yet

@@ -11,7 +11,7 @@ use_ok('Bio::TreeIO::nexml'); # checks that your module is there and loads ok
 
 
  # this passes if $object gets defined without throws by the constructor
- ok( my $TreeStream = Bio::TreeIO->new(-file => test_input_data('trees.nexml.xml'), -format => 'Nexml') );
+ ok( my $TreeStream = Bio::TreeIO->new(-file => test_input_file('../../code/data_sets/trees.nexml.xml'), -format => 'Nexml') );
  
 
  	
@@ -49,10 +49,11 @@ use_ok('Bio::TreeIO::nexml'); # checks that your module is there and loads ok
 	
 #Checking ability to write files
 
-	ok( my $outTreeStream = Bio::TreeIO->new(-file => test_output_data('>treesOut.xml'), -format => 'nexml'), 'Begin Tests for writing tree files');;
+	ok( my $outTreeStream = Bio::TreeIO->new(-file => test_output_data('>../../code/data_sets/treesOut.xml'), -format => 'nexml'), 'Begin Tests for writing tree files');
 	ok( $outTreeStream->write_tree($tree_obj));
 	
-	my $inTreeStream = Bio::TreeIO->new(-file => test_input_data('treesOut.xml'), -format => 'nexml');
+	
+	my $inTreeStream = Bio::TreeIO->new(-file => test_input_data('../../code/data_sets/treesOut.xml'), -format => 'nexml');
 	
 	#checking first tree object
 	ok($tree_obj = $inTreeStream->next_tree() );
