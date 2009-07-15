@@ -1,4 +1,4 @@
-# $Id: fasta.pm 15549 2009-02-21 00:48:48Z maj $
+# $Id$
 # BioPerl module for Bio::SeqIO::nexml
 #
 # Please direct questions and support issues to <bioperl-l@bioperl.org> 
@@ -79,6 +79,8 @@ use strict;
 
 use lib '../..';
 use Bio::Phylo::Matrices::Datum;
+# may want to call these directly off the class below, for ease of 
+# reading later - /maj
 use Bio::Phylo::IO qw (parse unparse);
 use Bio::Seq;
 use Bio::Seq::SeqFactory;
@@ -120,6 +122,8 @@ sub _parse {
 	
 	
 	#
+	# i.e., my $proj = Bio::Phylo::IO->parse(...); /maj
+	
 	my $proj = parse(
  	'-file'       => $self->{'_file'},
  	'-format'     => 'nexml',

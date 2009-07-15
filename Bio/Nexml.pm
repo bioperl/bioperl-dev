@@ -1,3 +1,4 @@
+# $Id$
 # BioPerl module for Bio::Nexml
 #
 # Please direct questions and support issues to <bioperl-l@bioperl.org> 

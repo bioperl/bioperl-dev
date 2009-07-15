@@ -1,4 +1,4 @@
-# $Id: nexml.pm
+# $Id$
 #
 # BioPerl module for Bio::TreeIO::nexml
 #
