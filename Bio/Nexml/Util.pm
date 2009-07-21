@@ -157,14 +157,14 @@ sub _make_aln {
 sub _make_tree {
 	my($self, $proj) = @_;
 	my @trees;
- 	my $taxa = $proj->get_taxa();
+ 	#my $taxa = $proj->get_taxa();
  	my $forests = $proj->get_forests();
  	
  	foreach my $forest (@$forests) 
  	{	
- 	my $basename = $forest->get_name();
- 	my $trees = $forest->get_entities();
- 		
+ 		my $basename = $forest->get_name();
+ 		my $taxa = $forest->get_taxa();
+ 		my $trees = $forest->get_entities();
  
  		foreach my $t (@$trees)
  		{
@@ -195,7 +195,7 @@ sub _make_tree {
  				
  				#transfer attributes that apply to all nodes
  				#check if taxa data exists for the current node ($terminal)
- 				my $taxa_ents = $taxa->[0]->get_entities();
+ 				my $taxa_ents = $taxa->get_entities();
  				foreach my $taxon (@$taxa_ents)
  				{
  					if($taxon eq $terminal->get_taxon()) {
@@ -392,12 +392,10 @@ sub create_bphylo_aln {
 			my @feats = $aln->get_all_SeqFeatures();
 			my $taxa = $factory->create_taxa();		
             for my $seq ( @seqs ) {
-            	#create taxa
-            	
+            	#create datum linked to taxa
             	my $datum = create_bphylo_datum($seq, \@feats, $taxa, '-type_object' => $to);                                    	
                 $matrix->insert($datum);
             }
-            #$self->_print($matrix->to_xml());
             return $matrix, $taxa;
 		}
 		else {
@@ -409,7 +407,6 @@ sub create_bphylo_seq {
 	my ($self, $seq, @args) = @_;
 	my $type 	= $seq->alphabet || $seq->_guess_alphabet || 'dna';
 	$type = uc($type);
-   	#my $dat 	= $fac->create_datum( '-type' => $type);
    	
 	my @feats = $seq->get_all_SeqFeatures();
 	my $taxa = $fac->create_taxa();	
@@ -449,11 +446,7 @@ sub create_bphylo_seq {
 	
 	my $matrix = $fac->create_matrix(-type => $type);
 	$matrix->set_name($seq->display_name());
-	print $dat->to_xml();
 	$matrix->insert($dat);
-	#my $proj = $fac->create_project();
-	#$proj->insert($matrix);
-	
         
 	return $matrix, $taxa;
 }
@@ -508,7 +501,7 @@ sub create_bphylo_datum {
         		my $taxon_name = ($feat->get_tag_values('taxon'))[0];
         		$taxon = $fac->create_taxon(-name => $taxon_name);
 				$taxa->insert($taxon);
-        		$self->set_taxon($taxa->get_by_name($taxon_name));
+        		$self->set_taxon($taxa->get_by_name($taxon_name)); #think i can change this to just set_taxon($taxon)
         	}
         }
           

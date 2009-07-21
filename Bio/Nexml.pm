@@ -109,7 +109,6 @@ sub new {
 	my %params = @args;
 	my $file_string = $params{'-file'};
 	
-	
 	$self->{'_seqIO'}  = Bio::SeqIO::nexml->new(@args);
  	$self->{'_alnIO'}  = Bio::AlignIO::nexml->new(@args);
  	$self->{'_treeIO'} = Bio::TreeIO::nexml->new(@args);
@@ -198,28 +197,25 @@ sub write_doc {
 	my $ent;
 	my $taxa_o;
 	my $phylo_tree_o;
-	my $first_taxa;
 	
 	foreach my $tree (@$trees) {
 		($phylo_tree_o, $taxa_o) = Bio::Nexml::Util->create_bphylo_tree($tree);
-		#check if taxa exists
-		if (!$first_taxa) {
-			$first_taxa = $taxa_o;
-		}
-		link_taxa($self, $taxa_o, $forest, \@taxas, $first_taxa);
+		
+		link_taxa($self, $taxa_o, $forest, \@taxas);
 		
 		$forest->insert($phylo_tree_o);
 	}
 
-	#converts matrices to Bio::Phylo objects
+	#convert matrices to Bio::Phylo objects
 	my $matrices = Bio::Phylo::Matrices->new();
 	my ($phylo_matrix_o, @matrix_taxas);
 	
 	foreach my $aln (@$alns)
 	{
 		($phylo_matrix_o, $taxa_o) = Bio::Nexml::Util->create_bphylo_aln($aln);
-		#check if taxa exists
-		link_taxa($self, $taxa_o, $phylo_matrix_o, \@matrix_taxas, $first_taxa);
+		
+		#link_taxa and check for already existing identical taxa
+		link_taxa($self, $taxa_o, $phylo_matrix_o, \@matrix_taxas);
 		$matrices->insert($phylo_matrix_o);
 	}
 	
@@ -245,44 +241,77 @@ sub write_doc {
 sub link_taxa
 {
 	
-	my ($self, $taxa_o, $phylo_cont_o, $taxas, $first_taxa) = @_;
-	
-	
-	if ($taxa_o->first() && !exists $taxas->[ get_taxa_labels($taxa_o) ]) {
-			$phylo_cont_o->set_taxa($taxa_o);
-			push @$taxas, get_taxa_labels($taxa_o);
-		} 
-		else #TODO make this work for multiple forests with different taxa
-		{
-			my $ents = $taxa_o->get_entities();
-	
-			my $main_taxa = $first_taxa->get_entities();
-			for (my $i = 0; $i < @$ents; $i++)
-			{
-				my $new_label = $ents->[$i]->get_name();
-				my $old_label = $main_taxa->[$i]->get_name();
-				if( $new_label != $old_label) {
-					$self->throw("taxa conversion error - taxa not identical");
-				}
-				my $id = $ents->[$i]->get_xml_id();
-				my $mid = $main_taxa->[$i]->get_xml_id();
-				$ents->[$i]->set_xml_id($mid);
-			}
-		}
-}
+	my ($self, $taxa_o, $phylo_cont_o, $taxas) = @_;
 
-sub get_taxa_labels
-{
-	my $taxa = shift(@_);
-	my $ents = $taxa->get_entities();
+	my $duplicate_taxa;
+	my $new_taxa_ents = $taxa_o->get_entities();
 	
-	my $label_str = undef;
-	
-	foreach my $ent (@$ents)
+	#test if taxa_o is already present
+	foreach my $taxa (@$taxas)
 	{
-		$label_str .= $ent->get_name();
+		my $taxa_ents = $taxa->get_entities;
+		my $new_num_taxa = @$new_taxa_ents;
+		my $num_taxa = @$taxa_ents;
+		
+		#check if the taxa have same number of elements
+		if($new_num_taxa != $num_taxa) {next;}
+		
+		my %taxa_o = map {($_)->get_name(), 1} @$taxa_ents;
+		my @difference = grep {!$taxa_o {($_)->get_name()}} @$new_taxa_ents;
+		
+		if (!@difference) {
+			$duplicate_taxa = $taxa;
+			last;
+		}
 	}
-	return $label_str;
+	if (!$duplicate_taxa) {
+			push @$taxas, $taxa_o;
+			$phylo_cont_o->set_taxa($taxa_o);
+	} 
+	else #TODO make this work for multiple forests with different taxa
+	{		
+		if ($phylo_cont_o->isa('Bio::Phylo::Matrices::Matrix')) {
+			$phylo_cont_o->set_taxa($taxa_o);
+		}
+	
+		my $present_taxa_ents = $duplicate_taxa->get_entities();
+		my %present_taxa_ents = map {($_)->get_name, $_} @$present_taxa_ents;
+		
+		foreach my $new_taxa_ent (@$new_taxa_ents)
+		{
+			my $new_label = $new_taxa_ent->get_name();
+			#If tree get nodes and change taxa to point to already present ($duplicated_taxa) taxa
+			if($phylo_cont_o->isa('Bio::Phylo::Forest')) {
+				my $nodes = $new_taxa_ent->get_nodes();
+				foreach my $node (@$nodes)
+				{
+					$new_taxa_ent->unset_node($node);
+					$present_taxa_ents{$new_label}->set_nodes($node);
+				}
+			}
+			#If matrix get data and change the taxa to point to already present ($duplicated_taxa) taxa
+			elsif($phylo_cont_o->isa('Bio::Phylo::Matrices::Matrix')) {
+				my $data = $new_taxa_ent->get_data();
+				foreach my $datum (@$data)
+				{
+					$new_taxa_ent->unset_datum($datum);
+					$present_taxa_ents{$new_label}->set_data($datum);
+				}
+				$phylo_cont_o->set_taxa($duplicate_taxa);
+			}
+			else {
+				$self->throw("Object container must be either Forest or Matrix");
+			}
+			my $xml_id = $present_taxa_ents{$new_label};
+			if( !$xml_id) {
+				$self->throw("taxa conversion error - taxa not identical");
+			}
+		}	
+	}
 }
 
+<<<<<<< .mine
+
+1;=======
 1;
+>>>>>>> .r15874
