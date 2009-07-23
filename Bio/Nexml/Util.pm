@@ -1,6 +1,6 @@
 # $Id$
 #
-# BioPerl module for Bio::TreeIO::nexml
+# BioPerl module for Bio::Nexml::Util
 #
 # Please direct questions and support issues to <bioperl-l@bioperl.org> 
 #
@@ -80,7 +80,27 @@ use Bio::Phylo::Matrices::Matrix;
 use Bio::Phylo::Matrices::Datatype::Rna;
 
 #not sure that it needs to inerhit from Bio::Nexml
-use base qw(Bio::Nexml);
+
+# no reason to really; you don't make instances of this class,
+# and there doesn't seem to be any calling of Bio::Nexml methods
+# here. Better to avoid the inheritance if not strictly necessary-
+# /maj
+
+#use base qw(Bio::Nexml);
+
+# It looks to me like you've created a factory without realizing it
+# (or maybe you did realize it!):
+# if you *do* add a constructor here, then up in Nexml.pm, you 
+# can initialize a Util object, like
+
+# $bn_fac = Bio::Nexml::Util->new()
+
+# and instead of Bio::Nexml::Util->create_..., you can call off the instance
+# $bn_fac->create_...
+
+# this looks like only a preference at the moment, BUT I think I'll have more
+# to say on the subject..../maj
+
 
 my $fac = Bio::Phylo::Factory->new();
 
