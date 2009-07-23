@@ -28,6 +28,9 @@ Bio::Nexml::Util - A utility module for parsing nexml documents
 This is a utility module in the nexml namespace.  It contains methods
 that are needed by multiple modules.
 
+A few key design issues pertaining to this module will be
+described here. 
+
 =head1 FEEDBACK
 
 =head2 Mailing Lists
@@ -104,6 +107,7 @@ use Bio::Phylo::Matrices::Datatype::Rna;
 
 my $fac = Bio::Phylo::Factory->new();
 
+# PODPODPOD
 
 sub _make_aln {
 	my ($self, $proj) = @_;
@@ -121,6 +125,10 @@ sub _make_aln {
  		unless ($mol_type eq 'dna' || $mol_type eq 'rna' || $mol_type eq 'protein')
  		{
  			next;
+			# something for the back-burner: BioPerl has objects
+			# to handle arbitrary genotypes; might be cool to 
+			# be able to create something besides alignments 
+			# here .../maj
  		}
  		
  		my $basename = $matrix->get_name();
@@ -142,10 +150,12 @@ sub _make_aln {
 
  			$seq = Bio::LocatableSeq->new(
 						  -seq         => $newSeq,
-						  -display_id  => "$seqID",
+#						  -display_id  => "$seqID",
+						  -display_id  => "$rowlabel",
 						  #-description => $desc,
 						  -alphabet	   => $mol_type,
 						  );
+
 			my $feat;			  
 			#check if taxon linked to sequence if so create feature to attach to alignment
 			foreach my $taxa_o (@$taxa)
@@ -173,6 +183,8 @@ sub _make_aln {
  	}
  	return \@alns;
 }
+
+#PODPODPOD
 
 sub _make_tree {
 	my($self, $proj) = @_;
@@ -259,6 +271,8 @@ sub _make_tree {
  	return \@trees;
 }
 
+#PODPODPOD
+
 sub _make_seq {
 	my($self, $proj) = @_;
 	my $matrices = $proj->get_matrices();
@@ -326,6 +340,8 @@ sub _make_seq {
  	return \@seqs;
 }
 
+#PODPODPOD
+
 sub create_bphylo_tree {
 	my ($self, $bptree) = @_;
 	#most of the code below ripped form Bio::Phylo::Forest::Tree::new_from_bioperl()d
@@ -353,7 +369,7 @@ sub create_bphylo_tree {
 	return $tree, $taxa;
 }
 
-
+#PODPODPOD
 
 sub _copy_tree {
 	my ( $tree, $bpnode, $parent, $taxa ) = @_;
@@ -375,6 +391,8 @@ sub _copy_tree {
 		}
 	 return $tree, $taxa;
 }
+
+#PODPODPOD
 
 sub create_bphylo_aln {
 	
@@ -423,6 +441,8 @@ sub create_bphylo_aln {
 		}
 }
 
+#PODPODPOD
+
 sub create_bphylo_seq {
 	my ($self, $seq, @args) = @_;
 	my $type 	= $seq->alphabet || $seq->_guess_alphabet || 'dna';
@@ -438,6 +458,9 @@ sub create_bphylo_seq {
     if ( $seqstring and $seqstring =~ /\S/ ) {
         eval { $dat->set_char( $seqstring ) };
         #TODO Test debuggin
+
+	# let's convert Rutger's cool exceptions to the more pedestrian Bioperl throws/maj
+
         if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
         	$self->throw(
         		"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".
@@ -471,6 +494,8 @@ sub create_bphylo_seq {
 	return $matrix, $taxa;
 }
 
+#PODPODPOD (there's a leitmotif here...)
+
 sub create_bphylo_taxa {
 	my ($aln, $seq) = @_;
 	
@@ -479,6 +504,8 @@ sub create_bphylo_taxa {
 
 	
 }
+
+#PODPODPOD
 
 sub create_bphylo_datum {
 	#ripped from Bio::Phylo::Matrices::Datum::new_from_bioperl()
@@ -493,7 +520,9 @@ sub create_bphylo_datum {
         my $seqstring = $seq->seq;
         if ( $seqstring and $seqstring =~ /\S/ ) {
         	eval { $self->set_char( $seqstring ) };
-   
+
+		# let's convert Rutger's cool exceptions to the more pedestrian Bioperl throws/maj   
+
         	if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
         		$self->throw(
         			"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".
