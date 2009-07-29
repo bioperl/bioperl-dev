@@ -1,19 +1,22 @@
+#-*-perl-*-
+# $Id$
+
 use strict;
 
-use lib '..';
+chdir('..'); # hack to allow run from t
+
+use Bio::Root::Test;
 use Bio::Tree::Tree;
 use Bio::TreeIO;
-use Test::More tests=> 1000;
-use Bio::Root::Test;
-use Bio::Nexml;
+test_begin( -tests=>1000 );
 
 
 use_ok('Bio::Nexml'); # checks that your module is there and loads ok
 
 
  # this passes if $object gets defined without throws by the constructor
- ok( my $TreeStream = Bio::TreeIO->new(-file => test_input_data('../code/data_sets/trees.nexml.xml'), -format => 'Nexml') );
- ok( my $AlnStream = Bio::AlignIO->new(-file => test_input_data('../code/data_sets/characters.nexml.xml'), -format => 'Nexml'));
+ ok( my $TreeStream = Bio::TreeIO->new(-file => test_input_data('../code/data_sets/trees.nexml.xml'), -format => 'Nexml'), "Tree Stream Ok" );
+ ok( my $AlnStream = Bio::AlignIO->new(-file => test_input_data('../code/data_sets/characters.nexml.xml'), -format => 'Nexml'), "Aln Stream Ok");
  
   	#load tree
 	ok( my $tree_obj1 = $TreeStream->next_tree() );
@@ -36,7 +39,7 @@ use_ok('Bio::Nexml'); # checks that your module is there and loads ok
 	my $nexml_doc = Bio::Nexml->new(-file => test_output_data('>../code/data_sets/out_nexml_doc.xml'), -format => 'Nexml');
 	
 	
-	ok( $nexml_doc->write_doc(-trees => \@trees, -alns => \@alns) );
+	ok( $nexml_doc->to_xml(-trees => \@trees, -alns => \@alns) );
 	
 	my $in_nexml_doc = Bio::Nexml->new(-file => test_input_data('../code/data_sets/out_nexml_doc.xml'), -format => 'Nexml');
 	

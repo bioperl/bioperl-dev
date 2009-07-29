@@ -78,6 +78,7 @@ use Bio::Event::EventGeneratorI;
 use IO::String;
 use Bio::Phylo::IO qw (parse unparse);
 use Bio::Nexml::Util;
+use Benchmark;
 
 use base qw(Bio::TreeIO);
 
@@ -115,8 +116,16 @@ sub next_tree {
     return $self->{'_trees'}->[ $self->{'_treeiter'}++ ];
 }
 
+sub benchmark_test {
+	my $tree = next_tree(@_);
+	my $self = shift;
+	$self->{'_parsed'} = 0;
+	return $tree;
+}
+
 sub rewind {
-    shift->{'_treeiter'} = 0;
+    my $self = shift;
+    $self->{'_treeiter'} = 0;
 }
 
 sub _parse {
@@ -139,6 +148,7 @@ sub _parse {
  	#	print "caught";
  	#}
  	$self->{'_trees'} = Bio::Nexml::Util->_make_tree($proj);
+ 	#timethis('50', my $test = sub {Bio::Nexml::Util->_make_tree($proj)});
 }
 
 =head2 write_tree

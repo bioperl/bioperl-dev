@@ -84,7 +84,7 @@ use Bio::Phylo::Matrices::Datum;
 use Bio::Phylo::IO qw (parse unparse);
 use Bio::Seq;
 use Bio::Seq::SeqFactory;
-use Bio::Nexml::Util;
+use Bio::Nexml::Factory;
 
 use base qw(Bio::SeqIO);
 
@@ -114,14 +114,20 @@ sub next_seq {
 
 #add sub rewind?
 
+sub benchmark_test {
+	my $seq = next_seq(@_);
+	my $self = shift;
+	$self->{'_parsed'} = 0;
+	return $seq;
+}
+
 sub _parse {
 	my ($self) = @_;
-
+	my $fac = Bio::Nexml::Factory->new();
+	
     $self->{'_parsed'}   = 1;
     $self->{'_seqiter'} = 0;
 	
-	
-	#
 	# i.e., my $proj = Bio::Phylo::IO->parse(...); /maj
 	
 	my $proj = parse(
@@ -132,7 +138,7 @@ sub _parse {
  
  	
  		
- 	$self->{'_seqs'} = Bio::Nexml::Util->_make_seq($proj);
+ 	$self->{'_seqs'} = $fac->create_bperl_seq($proj);
  		
  	
  	unless(@{ $self->{'_seqs'} } == 0)

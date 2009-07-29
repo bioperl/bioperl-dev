@@ -1,6 +1,6 @@
-# $Id$
+# $Id: Util.pm 15875 2009-07-21 19:20:00Z chmille4 $
 #
-# BioPerl module for Bio::Nexml::Util
+# BioPerl module for Bio::Nexml::Factory
 #
 # Please direct questions and support issues to <bioperl-l@bioperl.org> 
 #
@@ -14,7 +14,7 @@
 
 =head1 NAME
 
-Bio::Nexml::Util - A utility module for parsing nexml documents
+Bio::Nexml::Factory - A factory module for creating BioPerl and Bio::Phylo objects from/to nexml documents
 
 =head1 SYNOPSIS
 
@@ -25,7 +25,7 @@ Bio::Nexml::Util - A utility module for parsing nexml documents
 
 =head1 DESCRIPTION
 
-This is a utility module in the nexml namespace.  It contains methods
+This is a factory/utility module in the nexml namespace.  It contains methods
 that are needed by multiple modules.
 
 A few key design issues pertaining to this module will be
@@ -75,41 +75,27 @@ Internal methods are usually preceded with a _
 
 #Let the code begin
 
-package Bio::Nexml::Util;
+package Bio::Nexml::Factory;
 
 use strict;
 
 use Bio::Phylo::Matrices::Matrix;
 use Bio::Phylo::Matrices::Datatype::Rna;
+use Bio::SeqFeature::Generic;
 
-#not sure that it needs to inerhit from Bio::Nexml
 
-# no reason to really; you don't make instances of this class,
-# and there doesn't seem to be any calling of Bio::Nexml methods
-# here. Better to avoid the inheritance if not strictly necessary-
-# /maj
-
-#use base qw(Bio::Nexml);
-
-# It looks to me like you've created a factory without realizing it
-# (or maybe you did realize it!):
-# if you *do* add a constructor here, then up in Nexml.pm, you 
-# can initialize a Util object, like
-
-# $bn_fac = Bio::Nexml::Util->new()
-
-# and instead of Bio::Nexml::Util->create_..., you can call off the instance
-# $bn_fac->create_...
-
-# this looks like only a preference at the moment, BUT I think I'll have more
-# to say on the subject..../maj
-
+use base qw(Bio::Root::Root);
 
 my $fac = Bio::Phylo::Factory->new();
 
-# PODPODPOD
 
-sub _make_aln {
+
+sub new {
+	my($class,@args) = @_;
+ 	my $self = $class->SUPER::new(@args);
+}
+
+sub create_bperl_aln {
 	my ($self, $proj) = @_;
 	my ($start, $end, $seq, $desc);
 	my $taxa = $proj->get_taxa();
@@ -125,7 +111,7 @@ sub _make_aln {
  		unless ($mol_type eq 'dna' || $mol_type eq 'rna' || $mol_type eq 'protein')
  		{
  			next;
-			# something for the back-burner: BioPerl has objects
+ 			# something for the back-burner: BioPerl has objects
 			# to handle arbitrary genotypes; might be cool to 
 			# be able to create something besides alignments 
 			# here .../maj
@@ -150,12 +136,10 @@ sub _make_aln {
 
  			$seq = Bio::LocatableSeq->new(
 						  -seq         => $newSeq,
-#						  -display_id  => "$seqID",
 						  -display_id  => "$rowlabel",
 						  #-description => $desc,
 						  -alphabet	   => $mol_type,
 						  );
-
 			my $feat;			  
 			#check if taxon linked to sequence if so create feature to attach to alignment
 			foreach my $taxa_o (@$taxa)
@@ -183,10 +167,8 @@ sub _make_aln {
  	}
  	return \@alns;
 }
-
 #PODPODPOD
-
-sub _make_tree {
+sub create_bperl_tree {
 	my($self, $proj) = @_;
 	my @trees;
  	#my $taxa = $proj->get_taxa();
@@ -271,9 +253,7 @@ sub _make_tree {
  	return \@trees;
 }
 
-#PODPODPOD
-
-sub _make_seq {
+sub create_bperl_seq {
 	my($self, $proj) = @_;
 	my $matrices = $proj->get_matrices();
 	my $taxa = $proj->get_taxa();
@@ -319,7 +299,7 @@ sub _make_seq {
 			my $feat;
 			foreach my $taxa_o (@$taxa)
 			{
-				my $taxa_ents = $taxa_o->get_entities(); #TODO handle mutiple taxa
+				my $taxa_ents = $taxa_o->get_entities();
 				foreach my $taxon (@$taxa_ents)
 				{ 
  					if($taxon eq $row->get_taxon)
@@ -339,8 +319,6 @@ sub _make_seq {
  	}
  	return \@seqs;
 }
-
-#PODPODPOD
 
 sub create_bphylo_tree {
 	my ($self, $bptree) = @_;
@@ -369,7 +347,7 @@ sub create_bphylo_tree {
 	return $tree, $taxa;
 }
 
-#PODPODPOD
+
 
 sub _copy_tree {
 	my ( $tree, $bpnode, $parent, $taxa ) = @_;
@@ -392,14 +370,12 @@ sub _copy_tree {
 	 return $tree, $taxa;
 }
 
-#PODPODPOD
-
 sub create_bphylo_aln {
 	
 	my ($self, $aln, @args) = @_;
 	
 	#most of the code below ripped from Bio::Phylo::Matrices::Matrix::new_from_bioperl()
-	my $factory = Bio::Phylo::Factory->new();
+	
 	
 	if ( Bio::Phylo::Matrices::Matrix::isa( $aln, 'Bio::Align::AlignI' ) ) {
 		    $aln->unmatch;
@@ -413,7 +389,7 @@ sub create_bphylo_aln {
 		    	$type = 'dna';
 		    }
 		    
-			my $matrix = $factory->create_matrix( 
+			my $matrix = $fac->create_matrix( 
 				'-type' => $type,
 				'-special_symbols' => {
 			    	'-missing'   => $aln->missing_char || '?',
@@ -428,7 +404,7 @@ sub create_bphylo_aln {
 			}			
 			my $to = $matrix->get_type_object;	
 			my @feats = $aln->get_all_SeqFeatures();
-			my $taxa = $factory->create_taxa();		
+			my $taxa = $fac->create_taxa();		
             for my $seq ( @seqs ) {
             	#create datum linked to taxa
             	my $datum = create_bphylo_datum($seq, \@feats, $taxa, '-type_object' => $to);                                    	
@@ -440,8 +416,6 @@ sub create_bphylo_aln {
 			$self->throw('Not a bioperl alignment!');
 		}
 }
-
-#PODPODPOD
 
 sub create_bphylo_seq {
 	my ($self, $seq, @args) = @_;
@@ -457,10 +431,8 @@ sub create_bphylo_seq {
     my $seqstring = $seq->seq;
     if ( $seqstring and $seqstring =~ /\S/ ) {
         eval { $dat->set_char( $seqstring ) };
-        #TODO Test debuggin
-
-	# let's convert Rutger's cool exceptions to the more pedestrian Bioperl throws/maj
-
+        #	# let's convert Rutger's cool exceptions to the more pedestrian Bioperl throws/maj
+        
         if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
         	$self->throw(
         		"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".
@@ -493,9 +465,7 @@ sub create_bphylo_seq {
         
 	return $matrix, $taxa;
 }
-
-#PODPODPOD (there's a leitmotif here...)
-
+#PODPODPOD
 sub create_bphylo_taxa {
 	my ($aln, $seq) = @_;
 	
@@ -504,8 +474,6 @@ sub create_bphylo_taxa {
 
 	
 }
-
-#PODPODPOD
 
 sub create_bphylo_datum {
 	#ripped from Bio::Phylo::Matrices::Datum::new_from_bioperl()
@@ -520,9 +488,9 @@ sub create_bphylo_datum {
         my $seqstring = $seq->seq;
         if ( $seqstring and $seqstring =~ /\S/ ) {
         	eval { $self->set_char( $seqstring ) };
-
-		# let's convert Rutger's cool exceptions to the more pedestrian Bioperl throws/maj   
-
+   
+   		# let's convert Rutger's cool exceptions to the more pedestrian Bioperl throws/maj   
+   
         	if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
         		$self->throw(
         			"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".

@@ -67,6 +67,7 @@ use lib '../..';
 use Bio::Phylo::IO qw(parse unparse);
 use Bio::LocatableSeq;
 use Bio::Nexml::Util;
+use Benchmark;
 use base qw(Bio::AlignIO);
 
 
@@ -93,6 +94,13 @@ sub next_aln {
 }
 
 #Add sub rewind?
+
+sub benchmark_parse {
+	my $aln = next_aln(@_);
+	my $self = shift;
+	$self->{'_parsed'} = 0;
+	return $aln;
+}
 
 sub _parse {
 	my ($self) = @_;
