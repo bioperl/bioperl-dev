@@ -2,20 +2,16 @@
 # $Id$
 
 use strict;
-
-chdir ('../..'); # hack to allow run from t dir
-
 use Bio::Root::Test;
-
 test_begin( -tests=>1000 );
 
 use_ok( 'Bio::Tree::Tree' );
 use_ok( 'Bio::TreeIO' );
 use_ok('Bio::TreeIO::nexml'); # checks that your module is there and loads ok
+chdir ('../..'); # hack to allow run from t dir
 
-
- # this passes if $object gets defined without throws by the constructor
- ok( my $TreeStream = Bio::TreeIO->new(-file => test_input_file('trees.nexml.xml'), -format => 'nexml') );
+#Read in Data
+ok( my $TreeStream = Bio::TreeIO->new(-file => test_input_file('trees.nexml.xml'), -format => 'nexml') );
 
 	#checking first tree object
 	ok( my $tree_obj = $TreeStream->next_tree(), 'tree obj read' );
@@ -27,8 +23,6 @@ use_ok('Bio::TreeIO::nexml'); # checks that your module is there and loads ok
 	is( $node7->branch_length, 0.3247, "branch length");
 	is( $node7->ancestor->id, 'n3', 'anc id');
 	is( $node7->ancestor->branch_length, '0.34534', 'anc bl');
-	
-	
 	#Check leaf nodes and taxa
 	my %expected_leaves = (
 							'n8'	=>	'bird',
@@ -37,24 +31,24 @@ use_ok('Bio::TreeIO::nexml'); # checks that your module is there and loads ok
 							'n6'	=>	'mouse',
 							'n2'	=>	'human'
 	);
-	
 	ok( my @leaves = $tree_obj->get_leaf_nodes() );
 	is( @leaves, 5, "number of leaf nodes");
-	foreach my $leaf (@leaves)
-	{
+	foreach my $leaf (@leaves) {
 		my $leafID = $leaf->id();
 		ok( exists $expected_leaves{$leaf->id()}, "$leafID exists"  );
 		is( $leaf->get_tag_values('taxon'), $expected_leaves{$leaf->id()}, "$leafID taxon");
 	}
 	
 	
-#Checking ability to write files
+#Write data
 diag('Begin tests for writing tree files');
 my $outdata = test_output_file();
-	ok( my $outTreeStream = Bio::TreeIO->new(-file => $outdata, -format => 'nexml'), 'out stream');
-	ok( $outTreeStream->write_tree($tree_obj), 'write tree');
+ok( my $outTreeStream = Bio::TreeIO->new(-file => $outdata, -format => 'nexml'), 'out stream');
+ok( $outTreeStream->write_tree($tree_obj), 'write tree');
 close($outdata);
-	my $inTreeStream = Bio::TreeIO->new(-file => $outdata, -format => 'nexml');
+
+#Read in the out file to test roundtrip
+my $inTreeStream = Bio::TreeIO->new(-file => $outdata, -format => 'nexml');
 	
 	#checking first tree object
 	ok($tree_obj = $inTreeStream->next_tree(), 'read tree obj (rt)' );
@@ -68,7 +62,6 @@ close($outdata);
 	is( $node7->ancestor->branch_length, '0.34534', 'anc bl (rt)');
 	
 	#Check leaf nodes and taxa
-	
 	ok( my @outleaves = $tree_obj->get_leaf_nodes() );
 	is( @outleaves, 5, "number of leaf nodes (rt)");
 	foreach my $leaf (@outleaves)

@@ -77,7 +77,7 @@ use lib '../..';
 use Bio::Event::EventGeneratorI;
 use IO::String;
 use Bio::Phylo::IO qw (parse unparse);
-use Bio::Nexml::Util;
+use Bio::Nexml::Factory;
 use Benchmark;
 
 use base qw(Bio::TreeIO);
@@ -102,7 +102,7 @@ sub _initialize {
  Title   : next_tree
  Usage   : my $tree = $treeio->next_tree
  Function: Gets the next tree in the stream
- Returns : Bio::Tree::TreeI
+ Returns : L<Bio::Tree::TreeI>
  Args    : none
 
 
@@ -123,6 +123,22 @@ sub benchmark_test {
 	return $tree;
 }
 
+=head2 rewind
+
+ Title   : rewind
+ Usage   : $treeio->rewind
+ Function: Resets the stream
+ Returns : none
+ Args    : none
+
+
+=cut
+
+sub doc {
+	my $self = shift;
+	return $self->{'_doc'};
+}
+
 sub rewind {
     my $self = shift;
     $self->{'_treeiter'} = 0;
@@ -133,22 +149,16 @@ sub _parse {
     
     $self->{'_parsed'}   = 1;
     $self->{'_treeiter'} = 0;
+    my $fac = Bio::Nexml::Factory->new();
     
-    my $proj;
-    #eval {
-    	$proj = parse(
+    
+    $self->{_doc} = parse(
  	'-file'       => $self->{'_file'},
  	'-format'     => 'nexml',
  	'-as_project' => '1'
  	);
-   # };
  	
- 	#if ($@)
- 	#{
- 	#	print "caught";
- 	#}
- 	$self->{'_trees'} = Bio::Nexml::Util->_make_tree($proj);
- 	#timethis('50', my $test = sub {Bio::Nexml::Util->_make_tree($proj)});
+ 	$self->{'_trees'} = $fac->create_bperl_tree($self);
 }
 
 =head2 write_tree
@@ -157,14 +167,17 @@ sub _parse {
  Usage   : $treeio->write_tree($tree);
  Function: Writes a tree onto the stream
  Returns : none
- Args    : Bio::Tree::TreeI
+ Args    : L<Bio::Tree::TreeI>
 
 
 =cut
 
 sub write_tree {
-	my $self = shift(@_);
-	my ($tree, $taxa) = Bio::Nexml::Util->create_bphylo_tree(@_);
+	my ($self, $bp_tree) = @_;
+	
+	my $fac = Bio::Nexml::Factory->new();
+	my $taxa = $fac->create_bphylo_taxa($bp_tree);
+	my ($tree) = $fac->create_bphylo_tree($bp_tree, $taxa);
 	
 	my $forest = Bio::Phylo::Factory->create_forest();
 	my $nexml_doc = Bio::Phylo::Factory->create_project();

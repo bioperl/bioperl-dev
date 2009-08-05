@@ -80,6 +80,7 @@ package Bio::Nexml::Factory;
 use strict;
 
 use Bio::Phylo::Matrices::Matrix;
+use Bio::Phylo::Forest::Tree;
 use Bio::Phylo::Matrices::Datatype::Rna;
 use Bio::SeqFeature::Generic;
 
@@ -89,24 +90,44 @@ use base qw(Bio::Root::Root);
 my $fac = Bio::Phylo::Factory->new();
 
 
+=head2 new
+
+ Title   : new
+ Usage   : my $obj = Bio::Nexml::Factory->new();
+ Function: Builds a new L<Bio::Nexml::Factory> object 
+ Returns : L<Bio::Nexml::Factory> object
+ Args    : none
+
+=cut
 
 sub new {
 	my($class,@args) = @_;
  	my $self = $class->SUPER::new(@args);
 }
 
+#should all these creates be private methods?
+
+=head2 create_bperl_aln
+
+ Title   : create_bperl_aln
+ Usage   : my @alns = $factory->create_bperl_aln($proj);
+ Function: Converts Bio::Phylo::Matrices::Matrix objects into L<Bio::SimpleAlign> objects
+ Returns : an array of L<Bio::SimpleAlign> objects
+ Args    : Bio::Phylo::Project object
+ 
+see [http://search.cpan.org/~rvosa/Bio-Phylo/lib/Bio/Phylo/Project.pm Bio::Phylo::Project]
+
+=cut
+
 sub create_bperl_aln {
-	my ($self, $proj) = @_;
+	my ($self, $caller) = @_;
 	my ($start, $end, $seq, $desc);
-	my $taxa = $proj->get_taxa();
- 	my $matrices = $proj->get_matrices();
+ 	my $matrices = $caller->doc->get_matrices();
  	my @alns;
  	
  	foreach my $matrix (@$matrices) 
  	{	
-		my $aln = Bio::SimpleAlign->new();
-		
- 		#check if mol_type is something that makes sense to be a seq
+ 		#check if mol_type is something that makes sense to be an aln
  		my $mol_type = lc($matrix->get_type());
  		unless ($mol_type eq 'dna' || $mol_type eq 'rna' || $mol_type eq 'protein')
  		{
@@ -117,12 +138,32 @@ sub create_bperl_aln {
 			# here .../maj
  		}
  		
+ 		#continue creating an aln
+		my $aln = Bio::SimpleAlign->new();
+		my $taxa = $matrix->get_taxa();
+		$aln->{_Nexml_ID} = $caller->{_ID} . $taxa->get_xml_id;
+		
+		my $aln_feats = Bio::SeqFeature::Generic->new();
+		$aln_feats->add_tag_value('NexmlIO_ID', $caller->{_ID});
+		#check if there is a taxa associated with this alignment
+		if ($taxa) {
+			$aln_feats->add_tag_value('taxa_id', $taxa->get_xml_id()) if $taxa->get_xml_id();
+			$aln_feats->add_tag_value('taxa_label', $taxa->get_name()) if $taxa->get_name();
+		
+			my $taxon = $taxa->first;
+			while ($taxon) {
+				$aln_feats->add_tag_value('taxon', $taxon->get_name);
+				$taxon = $taxa->next;
+			}
+		}
+		
+		$aln->add_SeqFeature($aln_feats);
+ 		
  		my $basename = $matrix->get_name();
  		$aln->id($basename);
- 		
- 		my $rows = $matrix->get_entities();
  		my $seqNum = 0;
- 		foreach my $row (@$rows)
+ 		my$row = $matrix->first;
+ 		while ($row)
  		{
  			my $newSeq = $row->get_char();
  			my $rowlabel;
@@ -140,52 +181,78 @@ sub create_bperl_aln {
 						  #-description => $desc,
 						  -alphabet	   => $mol_type,
 						  );
-			my $feat;			  
-			#check if taxon linked to sequence if so create feature to attach to alignment
-			foreach my $taxa_o (@$taxa)
+			my $seq_feats;			  
+			#check if there is a taxa associated w/ this alignment
+			if($taxa)
 			{
-				my $taxa_ents = $taxa_o->get_entities(); 
-				foreach my $taxon (@$taxa_ents)
-				{ 
- 					if($taxon eq $row->get_taxon)
- 					{
- 						my $taxon_name = $taxon->get_name();
- 						$feat = Bio::SeqFeature::Generic->new();
- 						$feat->add_tag_value('taxon', "$taxon_name");
- 						$feat->add_tag_value('id', "$seqID");
- 					}
+				if (my $taxon = $taxa->get_by_name($row->get_taxon->get_name())) {
+					#attach taxon to each sequence by using the sequenceID because
+ 					#LocatableSeq does not support features
+ 					my $taxon_name = $taxon->get_name();
+ 					$seq_feats = Bio::SeqFeature::Generic->new();
+ 					#TODO merge the two below into $seq_feats->add_tag_value($rowlabel, "$taxon_name") and then fix elsewhere
+ 					$seq_feats->add_tag_value('taxon', "$taxon_name");
+ 					$seq_feats->add_tag_value('id', "$rowlabel");
 				}
 			}
 			
 		    $aln->add_seq($seq);
-		    $aln->add_SeqFeature($feat);
-		    $self->debug("Reading r$seqID\n");
+		    $aln->add_SeqFeature($seq_feats);
+		    $self->debug("Reading r$rowlabel\n");
  		
- 			
+ 			$row = $matrix->next();
  		}
  		push (@alns, $aln);
  	}
  	return \@alns;
 }
-#PODPODPOD
+
+
+=head2 create_bperl_tree
+
+ Title   : create_bperl_tree
+ Usage   : my @trees = $factory->create_bperl_seq($proj);
+ Function: Converts Bio::Phylo::Forest::Tree objects into L<Bio::Tree::Tree> objects
+ Returns : an array of L<Bio::Tree::Tree> objects
+ Args    : Bio::Phylo::Project object
+ 
+see [http://search.cpan.org/~rvosa/Bio-Phylo/lib/Bio/Phylo/Project.pm Bio::Phylo::Project]
+
+=cut
+
 sub create_bperl_tree {
-	my($self, $proj) = @_;
+	my($self, $caller) = @_;
 	my @trees;
- 	#my $taxa = $proj->get_taxa();
- 	my $forests = $proj->get_forests();
+ 	
+ 	
+ 	my $forests = $caller->doc->get_forests();
  	
  	foreach my $forest (@$forests) 
  	{	
  		my $basename = $forest->get_name();
  		my $taxa = $forest->get_taxa();
- 		my $trees = $forest->get_entities();
+ 		my $taxa_label = $taxa->get_name();
+ 		my $taxa_id = $taxa->get_xml_id();
+ 		
+ 		my $t = $forest->first();
  
- 		foreach my $t (@$trees)
- 		{
+ 		while ($t) #change this to $trees->next so it's more memory efficient
+  		{                       #although some thought needs to go into this one
  			my %created_nodes;
  			my $tree_id = $t->get_name();
  			my $tree = Bio::Tree::Tree->new(-id => "$basename.$tree_id");
 
+			#set the taxa info of the tree
+			$tree->add_tag_value('taxa_label', $taxa_label);
+			$tree->add_tag_value('taxa_id', $taxa_id);
+			$tree->add_tag_value('_NexmlIO_ID', $caller->{_ID});
+			
+			my $taxon = $taxa->first;
+			while($taxon) {
+				$tree->add_tag_value('taxon', $taxon->get_name());	
+				$taxon = $taxa->next;
+			}
+			
  			
  			
  			#process terminals only, removing terminals as they get processed 
@@ -207,14 +274,10 @@ sub create_bperl_tree {
  					$created_nodes{$new_node_id} = $newNode;
  				}
  				
- 				#transfer attributes that apply to all nodes
  				#check if taxa data exists for the current node ($terminal)
- 				my $taxa_ents = $taxa->get_entities();
- 				foreach my $taxon (@$taxa_ents)
- 				{
- 					if($taxon eq $terminal->get_taxon()) {
- 						$newNode->add_tag_value("taxon", $taxon->get_name());
- 					}
+				if($taxa) {
+					my $taxon = $terminal->get_taxon();
+					$newNode->add_tag_value("taxon", $taxon->get_name()) if $taxon;
  				}
  				
  				#check if you've reached the root of the tree and if so, stop.
@@ -248,15 +311,27 @@ sub create_bperl_tree {
  				}
  			}
 			push @trees, $tree;
+			$t = $forest->next();
  		}
  	}
  	return \@trees;
 }
 
+=head2 create_bperl_seq
+
+ Title   : create_bperl_seq
+ Usage   : my @seqs = $factory->create_bperl_seq($proj);
+ Function: Converts Bio::Phylo::Matrices::Datum objects into L<Bio::Seq> objects
+ Returns : an array of L<Bio::Seq> objects
+ Args    : Bio::Phylo::Project object
+ 
+see [http://search.cpan.org/~rvosa/Bio-Phylo/lib/Bio/Phylo/Project.pm Bio::Phylo::Project]
+
+=cut
+
 sub create_bperl_seq {
-	my($self, $proj) = @_;
-	my $matrices = $proj->get_matrices();
-	my $taxa = $proj->get_taxa();
+	my($self, $caller) = @_;
+	my $matrices = $caller->doc->get_matrices();
 	my @seqs;
  	
  	foreach my $matrix (@$matrices) 
@@ -268,12 +343,21 @@ sub create_bperl_seq {
  			next;
  		}
  		
- 		my $rows = $matrix->get_entities();
+ 		my $taxa = $matrix->get_taxa();
  		my $seqnum = 0;
+ 		my $taxa_id = $taxa->get_xml_id();
+ 		my $taxa_label = $taxa->get_name();
  		my $basename = $matrix->get_name();
- 		foreach my $row (@$rows)
+ 		my $row = $matrix->first;
+ 		while ($row)
  		{
  			my $newSeq = $row->get_char();
+ 			my $feat = Bio::SeqFeature::Generic->new();
+			$feat->add_tag_value('matrix_label', $matrix->get_name());
+			$feat->add_tag_value('matrix_id', $matrix->get_xml_id());
+			$feat->add_tag_value('NexmlIO_ID', $caller->{_ID});
+			$feat->add_tag_value('taxa_id', $taxa_id);
+			$feat->add_tag_value('taxa_label', $taxa_label);
  			
  			$seqnum++;
  			#construct full sequence id by using bio::phylo "matrix label" and "row id"
@@ -282,11 +366,8 @@ sub create_bperl_seq {
  			#check if there is a label for the row, if not default to seqID
  			if (!defined ($rowlabel = $row->get_name())) {$rowlabel = $seqID;}
  			
- 		
  			#build the seq object using the factory create method
- 			
  			my $seqbuilder = new Bio::Seq::SeqFactory('-type' => 'Bio::Seq');
- 			
  			my $seq = $seqbuilder->create(
 					   -seq         => $newSeq,
 					   -id          => $rowlabel,
@@ -295,43 +376,56 @@ sub create_bperl_seq {
 					   -alphabet    => $mol_type,
 					   -direct      => 1,
 					   );
+			$seq->{_Nexml_ID} = $caller->{_ID} . $taxa_id;
+			$seq->{_Nexml_matrix_ID} = $caller->{_ID} . $matrix->get_xml_id();
+			
 			#check if taxon linked to sequence if so create feature to attach to alignment
-			my $feat;
-			foreach my $taxa_o (@$taxa)
+			if ($taxa)
 			{
-				my $taxa_ents = $taxa_o->get_entities();
-				foreach my $taxon (@$taxa_ents)
+				my $taxon = $taxa->first;
+				while ($taxon)
 				{ 
+					$feat->add_tag_value('taxon', $taxon->get_name);
  					if($taxon eq $row->get_taxon)
  					{
  						my $taxon_name = $taxon->get_name();
- 						$feat = Bio::SeqFeature::Generic->new();
- 						$feat->add_tag_value('taxon', "$taxon_name");
- 						$feat->add_tag_value('id', $seqID);
- 						last;
+ 						
+ 						$feat->add_tag_value('my_taxon', "$taxon_name");
+ 						$feat->add_tag_value('id', $rowlabel);
  					}
+ 					$taxon = $taxa->next;
 				}
 			}
  			$seq->add_SeqFeature($feat);
  			push (@seqs, $seq);
- 			#what other data is appropriate to pull over from bio::phylo::matrices::matrix??
+ 			
+ 			$row = $matrix->next;
  		}
  	}
  	return \@seqs;
 }
 
+=head2 create_bphylo_tree
+
+ Title   : create_bphylo_tree
+ Usage   : my $bphylo_tree = $factory->create_bphylo_tree($bperl_tree);
+ Function: Converts a L<Bio::Tree::Tree> object into Bio::Phylo::Forest::Tree object
+ Returns : a Bio::Phylo::Forest::Tree object
+ Args    : Bio::Tree::Tree object
+ 
+=cut
+
 sub create_bphylo_tree {
-	my ($self, $bptree) = @_;
+	my ($self, $bptree, $taxa) = @_;
 	#most of the code below ripped form Bio::Phylo::Forest::Tree::new_from_bioperl()d
 	
 	my $tree = $fac->create_tree;
-	my $taxa = $fac->create_taxa;
 
 	my $class = 'Bio::Phylo::Forest::Tree';
 	
 	if ( Scalar::Util::blessed $bptree && $bptree->isa('Bio::Tree::TreeI') ) {
 		bless $tree, $class;
-		($tree, $taxa) = _copy_tree( $tree, $bptree->get_root_node, "", $taxa);
+		($tree) = _copy_tree( $tree, $bptree->get_root_node, "", $taxa);
 		
 		# copy name
 		my $name = $bptree->id;
@@ -340,11 +434,12 @@ sub create_bphylo_tree {
 		# copy score
 		my $score = $bptree->score;
 		$tree->set_score( $score ) if defined $score;
+		
 	}
 	else {
 		$self->throw('Not a bioperl tree!');
 	}
-	return $tree, $taxa;
+	return $tree;
 }
 
 
@@ -356,23 +451,31 @@ sub _copy_tree {
 		if ($parent) {
 			$parent->set_child($node);
 		}
-		#TODO get taxa label and find a way to relate it to the bioperl tag values so they can be retrieved on the other end
-		if (my $bptaxon = $bpnode->get_tag_values('taxon'))
+		if (my $bptaxon_name = $bpnode->get_tag_values('taxon'))
 		{
-			$taxon = $fac->create_taxon(-name => $bptaxon);
-			$taxa->insert($taxon);
-			$node->set_taxon($taxa->get_by_name($bptaxon));
+			$node->set_taxon($taxa->get_by_name($bptaxon_name));
 		}
 		$tree->insert($node);
 		foreach my $bpchild ( $bpnode->each_Descendent ) {
 			_copy_tree( $tree, $bpchild, $node, $taxa );
 		}
-	 return $tree, $taxa;
+		
+	 return $tree;
 }
+
+=head2 create_bphylo_aln
+
+ Title   : create_bphylo_aln
+ Usage   : my $bphylo_aln = $factory->create_bphylo_aln($bperl_aln);
+ Function: Converts a L<Bio::SimpleAlign> object into Bio::Phylo::Matrices::Matrix object
+ Returns : a Bio::Phylo::Matrices::Matrix object
+ Args    : Bio::SimpleAlign object
+ 
+=cut
 
 sub create_bphylo_aln {
 	
-	my ($self, $aln, @args) = @_;
+	my ($self, $aln, $taxa, @args) = @_;
 	
 	#most of the code below ripped from Bio::Phylo::Matrices::Matrix::new_from_bioperl()
 	
@@ -404,26 +507,42 @@ sub create_bphylo_aln {
 			}			
 			my $to = $matrix->get_type_object;	
 			my @feats = $aln->get_all_SeqFeatures();
-			my $taxa = $fac->create_taxa();		
+			
             for my $seq ( @seqs ) {
             	#create datum linked to taxa
             	my $datum = create_bphylo_datum($seq, \@feats, $taxa, '-type_object' => $to);                                    	
                 $matrix->insert($datum);
             }
-            return $matrix, $taxa;
+            
+            return $matrix;
 		}
 		else {
 			$self->throw('Not a bioperl alignment!');
 		}
 }
 
+#this might need to be rethough. It takes a single seq and returns a matrix, 
+# which normally contains multiple seqs. I originally did this because
+# a datum object must be inserted into a matrix object before it can 
+# be inserted into a project object so that it can be correclty converted
+# to xml
+
+=head2 create_bphylo_seq
+
+ Title   : create_bphylo_seq
+ Usage   : my $bphylo_seq = $factory->create_bphylo_seq($bperl_seq);
+ Function: Converts a L<Bio::Seq> object into Bio::Phylo::Matrices::Matix object
+ Returns : a Bio::Phylo::Matrices::Matrix object
+ Args    : Bio::Seq object
+ 
+=cut
+
 sub create_bphylo_seq {
-	my ($self, $seq, @args) = @_;
+	my ($self, $seq, $taxa, @args) = @_;
 	my $type 	= $seq->alphabet || $seq->_guess_alphabet || 'dna';
 	$type = uc($type);
    	
-	my @feats = $seq->get_all_SeqFeatures();
-	my $taxa = $fac->create_taxa();	
+	my @feats = $seq->get_all_SeqFeatures();	
     
     my $dat = create_bphylo_datum($seq, \@feats, $taxa, '-type' => $type);  
         
@@ -431,7 +550,7 @@ sub create_bphylo_seq {
     my $seqstring = $seq->seq;
     if ( $seqstring and $seqstring =~ /\S/ ) {
         eval { $dat->set_char( $seqstring ) };
-        #	# let's convert Rutger's cool exceptions to the more pedestrian Bioperl throws/maj
+        #TODO let's convert Rutger's cool exceptions to the more pedestrian Bioperl throws/maj
         
         if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
         	$self->throw(
@@ -444,7 +563,9 @@ sub create_bphylo_seq {
         		"\n--------------------------------------------------------------------------"
         	);
         }
-	}                
+	}    
+	
+	            
         
 	# copy name
 	my $name = $seq->display_id;
@@ -458,32 +579,84 @@ sub create_bphylo_seq {
 	for my $field ( qw(start end strand) ) {
 	    $dat->$field( $seq->$field ) if $seq->can($field);
     } 
-	
-	my $matrix = $fac->create_matrix(-type => $type);
-	$matrix->set_name($seq->display_name());
-	$matrix->insert($dat);
-        
-	return $matrix, $taxa;
+    
+	return $dat;
 }
 #PODPODPOD
 sub create_bphylo_taxa {
-	my ($aln, $seq) = @_;
+	my $self = shift @_;
+	my ($obj) = @_;
 	
 	#check if tree or aln object
-	#	if ( Bio::Phylo::Matrices::Matrix::isa( $aln, 'Bio::Align::AlignI' ) ) {
-
+	if ( UNIVERSAL::isa( $obj, 'Bio::Align::AlignI' ) || UNIVERSAL::isa( $obj, 'Bio::Seq')) {
+		return $self->_create_bphylo_matrix_taxa(@_);
+	}
+	elsif ( UNIVERSAL::isa( $obj, 'Bio::Tree::TreeI' ) ) {
+		return $self->_create_bphylo_tree_taxa(@_);
+	}
 	
 }
 
+sub _create_bphylo_tree_taxa {
+	my ($self, $tree) = @_;
+	
+	my $taxa = $fac->create_taxa();
+	my $taxon;
+	
+	#copy taxa details
+	$taxa->set_xml_id(($tree->get_tag_values('taxa_id'))[0]);
+	$taxa->set_name(($tree->get_tag_values('taxa_label'))[0]);
+	
+	foreach my $taxon_name ($tree->get_tag_values('taxon')) {
+		
+		$taxon = $fac->create_taxon(-name => $taxon_name);
+		$taxa->insert($taxon);
+	}
+	return $taxa;
+}
+
+sub _create_bphylo_matrix_taxa {
+	my ($self, $aln) = @_;
+	
+	my $taxa = $fac->create_taxa();
+	my $taxon;
+	my @feats = $aln->get_all_SeqFeatures();
+			
+	foreach my $feat (@feats) {
+    if (my $taxa_id = ($feat->get_tag_values('taxa_id'))[0]) {
+		my $taxa_label = ($feat->get_tag_values('taxa_label'))[0];
+    
+		$taxa->set_name($taxa_label) if defined $taxa_label;
+		$taxa->set_xml_id($taxa_id) if defined $taxa_label;
+		my @taxa_bp = $feat->get_tag_values('taxon');
+		foreach my $taxon_name (@taxa_bp) {
+			$taxon = $fac->create_taxon(-name => $taxon_name);
+			$taxa->insert($taxon);
+		}
+        last;
+        }
+	}
+	return $taxa
+}
+
+=head2 create_bphylo_datum
+
+ Title   : create_bphylo_datum
+ Usage   : my $bphylo_datum = $factory->create_bphylo_datum($bperl_datum);
+ Function: Converts a L<Bio::Seq> object into Bio::Phylo::Matrices::datum object
+ Returns : a Bio::Phylo::Matrices::datum object
+ Args    : Bio::Seq object
+ 
+=cut
+
 sub create_bphylo_datum {
-	#ripped from Bio::Phylo::Matrices::Datum::new_from_bioperl()
+	#mostly ripped from Bio::Phylo::Matrices::Datum::new_from_bioperl()
 	my ( $seq, $feats, $taxa, @args ) = @_;
 	my $class = 'Bio::Phylo::Matrices::Datum';
 	# want $seq type-check here? Allowable: is-a Bio::PrimarySeq, 
         #  Bio::LocatableSeq /maj
     	my $type = $seq->alphabet || $seq->_guess_alphabet || 'dna';
     	my $self = $class->new( '-type' => $type, @args );
-        
         # copy seq string
         my $seqstring = $seq->seq;
         if ( $seqstring and $seqstring =~ /\S/ ) {
@@ -504,6 +677,8 @@ sub create_bphylo_datum {
         	}
         }                
         
+       
+        
         # copy name
         my $name = $seq->display_id;
         $self->set_name( $name ) if defined $name;
@@ -512,13 +687,17 @@ sub create_bphylo_datum {
         foreach my $feat (@$feats)
         {
         	#get sequence id associated with taxa to compare
-        	my $taxa_id = ($feat->get_tag_values('id'))[0];
+        	my $taxa_id = ($feat->get_tag_values('id'))[0] if $feat->has_tag('id');
         	if ($name eq $taxa_id)
         	{
-        		my $taxon_name = ($feat->get_tag_values('taxon'))[0];
-        		$taxon = $fac->create_taxon(-name => $taxon_name);
-				$taxa->insert($taxon);
-        		$self->set_taxon($taxa->get_by_name($taxon_name)); #think i can change this to just set_taxon($taxon)
+        		my $taxon_name;
+        		if($feat->has_tag('my_taxon')) {
+        			$taxon_name = ($feat->get_tag_values('my_taxon'))[0]
+        		}
+        		else {
+        			$taxon_name = ($feat->get_tag_values('taxon'))[0];
+        		}
+        		$self->set_taxon($taxa->get_by_name($taxon_name));
         	}
         }
           

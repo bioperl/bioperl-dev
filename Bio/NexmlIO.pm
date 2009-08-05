@@ -1,5 +1,5 @@
-# $Id$
-# BioPerl module for Bio::Nexml
+# $Id: Nexml.pm 15889 2009-07-29 13:35:29Z chmille4 $
+# BioPerl module for Bio::NexmlIO
 #
 # Please direct questions and support issues to <bioperl-l@bioperl.org> 
 #
@@ -16,7 +16,7 @@
 
 =head1 NAME
 
-Bio::Nexml - Nexml document handler
+Bio::NexmlIO - stream handler for nexml documents
 
 =head1 SYNOPSIS
 
@@ -25,16 +25,16 @@ Bio::Nexml - Nexml document handler
 
 =head1 DESCRIPTION
 
-	Bio::Nexml is a handler for a Nexml document.  A Nexml document can represent three
+	Bio::NexmlIO is a handler for a Nexml document.  A Nexml document can represent three
 	different data types: simple sequences, alignments, and trees. So.....FILL THIS IN
 
 
 =head1 CONSTRUCTORS
 
-=head2 Bio::Nexml-E<gt>new()
+=head2 Bio::NexmlIO-E<gt>new()
 
-   $seqIO = Bio::Nexml->new(-file => 'filename');
-   $seqIO = Bio::Nexml->new(-fh   => \*FILEHANDLE, -format=>$format); # this should work sense it's being passed through to SeqIO->new
+   $seqIO = Bio::NexmlIO->new(-file => 'filename');
+   $seqIO = Bio::NexmlIO->new(-fh   => \*FILEHANDLE, -format=>$format); # this should work sense it's being passed through to SeqIO->new
    
 
 =back
@@ -91,7 +91,7 @@ methods. Internal methods are usually preceded with a _
 #' Let the code begin...
 
 
-package Bio::Nexml;
+package Bio::NexmlIO;
 use strict;
 #TODO Change this
 use lib '..';
@@ -99,7 +99,7 @@ use lib '..';
 use Bio::SeqIO::nexml;
 use Bio::AlignIO::nexml;
 use Bio::TreeIO::nexml;
-use Bio::Nexml::Util;
+use Bio::Nexml::Factory;
 
 use Bio::Phylo::IO;
 use Bio::Phylo::Factory;
@@ -109,17 +109,17 @@ use base qw(Bio::Root::IO);
 
 my $nexml_fac = Bio::Nexml::Factory->new();
 
+
 sub new {
  	my($class,@args) = @_;
  	my $self = $class->SUPER::new(@args);
 
 	my %params = @args;
 	my $file_string = $params{'-file'};
-	
-	$self->{'_seqIO'}  = Bio::SeqIO::nexml->new(@args);
- 	$self->{'_alnIO'}  = Bio::AlignIO::nexml->new(@args);
- 	$self->{'_treeIO'} = Bio::TreeIO::nexml->new(@args);
- 	$self->{'_taxa'}   = my %taxa;
+ 	
+ 	#create unique ID by creating a scalar and using the memory address
+ 	my $ID = bless \(my $dummy), "UniqueID";
+ 	$self->{'_ID'} = $ID;
  	
  	unless ($file_string =~ m/^\>/) {
  		$self->{'_doc'} = Bio::Phylo::IO->parse('-file' => $params{'-file'}, '-format' => 'nexml', '-as_project' => '1');
@@ -129,26 +129,11 @@ sub new {
  	return $self;
 }
 
-
-sub treeIO {
-	my $self = shift;
-	return $self->{'_treeIO'};
-}
-
-sub seqIO {
-	my $self = shift;
-	return $self->{'_seqIO'};
-}
-
-sub alnIO {
-	my $self = shift;
-	return $self->{'_alnIO'};	
-}
-
 sub doc {
 	my $self = shift;
 	return $self->{'_doc'};
 }
+
 
 sub _parse {
 	my ($self) = @_;
@@ -157,12 +142,28 @@ sub _parse {
     $self->{'_seqiter'}  = 0;
     $self->{'_alniter'}  = 0;
     
-	$self->{'_trees'} = $nexml_fac->create_bperl_tree($self->doc);
-	$self->{'_alns'}  = $nexml_fac->create_bperl_aln($self->doc);
-	$self->{'_seqs'}  = $nexml_fac->create_bperl_seq($self->doc);
+	$self->{_trees} = $nexml_fac->create_bperl_tree($self);
+	$self->{_alns}  = $nexml_fac->create_bperl_aln($self);
+	$self->{_seqs}  = $nexml_fac->create_bperl_seq($self);
+	my $taxa_array = $self->doc->get_taxa();
+	
+	#my $nexml_doc = Bio::Nexml->new('-trees' => $trees, '-alns' => $alns, '-seqs' => $seqs, '-taxa_array' => $taxa_array);
 	
 	$self->{'_parsed'}   = 1; #success
 }
+
+=head2 next
+
+ Title   : next_tree
+ Usage   : $tree = stream->next
+ Function: Reads the next data object (tree, aln, or seq) from the stream and returns it.
+ Returns : a Bio::Tree::Tree object
+ Args    : none
+
+See L<Bio::Root::RootI>, L<Bio::Tree::Tree>
+
+=cut
+
 
 sub next_tree {
 	my $self = shift;
@@ -203,12 +204,14 @@ sub rewind_tree { shift->rewind('tree'); }
 
 ###
 
-sub to_xml {
+sub write {
 	my ($self, @args) = @_;
 	
 	my %params = @args;
 	
 	my ($trees, $alns, $seqs) = @params{qw( -trees -alns -seqs )};
+	my %taxa_hash = ();
+	my %seq_matrices = ();
 
 	my $proj_doc = Bio::Phylo::Factory->create_project();
 	
@@ -221,30 +224,79 @@ sub to_xml {
 	my $phylo_tree_o;
 	
 	foreach my $tree (@$trees) {
-		($phylo_tree_o, $taxa_o) = $nexml_fac->create_bphylo_tree($tree);
+		my $nexml_id = $tree->get_tag_values('_NexmlIO_ID');
+		$taxa_o = undef;
+		if ( defined $taxa_hash{$nexml_id} ) {
+			$taxa_o = $taxa_hash{$nexml_id};
+		}
+		else {
+			($taxa_o) = $nexml_fac->create_bphylo_taxa($tree);
+			$forest->set_taxa($taxa_o) if defined $taxa_o;
+			$taxa_hash{$nexml_id} = $taxa_o;
+		}
 		
-		#link_taxa($self, $taxa_o, $forest, \@taxa_array);
+		($phylo_tree_o) = $nexml_fac->create_bphylo_tree($tree,  $taxa_o);
 		
 		$forest->insert($phylo_tree_o);
 	}
 
 	#convert matrices to Bio::Phylo objects
 	my $matrices = Bio::Phylo::Matrices->new();
-	my ($phylo_matrix_o, @matrix_taxas);
+	my $phylo_matrix_o;
 	
 	foreach my $aln (@$alns)
 	{
-		($phylo_matrix_o, $taxa_o) = $nexml_fac->create_bphylo_aln($aln);
+		$taxa_o = undef;
+		if (defined $taxa_hash{ $aln->{_Nexml_ID} }) {
+			$taxa_o = $taxa_hash{$aln->{_Nexml_ID}};
+		}
+		else {
+			($taxa_o) = $nexml_fac->create_bphylo_taxa($aln);
+			$taxa_hash{$aln->{_Nexml_ID}} = $taxa_o;
+		}
 		
-		#link_taxa and check for already existing identical taxa
-		#link_taxa($self, $taxa_o, $phylo_matrix_o, \@matrix_taxas);
-		$matrices->insert($phylo_matrix_o);
+		($phylo_matrix_o) = $nexml_fac->create_bphylo_aln($aln,  $taxa_o);
+		
+		$phylo_matrix_o->set_taxa($taxa_o) if defined $taxa_o;
+		$matrices->insert($phylo_matrix_o);	
 	}
 	
+	my $seq_matrix_o;
+	my $datum;
 	#convert sequences to Bio::Phylo objects
 	foreach my $seq (@$seqs)
 	{
-		$matrices->insert($nexml_fac->create_bphylo_seq($seq));
+		$taxa_o = undef;
+		#check if this Bio::Phylo::Taxa obj has already been created
+		if (defined $taxa_hash{ $seq->{_Nexml_ID} }) {
+			$taxa_o = $taxa_hash{$seq->{_Nexml_ID}};
+		}
+		else {
+			($taxa_o) = $nexml_fac->create_bphylo_taxa($seq);
+			$taxa_hash{$seq->{_Nexml_ID}} = $taxa_o;
+		}
+		$datum = $nexml_fac->create_bphylo_seq($seq, $taxa_o);
+		#check if this Bio::Phylo::Matrices::Matrix obj has already been created
+		if (defined $seq_matrices{ $seq->{_Nexml_matrix_ID} }) {
+			$seq_matrix_o = $seq_matrices{$seq->{_Nexml_matrix_ID}};
+			my $taxon_name = $datum->get_taxon()->get_name();
+			$datum->unset_taxon();
+			$seq_matrix_o->insert($datum);
+			$datum->set_taxon($seq_matrix_o->get_taxa()->get_by_name($taxon_name));
+		}
+		else {
+			$seq_matrix_o = Bio::Phylo::Factory->create_matrix('-type' => $datum->moltype);
+			$seq_matrices{$seq->{_Nexml_matrix_ID}} = $seq_matrix_o;
+			$seq_matrix_o->set_taxa($taxa_o) if defined $taxa_o;
+			$seq_matrix_o->insert($datum);
+			
+			#get matrix label
+			my $feat = ($seq->get_SeqFeatures())[0];
+			my $matrix_label = ($feat->get_tag_values('matrix_label'))[0] if $feat->has_tag('id');
+			$seq_matrix_o->set_name($matrix_label);
+			
+			$matrices->insert($seq_matrix_o);
+		}
 	}
 	
 	#Add matrices and forest objects to project object which represents a complete nexml document
@@ -256,94 +308,8 @@ sub to_xml {
 	}
 	
 	#write nexml document to stream
-	
 	$self->_print($proj_doc->to_xml());
 }
 
-
-# this is hairy--probably can use some tricks to clean it up a bit./maj
-
-sub link_taxa
-{
-    
-	my ($self, $taxa_o, $phylo_cont_o, $taxa_array) = @_;
-
-	my $duplicate_taxa;
-	my $new_taxa_ents = $taxa_o->get_entities();
-	
-	#test if taxa_o is already present
-
-	# how about pushing this loop into a subroutine that 
-	# returns $duplicate_taxa, to clean up the code a bit?
-	####
-	foreach my $taxa (@$taxa_array)
-	{
-		my $taxa_ents = $taxa->get_entities;
-		my $new_num_taxa = @$new_taxa_ents;
-		my $num_taxa = @$taxa_ents;
-		
-		#check if the taxa have same number of elements
-		if($new_num_taxa != $num_taxa) {next;}
-		
-		my %taxa_o = map {($_)->get_name(), 1} @$taxa_ents;
-		my @difference = grep {!$taxa_o {($_)->get_name()}} @$new_taxa_ents;
-		
-		if (!@difference) {
-			$duplicate_taxa = $taxa;
-			last;
-		}
-	}
-	####
-	
-	if (!$duplicate_taxa) {
-			push @$taxa_array, $taxa_o;
-			$phylo_cont_o->set_taxa($taxa_o);
-	} 
-	else 
-	{		
-		if ($phylo_cont_o->isa('Bio::Phylo::Matrices::Matrix')) {
-			$phylo_cont_o->set_taxa($taxa_o);
-		}
-	
-		my $present_taxa_ents = $duplicate_taxa->get_entities();
-		# '=>' means exactly the same as ',' but it makes it clearer
-		# that you're producing a hash.../maj
-		my %present_taxa_ents = map {($_)->get_name => $_} @$present_taxa_ents;
-		
-		foreach my $new_taxa_ent (@$new_taxa_ents)
-		{
-			my $new_label = $new_taxa_ent->get_name();
-			#If tree get nodes and change taxa to point to already present ($duplicated_taxa) taxa
-
-			# rearranging with a / /&&do{}; switch structure/maj
-			for (ref $phylo_cont_o) {
-			    /Bio::Phylo::Forest/ && do {
-				my $nodes = $new_taxa_ent->get_nodes();
-				foreach my $node (@$nodes)
-				{
-					$new_taxa_ent->unset_node($node);
-					$present_taxa_ents{$new_label}->set_nodes($node);
-				}
-				last;
-			    };
-			#If matrix get data and change the taxa to point to already present ($duplicated_taxa) taxa
-			    /Bio::Phylo::Matrices::Matrix/ && do {
-				my $data = $new_taxa_ent->get_data();
-				foreach my $datum (@$data)
-				{
-					$new_taxa_ent->unset_datum($datum);
-					$present_taxa_ents{$new_label}->set_data($datum);
-				}
-				$phylo_cont_o->set_taxa($duplicate_taxa);
-				last;
-			    };
-			    do { # else 
-				$self->throw("Object container must be either Forest or Matrix");
-			    };
-			}
-			$self->throw("taxa conversion error - taxa not identical") unless $present_taxa_ents{$new_label};
-		}	
-	}
-}
-
 1;
+

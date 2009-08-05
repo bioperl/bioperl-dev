@@ -65,8 +65,9 @@ package Bio::AlignIO::nexml;
 use strict;
 use lib '../..';
 use Bio::Phylo::IO qw(parse unparse);
+use Bio::Phylo::Matrices;
 use Bio::LocatableSeq;
-use Bio::Nexml::Util;
+use Bio::Nexml::Factory;
 use Benchmark;
 use base qw(Bio::AlignIO);
 
@@ -93,13 +94,32 @@ sub next_aln {
     return $self->{'_alns'}->[ $self->{'_alnsiter'}++ ];
 }
 
-#Add sub rewind?
+=head2 rewind
 
-sub benchmark_parse {
+ Title   : rewind
+ Usage   : $alnio->rewind
+ Function: Resets the stream
+ Returns : none
+ Args    : none
+
+
+=cut
+
+sub rewind {
+    my $self = shift;
+    $self->{'_alniter'} = 0;
+}
+
+sub _benchmark_parse {
 	my $aln = next_aln(@_);
 	my $self = shift;
 	$self->{'_parsed'} = 0;
 	return $aln;
+}
+
+sub doc {
+	my $self = shift;
+	return $self->{'_doc'};
 }
 
 sub _parse {
@@ -107,16 +127,17 @@ sub _parse {
 
     $self->{'_parsed'}   = 1;
     $self->{'_alnsiter'} = 0;
+    my $fac = Bio::Nexml::Factory->new();
 	
 	
 	#
-	my $proj = parse(
+	$self->{_doc} = parse(
  	'-file'       => $self->{'_file'},
  	'-format'     => 'nexml',
  	'-as_project' => '1'
  	);
 
-	$self->{'_alns'} = Bio::Nexml::Util->_make_aln($proj);
+	$self->{'_alns'} = $fac->create_bperl_aln($self);
  	if(@{ $self->{'_alns'} } == 0)
  	{
  		self->debug("no seqs in $self->{_file}");
@@ -136,16 +157,15 @@ See L<Bio::Align::AlignI>
 =cut
 
 sub write_aln {
-	my $self = shift(@_);
-	my ($matrix, $taxa) = Bio::Nexml::Util->create_bphylo_aln(@_);
+	my ($self, $aln) = @_;
+	
+    my $fac = Bio::Nexml::Factory->new();
+    my $taxa = $fac->create_bphylo_taxa($aln);
+	my ($matrix) = $fac->create_bphylo_aln($aln, $taxa);
 	$matrix->set_taxa($taxa);
 	
-	my $matrices = Bio::Phylo::Matrices->new();
 	my $proj = Bio::Phylo::Factory->create_project();
-	
-	$matrices->insert($matrix);
 	$proj->insert($matrix);
-	print $proj->to_xml();
 	$self->_print($proj->to_xml());
 	
 	return 1;

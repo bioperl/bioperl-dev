@@ -98,7 +98,7 @@ sub _initialize {
  Title   : next_seq
  Usage   : $seq = $stream->next_seq()
  Function: returns the next sequence in the stream
- Returns : Bio::Seq object
+ Returns : L<Bio::Seq> object
  Args    : NONE
 
 =cut
@@ -112,13 +112,32 @@ sub next_seq {
     return $self->{'_seqs'}->[ $self->{'_seqiter'}++ ];
 }
 
-#add sub rewind?
+=head2 rewind
 
-sub benchmark_test {
+ Title   : rewind
+ Usage   : $seqio->rewind
+ Function: Resets the stream
+ Returns : none
+ Args    : none
+
+
+=cut
+
+sub rewind {
+    my $self = shift;
+    $self->{'_seqiter'} = 0;
+}
+
+sub _benchmark_test {
 	my $seq = next_seq(@_);
 	my $self = shift;
 	$self->{'_parsed'} = 0;
 	return $seq;
+}
+
+sub doc {
+	my $self = shift;
+	return $self->{'_doc'};
 }
 
 sub _parse {
@@ -130,7 +149,7 @@ sub _parse {
 	
 	# i.e., my $proj = Bio::Phylo::IO->parse(...); /maj
 	
-	my $proj = parse(
+	$self->{_doc} = parse(
  	'-file'       => $self->{'_file'},
  	'-format'     => 'nexml',
  	'-as_project' => '1'
@@ -138,7 +157,7 @@ sub _parse {
  
  	
  		
- 	$self->{'_seqs'} = $fac->create_bperl_seq($proj);
+ 	$self->{'_seqs'} = $fac->create_bperl_seq($self);
  		
  	
  	unless(@{ $self->{'_seqs'} } == 0)
@@ -156,21 +175,33 @@ sub _parse {
  Usage   : $stream->write_seq(@seq)
  Function: Writes the $seq object into the stream
  Returns : 1 for success and 0 for error
- Args    : Array of 1 or more Bio::PrimarySeqI objects
+ Args    : Array of 1 or more L<Bio::PrimarySeqI> objects
 
 =cut
 
 sub write_seq {
 	
-	my $self = shift(@_);
-	my ($matrix, $taxa) = Bio::Nexml::Util->create_bphylo_seq(@_);
+	my ($self, $bp_seq) = @_;
+	
+	my $fac = Bio::Nexml::Factory->new();
+	my $taxa = $fac->create_bphylo_taxa($bp_seq);
+	my ($seq) = $fac->create_bphylo_seq($bp_seq, $taxa);
+	
+	my $matrix = Bio::Phylo::Factory->create_matrix('-type' => $seq->get_type());
+	$matrix->insert($seq);
 	$matrix->set_taxa($taxa);
+	
+	#set matrix label
+	my $feat = ($bp_seq->get_SeqFeatures())[0];
+	$matrix->set_name($feat->get_tag_values('matrix_label'));
 	
 	my $nexml_doc = Bio::Phylo::Factory->create_project();
 	
 	$nexml_doc->insert($matrix);
 	
 	$self->_print($nexml_doc->to_xml());
+	
+	return 1;
 }
 
 
