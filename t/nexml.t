@@ -10,7 +10,6 @@ use Bio::Tree::Tree;
 use Bio::TreeIO;
 test_begin( -tests=>1000 );
 
-use_ok('Bio::Nexml'); # checks that your module is there and loads ok
 use_ok('Bio::NexmlIO');
 
 
