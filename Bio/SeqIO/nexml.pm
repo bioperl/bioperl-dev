@@ -149,7 +149,7 @@ sub _parse {
 	
 	# i.e., my $proj = Bio::Phylo::IO->parse(...); /maj
 	
-	$self->{_doc} = parse(
+	$self->{_doc} = Bio::Phylo::IO->parse(
  	'-file'       => $self->{'_file'},
  	'-format'     => 'nexml',
  	'-as_project' => '1'

@@ -20,13 +20,32 @@ Bio::NexmlIO - stream handler for nexml documents
 
 =head1 SYNOPSIS
 
-    #TODO FILL THIS IN
+    #Instantiate a Bio::Nexml object and link it to a file
+    my $in_nexml = Bio::Nexml->new(-file => 'nexml_doc.xml', -format => 'Nexml');
+
+	#Read in some data
+	my $bptree1 = $in_nexml->next_tree();
+	my $bpaln1  = $in_nexml->next_aln();
+	my $bpseq1  = $in_nexml->next_seq();
+
+	#Use/manipulate data
+	...
+
+	#Write data to nexml file
+	my $out_nexml = Bio::Nexml->new(-file => '>new_nexml_doc.xml', -format => 'Nexml');
+	$out_nexml->to_xml();
+    
 
 
 =head1 DESCRIPTION
 
 	Bio::NexmlIO is a handler for a Nexml document.  A Nexml document can represent three
-	different data types: simple sequences, alignments, and trees. So.....FILL THIS IN
+	different data types: simple sequences, alignments, and trees. NexmlIO has four main 
+	methods next_tree, next_seq, next_aln, and write. NexmlIO returns bioperl seq, tree, and aln 
+	objects which can be manipulated then passed to the write method of a new NexmlIO instance 
+	to allow the creation of a nexml document.
+
+Each bioperl object contains all the information to recreate a Bio::Phylo::Taxa object, so each time a bioperl object is converted to a biophylo object I check to see if it's assocaited taxa has already been created (with a hash using the NexmlIO_ID and Taxa_ID to create a unique string). If  not I create it, If so, I just use that taxa object to link the Bio::Phylo tree or matrix to.
 
 
 =head1 CONSTRUCTORS
@@ -100,7 +119,6 @@ use Bio::SeqIO::nexml;
 use Bio::AlignIO::nexml;
 use Bio::TreeIO::nexml;
 use Bio::Nexml::Factory;
-
 use Bio::Phylo::IO;
 use Bio::Phylo::Factory;
 use Bio::Phylo::Matrices;
@@ -109,7 +127,17 @@ use base qw(Bio::Root::IO);
 
 my $nexml_fac = Bio::Nexml::Factory->new();
 
+=head2 new
 
+ Title   : new
+ Usage   : my $in_nexmlIO = Bio::NexmlIO->new(-file => 'data.nexml.xml');
+ Function: Creates a L<Bio::NexmlIO> object linked to a stream
+ Returns : a L<Bio::NexmlIO> object
+ Args    : file name
+ 
+ See L<Bio::Root::IO>
+ 
+=cut
 sub new {
  	my($class,@args) = @_;
  	my $self = $class->SUPER::new(@args);
@@ -129,12 +157,21 @@ sub new {
  	return $self;
 }
 
+=head2 new
+
+ Title   : doc
+ Usage   : my $nexml_doc = $in_nexmlIO->doc();
+ Function: returns a L<Bio::Phylo::Project> object that contains all the Bio::Phylo data objects parsed from the stream
+ Returns : a L<Bio::Phylo::Project> object
+ Args    : none
+ 
+=cut
 sub doc {
 	my $self = shift;
 	return $self->{'_doc'};
 }
 
-
+# Takes the Bio::Phylo::Project object and creats BioPerl trees, alns, and seqs from it
 sub _parse {
 	my ($self) = @_;
     
@@ -152,19 +189,17 @@ sub _parse {
 	$self->{'_parsed'}   = 1; #success
 }
 
-=head2 next
+=head2 next_tree
 
  Title   : next_tree
- Usage   : $tree = stream->next
- Function: Reads the next data object (tree, aln, or seq) from the stream and returns it.
- Returns : a Bio::Tree::Tree object
+ Usage   : $tree = $stream->next_tree
+ Function: Reads the next tree object from the stream and returns it.
+ Returns : a L<Bio::Tree::Tree> object
  Args    : none
 
-See L<Bio::Root::RootI>, L<Bio::Tree::Tree>
+See L<Bio::Root::IO>, L<Bio::Tree::Tree>
 
 =cut
-
-
 sub next_tree {
 	my $self = shift;
 	$self->_parse unless $self->{'_parsed'};
@@ -172,6 +207,17 @@ sub next_tree {
 	return $self->{'_trees'}->[ $self->{'_treeiter'}++ ];
 }
 
+=head2 next_seq
+
+ Title   : next_seq
+ Usage   : $seq = $stream->next_seq
+ Function: Reads the next seq object from the stream and returns it.
+ Returns : a L<Bio::Seq> object
+ Args    : none
+
+See L<Bio::Root::IO>, L<Bio::Seq>
+
+=cut
 sub next_seq {
 	my $self = shift;
 	unless ( $self->{'_parsed'} ) {
@@ -180,6 +226,17 @@ sub next_seq {
 	return $self->{'_seqs'}->[ $self->{'_seqiter'}++ ];
 }
 
+=head2 next_aln
+
+ Title   : next_aln
+ Usage   : $aln = $stream->next_aln
+ Function: Reads the next aln object from the stream and returns it.
+ Returns : a L<Bio::SimpleAlign> object
+ Args    : none
+
+See L<Bio::Root::IO>, L<Bio::SimpleAlign>
+
+=cut
 sub next_aln {
 	my $self = shift;
 	unless ( $self->{'_parsed'} ) {
@@ -189,21 +246,68 @@ sub next_aln {
 }
 
 
-sub rewind {
+sub _rewind {
     my $self = shift;
     my $elt = shift;
     $self->{"_${elt}iter"} = 0 if defined $self->{"_${elt}iter"};
     return 1;
 }
 
-sub rewind_seq { shift->rewind('seq'); }
-sub rewind_aln { shift->rewind('aln'); }
-sub rewind_tree { shift->rewind('tree'); }
+=head2 rewind_seq
 
-# you could do something similar with the next_* functions too. Slick.
+ Title   : rewind_seq
+ Usage   : $stream->rewind_seq
+ Function: Resets the stream for seqs
+ Returns : none
+ Args    : none
 
-###
+See L<Bio::Root::IO>, L<Bio::Seq>
 
+=cut
+sub rewind_seq { shift->_rewind('seq'); }
+
+=head2 rewind_aln
+
+ Title   : rewind_aln
+ Usage   : $stream->rewind_aln
+ Function: Resets the stream for alns
+ Returns : none
+ Args    : none
+
+See L<Bio::Root::IO>, L<Bio::Simple::Align>
+
+=cut
+sub rewind_aln { shift->_rewind('aln'); }
+
+=head2 rewind_tree
+
+ Title   : rewind_tree
+ Usage   : $stream->rewind_tree
+ Function: Resets the stream for trees
+ Returns : none
+ Args    : none
+
+See L<Bio::Root::IO>, L<Bio::tree::tree>
+
+=cut
+sub rewind_tree { shift->_rewind('tree'); }
+
+
+
+=head2 write
+
+ Title   : write
+ Usage   : $stream->write(-alns => $alns, -seqs => $seqs, -trees => $trees)
+ Function: converts BioPerl seq, tree, and aln objects into Bio::Phylo
+ 		   seq, tree, and aln objects, constructs a Bio::Phylo::Project object
+ 		   made up of the newly created Bio::Phylo objects, and writes the
+ 		   Bio::Phylo:Project object to the stream as a valid nexml document
+ Returns : none
+ Args    : \@L<Bio::Seq>, \@L<Bio::SimpleAlign>, \@L<Bio::Tree::Tree>
+
+See L<Bio::Root::IO>, L<Bio::tree::tree>, L<Bio::Seq>, L<Bio::SimpleAlign>
+
+=cut
 sub write {
 	my ($self, @args) = @_;
 	

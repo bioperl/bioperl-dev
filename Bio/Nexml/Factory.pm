@@ -19,7 +19,7 @@ Bio::Nexml::Factory - A factory module for creating BioPerl and Bio::Phylo objec
 =head1 SYNOPSIS
 
   Do not use this module directly. It shoulde be used through 
-  Bio::Nexml, Bio::SeqIO::nexml, Bio::AlignIO::nexml, or 
+  Bio::NexmlIO, Bio::SeqIO::nexml, Bio::AlignIO::nexml, or 
   Bio::TreeIO::nexml
   
 
@@ -28,8 +28,9 @@ Bio::Nexml::Factory - A factory module for creating BioPerl and Bio::Phylo objec
 This is a factory/utility module in the nexml namespace.  It contains methods
 that are needed by multiple modules.
 
-A few key design issues pertaining to this module will be
-described here. 
+This module handles the creation of BioPerl objects from Bio::Phylo objects and vice versa, 
+which is used to read and write nexml documents to and from BioPerl objects. 
+ 
 
 =head1 FEEDBACK
 
@@ -156,7 +157,6 @@ sub create_bperl_aln {
 				$taxon = $taxa->next;
 			}
 		}
-		
 		$aln->add_SeqFeature($aln_feats);
  		
  		my $basename = $matrix->get_name();
@@ -190,12 +190,10 @@ sub create_bperl_aln {
  					#LocatableSeq does not support features
  					my $taxon_name = $taxon->get_name();
  					$seq_feats = Bio::SeqFeature::Generic->new();
- 					#TODO merge the two below into $seq_feats->add_tag_value($rowlabel, "$taxon_name") and then fix elsewhere
  					$seq_feats->add_tag_value('taxon', "$taxon_name");
  					$seq_feats->add_tag_value('id', "$rowlabel");
 				}
 			}
-			
 		    $aln->add_seq($seq);
 		    $aln->add_SeqFeature($seq_feats);
 		    $self->debug("Reading r$rowlabel\n");
@@ -224,7 +222,6 @@ sub create_bperl_tree {
 	my($self, $caller) = @_;
 	my @trees;
  	
- 	
  	my $forests = $caller->doc->get_forests();
  	
  	foreach my $forest (@$forests) 
@@ -236,8 +233,8 @@ sub create_bperl_tree {
  		
  		my $t = $forest->first();
  
- 		while ($t) #change this to $trees->next so it's more memory efficient
-  		{                       #although some thought needs to go into this one
+ 		while ($t) 
+  		{                       
  			my %created_nodes;
  			my $tree_id = $t->get_name();
  			my $tree = Bio::Tree::Tree->new(-id => "$basename.$tree_id");
@@ -252,8 +249,6 @@ sub create_bperl_tree {
 				$tree->add_tag_value('taxon', $taxon->get_name());	
 				$taxon = $taxa->next;
 			}
-			
- 			
  			
  			#process terminals only, removing terminals as they get processed 
  			#which inturn creates new terminals to process until the entire tree has been processed
@@ -380,14 +375,11 @@ sub create_bperl_seq {
 			$seq->{_Nexml_matrix_ID} = $caller->{_ID} . $matrix->get_xml_id();
 			
 			#check if taxon linked to sequence if so create feature to attach to alignment
-			if ($taxa)
-			{
+			if ($taxa) {
 				my $taxon = $taxa->first;
-				while ($taxon)
-				{ 
+				while ($taxon) { 
 					$feat->add_tag_value('taxon', $taxon->get_name);
- 					if($taxon eq $row->get_taxon)
- 					{
+ 					if($taxon eq $row->get_taxon) {
  						my $taxon_name = $taxon->get_name();
  						
  						$feat->add_tag_value('my_taxon', "$taxon_name");
@@ -420,7 +412,6 @@ sub create_bphylo_tree {
 	#most of the code below ripped form Bio::Phylo::Forest::Tree::new_from_bioperl()d
 	
 	my $tree = $fac->create_tree;
-
 	my $class = 'Bio::Phylo::Forest::Tree';
 	
 	if ( Scalar::Util::blessed $bptree && $bptree->isa('Bio::Tree::TreeI') ) {
@@ -433,15 +424,13 @@ sub create_bphylo_tree {
 			
 		# copy score
 		my $score = $bptree->score;
-		$tree->set_score( $score ) if defined $score;
-		
+		$tree->set_score( $score ) if defined $score;	
 	}
 	else {
 		$self->throw('Not a bioperl tree!');
 	}
 	return $tree;
 }
-
 
 
 sub _copy_tree {
@@ -458,8 +447,7 @@ sub _copy_tree {
 		$tree->insert($node);
 		foreach my $bpchild ( $bpnode->each_Descendent ) {
 			_copy_tree( $tree, $bpchild, $node, $taxa );
-		}
-		
+		}	
 	 return $tree;
 }
 
@@ -478,8 +466,6 @@ sub create_bphylo_aln {
 	my ($self, $aln, $taxa, @args) = @_;
 	
 	#most of the code below ripped from Bio::Phylo::Matrices::Matrix::new_from_bioperl()
-	
-	
 	if ( Bio::Phylo::Matrices::Matrix::isa( $aln, 'Bio::Align::AlignI' ) ) {
 		    $aln->unmatch;
 		    $aln->map_chars('\.','-');
@@ -512,8 +498,7 @@ sub create_bphylo_aln {
             	#create datum linked to taxa
             	my $datum = create_bphylo_datum($seq, \@feats, $taxa, '-type_object' => $to);                                    	
                 $matrix->insert($datum);
-            }
-            
+            }  
             return $matrix;
 		}
 		else {
@@ -521,11 +506,7 @@ sub create_bphylo_aln {
 		}
 }
 
-#this might need to be rethough. It takes a single seq and returns a matrix, 
-# which normally contains multiple seqs. I originally did this because
-# a datum object must be inserted into a matrix object before it can 
-# be inserted into a project object so that it can be correclty converted
-# to xml
+
 
 =head2 create_bphylo_seq
 
@@ -550,22 +531,10 @@ sub create_bphylo_seq {
     my $seqstring = $seq->seq;
     if ( $seqstring and $seqstring =~ /\S/ ) {
         eval { $dat->set_char( $seqstring ) };
-        #TODO let's convert Rutger's cool exceptions to the more pedestrian Bioperl throws/maj
-        
         if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
-        	$self->throw(
-        		"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".
-        		$@->description                                                                  .
-        		"\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n"           .
-        		"I cannot store this string, I will continue instantiating an empty object.\n"   .
-        		"---------------------------------- STACK ----------------------------------\n"  .
-        		$@->trace->as_string                                                             .
-        		"\n--------------------------------------------------------------------------"
-        	);
+        	$self->throw("\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n");
         }
-	}    
-	
-	            
+	}              
         
 	# copy name
 	my $name = $seq->display_id;
@@ -578,11 +547,20 @@ sub create_bphylo_seq {
 	#get features from SeqFeatureI
 	for my $field ( qw(start end strand) ) {
 	    $dat->$field( $seq->$field ) if $seq->can($field);
-    } 
-    
+    }
 	return $dat;
 }
-#PODPODPOD
+
+=head2 create_bphylo_taxa
+
+ Title   : create_bphylo_seq
+ Usage   : my $taxa = $factory->create_bphylo_taxa($bperl_obj);
+ Function: creates a taxa object from the data attached to a bioperl object
+ Returns : a Bio::Phylo::Taxa object
+ Args    : L<Bio::Seq> object, or L<Bio::SimpleAlign> object, or L<Bio::Tree::Tree> object
+ 
+=cut
+
 sub create_bphylo_taxa {
 	my $self = shift @_;
 	my ($obj) = @_;
@@ -594,7 +572,6 @@ sub create_bphylo_taxa {
 	elsif ( UNIVERSAL::isa( $obj, 'Bio::Tree::TreeI' ) ) {
 		return $self->_create_bphylo_tree_taxa(@_);
 	}
-	
 }
 
 sub _create_bphylo_tree_taxa {
@@ -661,23 +638,10 @@ sub create_bphylo_datum {
         my $seqstring = $seq->seq;
         if ( $seqstring and $seqstring =~ /\S/ ) {
         	eval { $self->set_char( $seqstring ) };
-   
-   		# let's convert Rutger's cool exceptions to the more pedestrian Bioperl throws/maj   
-   
         	if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
-        		$self->throw(
-        			"\nAn exception of type Bio::Phylo::Util::Exceptions::InvalidData was caught\n\n".
-        			$@->description                                                                  .
-        			"\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n"           .
-        			"I cannot store this string, I will continue instantiating an empty object.\n"   .
-        			"---------------------------------- STACK ----------------------------------\n"  .
-        			$@->trace->as_string                                                             .
-        			"\n--------------------------------------------------------------------------"
-        		);
+        		$self->throw("\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n");
         	}
-        }                
-        
-       
+        }      
         
         # copy name
         my $name = $seq->display_id;
