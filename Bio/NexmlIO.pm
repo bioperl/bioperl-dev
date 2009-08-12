@@ -39,26 +39,11 @@ Bio::NexmlIO - stream handler for nexml documents
 
 =head1 DESCRIPTION
 
-	Bio::NexmlIO is a handler for a Nexml document.  A Nexml document can represent three
-	different data types: simple sequences, alignments, and trees. NexmlIO has four main 
-	methods next_tree, next_seq, next_aln, and write. NexmlIO returns bioperl seq, tree, and aln 
-	objects which can be manipulated then passed to the write method of a new NexmlIO instance 
-	to allow the creation of a nexml document.
+Bio::NexmlIO is a handler for a Nexml document.  A Nexml document can represent three different data types: simple sequences, alignments, and trees. NexmlIO has four main methods next_tree, next_seq, next_aln, and write. NexmlIO returns bioperl seq, tree, and aln objects which can be manipulated then passed to the write method of a new NexmlIO instance to allow the creation of a nexml document.
 
-Each bioperl object contains all the information to recreate a Bio::Phylo::Taxa object, so each time a bioperl object is converted to a biophylo object I check to see if it's assocaited taxa has already been created (with a hash using the NexmlIO_ID and Taxa_ID to create a unique string). If  not I create it, If so, I just use that taxa object to link the Bio::Phylo tree or matrix to.
+Each bioperl object contains all the information necessary to recreate a Bio::Phylo::Taxa object, so each time a bioperl object is converted to a biophylo object I check to see if its associated taxa has already been created (with a hash using the NexmlIO_ID and Taxa_ID to create a unique string). If not I create it; if so, I just use that taxa object to link the Bio::Phylo tree or matrix to.
 
-
-=head1 CONSTRUCTORS
-
-=head2 Bio::NexmlIO-E<gt>new()
-
-   $seqIO = Bio::NexmlIO->new(-file => 'filename');
-   $seqIO = Bio::NexmlIO->new(-fh   => \*FILEHANDLE, -format=>$format); # this should work sense it's being passed through to SeqIO->new
-   
-
-=back
-
-
+For more information on the Nexml format, see L<http://www.nexml.org>.
 
 =head1 FEEDBACK
 
@@ -107,7 +92,7 @@ methods. Internal methods are usually preceded with a _
 
 =cut
 
-#' Let the code begin...
+# Let the code begin...
 
 
 package Bio::NexmlIO;
@@ -127,6 +112,8 @@ use base qw(Bio::Root::IO);
 
 my $nexml_fac = Bio::Nexml::Factory->new();
 
+=head1 CONSTRUCTOR
+
 =head2 new
 
  Title   : new
@@ -138,6 +125,7 @@ my $nexml_fac = Bio::Nexml::Factory->new();
  See L<Bio::Root::IO>
  
 =cut
+
 sub new {
  	my($class,@args) = @_;
  	my $self = $class->SUPER::new(@args);
@@ -157,7 +145,7 @@ sub new {
  	return $self;
 }
 
-=head2 new
+=head2 doc
 
  Title   : doc
  Usage   : my $nexml_doc = $in_nexmlIO->doc();
@@ -166,6 +154,7 @@ sub new {
  Args    : none
  
 =cut
+
 sub doc {
 	my $self = shift;
 	return $self->{'_doc'};
@@ -175,19 +164,19 @@ sub doc {
 sub _parse {
 	my ($self) = @_;
     
-    $self->{'_treeiter'} = 0;
-    $self->{'_seqiter'}  = 0;
-    $self->{'_alniter'}  = 0;
+	$self->{'_treeiter'} = 0;
+	$self->{'_seqiter'}  = 0;
+	$self->{'_alniter'}  = 0;
     
 	$self->{_trees} = $nexml_fac->create_bperl_tree($self);
 	$self->{_alns}  = $nexml_fac->create_bperl_aln($self);
 	$self->{_seqs}  = $nexml_fac->create_bperl_seq($self);
 	my $taxa_array = $self->doc->get_taxa();
 	
-	#my $nexml_doc = Bio::Nexml->new('-trees' => $trees, '-alns' => $alns, '-seqs' => $seqs, '-taxa_array' => $taxa_array);
-	
 	$self->{'_parsed'}   = 1; #success
 }
+
+=head1 ITERATORS
 
 =head2 next_tree
 
@@ -200,6 +189,7 @@ sub _parse {
 See L<Bio::Root::IO>, L<Bio::Tree::Tree>
 
 =cut
+
 sub next_tree {
 	my $self = shift;
 	$self->_parse unless $self->{'_parsed'};
@@ -218,6 +208,7 @@ sub next_tree {
 See L<Bio::Root::IO>, L<Bio::Seq>
 
 =cut
+
 sub next_seq {
 	my $self = shift;
 	unless ( $self->{'_parsed'} ) {
@@ -237,6 +228,7 @@ sub next_seq {
 See L<Bio::Root::IO>, L<Bio::SimpleAlign>
 
 =cut
+
 sub next_aln {
 	my $self = shift;
 	unless ( $self->{'_parsed'} ) {
@@ -244,7 +236,6 @@ sub next_aln {
     }
 	return $self->{'_alns'}->[ $self->{'_alniter'}++ ];
 }
-
 
 sub _rewind {
     my $self = shift;
@@ -264,6 +255,7 @@ sub _rewind {
 See L<Bio::Root::IO>, L<Bio::Seq>
 
 =cut
+
 sub rewind_seq { shift->_rewind('seq'); }
 
 =head2 rewind_aln
@@ -277,6 +269,7 @@ sub rewind_seq { shift->_rewind('seq'); }
 See L<Bio::Root::IO>, L<Bio::Simple::Align>
 
 =cut
+
 sub rewind_aln { shift->_rewind('aln'); }
 
 =head2 rewind_tree
@@ -290,24 +283,25 @@ sub rewind_aln { shift->_rewind('aln'); }
 See L<Bio::Root::IO>, L<Bio::tree::tree>
 
 =cut
+
 sub rewind_tree { shift->_rewind('tree'); }
-
-
 
 =head2 write
 
  Title   : write
- Usage   : $stream->write(-alns => $alns, -seqs => $seqs, -trees => $trees)
+ Usage   : $stream->write(-alns => $alns,-seqs => $seqs,-trees => $trees)
  Function: converts BioPerl seq, tree, and aln objects into Bio::Phylo
- 		   seq, tree, and aln objects, constructs a Bio::Phylo::Project object
- 		   made up of the newly created Bio::Phylo objects, and writes the
- 		   Bio::Phylo:Project object to the stream as a valid nexml document
+           seq, tree, and aln objects, constructs a Bio::Phylo::Project 
+           object made up of the newly created Bio::Phylo objects, and 
+           writes the Bio::Phylo:Project object to the stream as a valid 
+           nexml document
  Returns : none
  Args    : \@L<Bio::Seq>, \@L<Bio::SimpleAlign>, \@L<Bio::Tree::Tree>
 
 See L<Bio::Root::IO>, L<Bio::tree::tree>, L<Bio::Seq>, L<Bio::SimpleAlign>
 
 =cut
+
 sub write {
 	my ($self, @args) = @_;
 	

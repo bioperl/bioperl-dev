@@ -25,12 +25,12 @@ Bio::Nexml::Factory - A factory module for creating BioPerl and Bio::Phylo objec
 
 =head1 DESCRIPTION
 
-This is a factory/utility module in the nexml namespace.  It contains methods
-that are needed by multiple modules.
+This is a factory/utility module in the Nexml namespace.  It contains
+methods that are needed by multiple modules.
 
-This module handles the creation of BioPerl objects from Bio::Phylo objects and vice versa, 
-which is used to read and write nexml documents to and from BioPerl objects. 
- 
+This module handles the creation of BioPerl objects from Bio::Phylo
+objects and vice versa, which is used to read and write nexml
+documents to and from BioPerl objects.
 
 =head1 FEEDBACK
 
@@ -82,7 +82,6 @@ use strict;
 
 use Bio::Phylo::Matrices::Matrix;
 use Bio::Phylo::Forest::Tree;
-use Bio::Phylo::Matrices::Datatype::Rna;
 use Bio::SeqFeature::Generic;
 
 
@@ -107,6 +106,7 @@ sub new {
 }
 
 #should all these creates be private methods?
+# naah./maj
 
 =head2 create_bperl_aln
 
@@ -414,7 +414,7 @@ sub create_bphylo_tree {
 	my $tree = $fac->create_tree;
 	my $class = 'Bio::Phylo::Forest::Tree';
 	
-	if ( Scalar::Util::blessed $bptree && $bptree->isa('Bio::Tree::TreeI') ) {
+	if ( ref $bptree && $bptree->isa('Bio::Tree::TreeI') ) {
 		bless $tree, $class;
 		($tree) = _copy_tree( $tree, $bptree->get_root_node, "", $taxa);
 		
@@ -435,6 +435,7 @@ sub create_bphylo_tree {
 
 sub _copy_tree {
 	my ( $tree, $bpnode, $parent, $taxa ) = @_;
+	        # can we do the new_from_bioperl stuff "by hand" here?
 		my $node = Bio::Phylo::Forest::Node->new_from_bioperl($bpnode);
 		my $taxon;
 		if ($parent) {
@@ -674,6 +675,31 @@ sub create_bphylo_datum {
 	    $self->$field( $seq->$field ) if $seq->can($field);
         } 	
         return $self;
+}
+
+=head2 CREATOR
+
+=cut
+
+=head1 bioperl_create
+
+ Title   : bioperl_create
+ Usage   : $bioperl_obj = $fac->bioperl_create($obj_type, $biophylo_proj);
+ Function: Create a specified bioperl object using a Bio::Phylo project
+ Args    : scalar string ('aln', 'tree', 'seq') type designator
+           Bio::Phylo::Project object
+ Returns : Appropriate BioPerl object
+
+=cut
+
+sub bioperl_create {
+    my $self = shift;
+    my ($type, @args) = @_;
+    unless (grep /^type/,qw( seq aln tree )) {
+	$self->throw("Unrecognized type for argument 1");
+    }
+    my $call = 'create_bioperl_'.$type;
+    return $self->$call(@args);
 }
 
 1;
