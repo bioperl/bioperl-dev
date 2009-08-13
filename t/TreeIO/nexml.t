@@ -5,10 +5,11 @@ use strict;
 use Bio::Root::Test;
 test_begin( -tests=>1000 );
 
+chdir ('../..'); # hack to allow run from t dir
 use_ok( 'Bio::Tree::Tree' );
 use_ok( 'Bio::TreeIO' );
 use_ok('Bio::TreeIO::nexml'); # checks that your module is there and loads ok
-chdir ('../..'); # hack to allow run from t dir
+
 
 #Read in Data
 ok( my $TreeStream = Bio::TreeIO->new(-file => test_input_file('trees.nexml.xml'), -format => 'nexml') );
@@ -43,7 +44,7 @@ ok( my $TreeStream = Bio::TreeIO->new(-file => test_input_file('trees.nexml.xml'
 #Write data
 diag('Begin tests for writing tree files');
 my $outdata = test_output_file();
-ok( my $outTreeStream = Bio::TreeIO->new(-file => $outdata, -format => 'nexml'), 'out stream');
+ok( my $outTreeStream = Bio::TreeIO->new(-file => ">$outdata", -format => 'nexml'), 'out stream');
 ok( $outTreeStream->write_tree($tree_obj), 'write tree');
 close($outdata);
 

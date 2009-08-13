@@ -53,7 +53,7 @@ use_ok('Bio::SeqIO::nexml'); # checks that your module is there and loads ok
 #Write Data
 diag('Begin tests for writing seq files');
 my $outdata = test_output_file();
-ok( my $outSeqStream = Bio::SeqIO->new(-file => $outdata, -format => 'nexml'), 'out stream ok');
+ok( my $outSeqStream = Bio::SeqIO->new(-file => ">$outdata", -format => 'nexml'), 'out stream ok');
 ok( $outSeqStream->write_seq($seq_obj), 'write nexml seq');
 close($outdata);
 

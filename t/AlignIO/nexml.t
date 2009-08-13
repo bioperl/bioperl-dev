@@ -30,7 +30,7 @@ ok( my $inAlnStream = Bio::AlignIO->new(-file => test_input_file("characters.nex
 #Write Data
 diag('Begin tests for write/read roundtrip');
 my $outdata = test_output_file();
-ok( my $outAlnStream = Bio::AlignIO->new(-file =>$outdata, -format => 'nexml'), 'out stream ok');;
+ok( my $outAlnStream = Bio::AlignIO->new(-file => ">$outdata", -format => 'nexml'), 'out stream ok');;
 ok( $outAlnStream->write_aln($aln_obj), 'write nexml');
 close($outdata);
 

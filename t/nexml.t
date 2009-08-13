@@ -8,7 +8,7 @@ use lib ('..');
 use Bio::Root::Test;
 use Bio::Tree::Tree;
 use Bio::TreeIO;
-test_begin( -tests=>1000 );
+test_begin( -tests=>125 );
 
 use_ok('Bio::NexmlIO');
 
@@ -105,7 +105,7 @@ my $in_nexmlIO = Bio::NexmlIO->new(-file => test_input_file('characters+trees.ne
 #Write Data
 diag('Begin tests for write/read roundtrip');
 my $outdata = test_output_file();
-my $nexml_out = Bio::NexmlIO->new(-file => $outdata, -format => 'Nexml');	
+my $nexml_out = Bio::NexmlIO->new(-file => ">$outdata", -format => 'Nexml');	
 ok( $nexml_out->write(-seqs => \@seqs1, -alns =>\@alns1, -trees => \@trees1), "write to stream" );
 close($outdata);
 
@@ -139,6 +139,17 @@ my $in_nexmlIO_roundtrip = Bio::NexmlIO->new(-file => $outdata);
 			is ( ($feat->get_tag_values('taxon'))[0], $expected_taxa{$seq_num}, "$seq_num taxon ok" )
 		}
 	}
+	#check extract_alns method
+	my $alns_outfile = test_output_file();
+	ok ( $in_nexmlIO_roundtrip->extract_alns(-file => ">$alns_outfile", -format => "fasta"), 'extract_alns write' );
+	close($alns_outfile);
+	my $alnIO = Bio::SeqIO->new(-file => "$alns_outfile", -format => 'fasta');
+	my $alns_array = $in_nexmlIO_roundtrip->{_seqs};
+	my $alnNum = 1;
+	while (my $aln = $alnIO->next_seq()) {
+		is( $aln->seq, $alns_array->[$alnNum-1]->seq, "extract_alns roundtrip $alnNum" );
+		$alnNum++;
+	}
 	
 	#Read in some sequences
 	ok( my $seq5 = $in_nexmlIO_roundtrip->next_seq() );
@@ -154,6 +165,17 @@ my $in_nexmlIO_roundtrip = Bio::NexmlIO->new(-file => $outdata);
 	is( $seq6->primary_id,	'DNA sequences.seq_2',	"primary_id");
 	is( $seq6->display_id,	'dna_seq_2',			"display_id");
 	is( $seq6->seq,			'ACGCTCGCATCGCATT',		"sequence");
+	#check extract_seqs method
+	my $seqs_outfile = test_output_file();
+	ok ( $in_nexmlIO_roundtrip->extract_seqs(-file => ">$seqs_outfile", -format => "fasta"), 'extract_seqs write' );
+	close($seqs_outfile);
+	my $seqIO = Bio::SeqIO->new(-file => "$seqs_outfile", -format => 'fasta');
+	my $seqs_array = $in_nexmlIO_roundtrip->{_seqs};
+	my $seqNum = 1;
+	while (my $seq = $seqIO->next_seq()) {
+		is( $seq->seq, $seqs_array->[$seqNum-1]->seq, "extract_seqs roundtrip $seqNum" );
+		$seqNum++;
+	}
 	
 	#Read in some trees
 	ok( my $tree3 = $in_nexmlIO_roundtrip->next_tree() );
@@ -173,3 +195,15 @@ my $in_nexmlIO_roundtrip = Bio::NexmlIO->new(-file => $outdata);
 		ok( exists $expected_leaves{$leaf->id()}, "$leafID exists"  );
 		is( $leaf->get_tag_values('taxon'), $expected_leaves{$leaf->id()}, "$leafID taxon");
 	}
+	#check extract_trees method
+	my $trees_outfile = test_output_file();
+	ok ( $in_nexmlIO_roundtrip->extract_trees(-file => ">$trees_outfile", -format => "nexus"), 'extract_trees write' );
+	close($seqs_outfile);
+	my $treeIO = Bio::TreeIO->new(-file => "$trees_outfile", -format => 'nexus');
+	my $trees_array = $in_nexmlIO_roundtrip->{_trees};
+	my $treeNum = 1;
+	while (my $tree = $treeIO->next_tree()) {
+		is( $tree->id, $trees_array->[$treeNum-1]->id, "extract_trees roundtrip $treeNum" );
+		$treeNum++;
+	}
+	

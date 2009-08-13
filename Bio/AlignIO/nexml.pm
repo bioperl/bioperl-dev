@@ -68,7 +68,6 @@ use Bio::Phylo::IO qw(parse unparse);
 use Bio::Phylo::Matrices;
 use Bio::LocatableSeq;
 use Bio::Nexml::Factory;
-use Benchmark;
 use base qw(Bio::AlignIO);
 
 
@@ -110,12 +109,16 @@ sub rewind {
     $self->{'_alniter'} = 0;
 }
 
-sub _benchmark_parse {
-	my $aln = next_aln(@_);
-	my $self = shift;
-	$self->{'_parsed'} = 0;
-	return $aln;
-}
+=head2 doc
+
+ Title   : doc
+ Usage   : $treeio->doc
+ Function: Returns the biophylo nexml document object
+ Returns : Bio::Phylo::Project
+ Args    : none
+
+
+=cut
 
 sub doc {
 	my $self = shift;

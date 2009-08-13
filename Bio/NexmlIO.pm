@@ -411,5 +411,102 @@ sub write {
 	return($ret);
 }
 
+=head2 extract_seqs
+
+ Title   : extract_seqs
+ Usage   : $nexmlIO->extract_seqs(-file => ">$outfile", -format => $format)
+ Function: converts BioPerl seqs stored in the NexmlIO object into the provided 
+ 		   format and writes it to the provided file. Uses L<Bio::SeqIO> to do 
+ 		   the conversion and writing.
+ Returns : none
+ Args    : file to write to, format to be converted to
+
+See L<Bio::Seq>, L<Bio::SeqIO>
+
+=cut
+
+sub extract_seqs {
+	my $self = shift;
+	unless ( $self->{'_parsed'} ) {
+        $self->_parse;
+    }
+	
+	my %params = @_;
+	my $ret = 0;
+	my ($format, $file) = @params{qw( -format -file)};
+	
+	my $seqIO = Bio::SeqIO->new(-format => $format, -file => $file);
+	my $seqs = $self->{_seqs};
+	foreach my $seq (@$seqs) {
+		$ret = $seqIO->write_seq($seq);
+	}
+	return $ret;
+}
+
+=head2 extract_alns
+
+ Title   : extract_alns
+ Usage   : $nexmlIO->extract_alns(-file => ">$outfile", -format => $format)
+ Function: converts BioPerl alns stored in the NexmlIO object into the provided 
+ 		   format and writes it to the provided file. Uses L<Bio::AlignIO> to do 
+ 		   the conversion and writing.
+ Returns : none
+ Args    : file to write to, format to be converted to
+
+See L<Bio::SimpleAlign>, L<Bio::AlignIO>
+
+=cut
+
+sub extract_alns {
+	my $self = shift;
+	unless ( $self->{'_parsed'} ) {
+        $self->_parse;
+    }
+	
+	my $ret = 0;
+	my %params = @_;
+	my ($format, $file) = @params{qw( -format -file)};
+	
+	my $alignIO = Bio::AlignIO->new(-format => $format, -file => $file);
+	my $alns = $self->{_alns};
+	foreach my $aln (@$alns) {
+		$ret = $alignIO->write_aln($aln);
+	}
+	return $ret;
+}
+
+=head2 extract_trees
+
+ Title   : extract_trees
+ Usage   : $nexmlIO->extract_trees(-file => ">$outfile", -format => $format)
+ Function: converts BioPerl trees stored in the NexmlIO object into the provided 
+ 		   format and writes it to the provided file. Uses L<Bio::TreeIO> to do 
+ 		   the conversion and writing.
+ Returns : none
+ Args    : file to write to, format to be converted to
+
+See L<Bio::Tree::Tree>, L<Bio::TreeIO>
+
+=cut
+
+sub extract_trees {
+	my $self = shift;
+	unless ( $self->{'_parsed'} ) {
+        $self->_parse;
+    }
+	
+	my $ret = 0;
+	my %params = @_;
+	my ($format, $file) = @params{qw( -format -file)};
+	
+	my $treeIO = Bio::TreeIO->new(-format => $format, -file => $file);
+	my $trees = $self->{_trees};
+	foreach my $tree (@$trees) {
+		$treeIO->write_tree($tree);
+		$ret = 1;
+	}
+	return $ret;
+}
+
 1;
 

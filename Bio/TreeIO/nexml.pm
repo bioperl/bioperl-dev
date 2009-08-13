@@ -78,19 +78,9 @@ use Bio::Event::EventGeneratorI;
 use IO::String;
 use Bio::Phylo::IO qw (parse unparse);
 use Bio::Nexml::Factory;
-use Benchmark;
 
 use base qw(Bio::TreeIO);
 
-=head2 new
-
- Title   : new
- Args    : -header    => boolean  default is true 
-                         print/do not print #NEXUS header
-           -translate => boolean default is true
-                         print/do not print Node Id translation to a number
-
-=cut
 
 sub _initialize {
     my $self = shift;
@@ -116,12 +106,22 @@ sub next_tree {
     return $self->{'_trees'}->[ $self->{'_treeiter'}++ ];
 }
 
-sub benchmark_test {
-	my $tree = next_tree(@_);
+=head2 doc
+
+ Title   : doc
+ Usage   : $treeio->doc
+ Function: Returns the biophylo nexml document object
+ Returns : Bio::Phylo::Project
+ Args    : none
+
+
+=cut
+
+sub doc {
 	my $self = shift;
-	$self->{'_parsed'} = 0;
-	return $tree;
+	return $self->{'_doc'};
 }
+
 
 =head2 rewind
 
@@ -133,12 +133,6 @@ sub benchmark_test {
 
 
 =cut
-
-sub doc {
-	my $self = shift;
-	return $self->{'_doc'};
-}
-
 sub rewind {
     my $self = shift;
     $self->{'_treeiter'} = 0;

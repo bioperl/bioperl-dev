@@ -435,8 +435,7 @@ sub create_bphylo_tree {
 
 sub _copy_tree {
 	my ( $tree, $bpnode, $parent, $taxa ) = @_;
-	        # can we do the new_from_bioperl stuff "by hand" here?
-		my $node = Bio::Phylo::Forest::Node->new_from_bioperl($bpnode);
+		my $node = create_bphylo_node($bpnode);
 		my $taxon;
 		if ($parent) {
 			$parent->set_child($node);
@@ -451,6 +450,46 @@ sub _copy_tree {
 		}	
 	 return $tree;
 }
+
+=head2 create_bphylo_node
+
+ Title   : create_bphylo_node
+ Usage   : my $bphylo_node = $factory->create_bphylo_node($bperl_node);
+ Function: Converts a L<Bio::Tree::Node> object into Bio::Phylo::Forest::Node object
+ Returns : a Bio::Phylo::Forest::Node object
+ Args    : L<Bio::Tree::Node> object
+ 
+=cut
+
+sub create_bphylo_node {
+	my ($bpnode) = @_;
+		my $node = Bio::Phylo::Forest::Node->new();
+		
+		#mostly ripped from Bio::Phylo::Forest::Node->new_from_bioperl()
+		# copy name
+		my $name = $bpnode->id;
+		$node->set_name( $name ) if defined $name;
+		
+		# copy branch length
+		my $branch_length = $bpnode->branch_length;
+		$node->set_branch_length( $branch_length ) if defined $branch_length;
+		
+		# copy description
+		my $desc = $bpnode->description;
+		$node->set_desc( $desc ) if defined $desc;
+		
+		# copy bootstrap
+		my $bootstrap = $bpnode->bootstrap;
+		$node->set_score( $bootstrap ) if defined $bootstrap and looks_like_number $bootstrap;
+		
+		# copy other tags
+		for my $tag ( $bpnode->get_all_tags ) {
+		    my @values = $bpnode->get_tag_values( $tag );
+			$node->set_generic( $tag => \@values );
+		}
+		return $node;
+	}
+	
 
 =head2 create_bphylo_aln
 

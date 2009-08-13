@@ -79,8 +79,6 @@ use strict;
 
 use lib '../..';
 use Bio::Phylo::Matrices::Datum;
-# may want to call these directly off the class below, for ease of 
-# reading later - /maj
 use Bio::Phylo::IO qw (parse unparse);
 use Bio::Seq;
 use Bio::Seq::SeqFactory;
@@ -128,12 +126,16 @@ sub rewind {
     $self->{'_seqiter'} = 0;
 }
 
-sub _benchmark_test {
-	my $seq = next_seq(@_);
-	my $self = shift;
-	$self->{'_parsed'} = 0;
-	return $seq;
-}
+=head2 doc
+
+ Title   : doc
+ Usage   : $treeio->doc
+ Function: Returns the biophylo nexml document object
+ Returns : Bio::Phylo::Project
+ Args    : none
+
+
+=cut
 
 sub doc {
 	my $self = shift;
@@ -146,8 +148,6 @@ sub _parse {
 	
     $self->{'_parsed'}   = 1;
     $self->{'_seqiter'} = 0;
-	
-	# i.e., my $proj = Bio::Phylo::IO->parse(...); /maj
 	
 	$self->{_doc} = Bio::Phylo::IO->parse(
  	'-file'       => $self->{'_file'},
