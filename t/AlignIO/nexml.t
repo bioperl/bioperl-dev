@@ -5,7 +5,7 @@ use strict;
 chdir('../..'); # hack to allow run from t
 use lib 't/lib';
 use Bio::Root::Test;
-test_begin( -tests => 1000 );
+test_begin( -tests => 35 );
 use_ok('Bio::AlignIO::nexml'); # checks that your module is there and loads ok
 
 
@@ -49,7 +49,7 @@ ok( my $inAlnStream2 = Bio::AlignIO->new(-file => $outdata, -format => 'nexml'),
 		$num++;
 		
 		is( $seq_obj->alphabet, 'dna', "alphabet (rt)" );
-		is( $seq_obj->display_id, "DNA sequences.row_$num", "display_id (rt)");
+		is( $seq_obj->display_id, "dna_seq_$num", "display_id (rt)");
 		is( $seq_obj->seq, $expected_seqs[$num-1], "sequence (rt)");
 	}
 	#check taxa object

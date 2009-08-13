@@ -6,7 +6,7 @@ use strict;
 chdir('../..'); # hack to allow run from t
 
 use Bio::Root::Test;
-test_begin( -tests=>1000 );
+test_begin( -tests=>44 );
 use_ok( 'Bio::PrimarySeq' );
 use_ok('Bio::SeqIO::nexml'); # checks that your module is there and loads ok
 
@@ -18,7 +18,7 @@ use_ok('Bio::SeqIO::nexml'); # checks that your module is there and loads ok
 	ok( my $seq_obj = $SeqStream->next_seq(), 'seq obj' );
 	isa_ok($seq_obj, 'Bio::Seq');
 	is( $seq_obj->alphabet, 'dna', "alphabet" );
-	is( $seq_obj->primary_id, 'DNA sequences.seq_1', "primary_id");
+	is( $seq_obj->primary_id, 'dna_seq_1', "primary_id");
 	is( $seq_obj->display_id, 'dna_seq_1', "display_id");
 	is( $seq_obj->seq, 'ACGCTCGCATCGCATC', "sequence");
 	#check taxa
@@ -36,7 +36,7 @@ use_ok('Bio::SeqIO::nexml'); # checks that your module is there and loads ok
 	#checking second sequence object
 	ok( $seq_obj = $SeqStream->next_seq() );
 	is( $seq_obj->alphabet, 'dna', "alphabet" );
-	is( $seq_obj->primary_id, 'DNA sequences.seq_2', "primary_id");
+	is( $seq_obj->primary_id, 'dna_seq_2', "primary_id");
 	is( $seq_obj->display_id, 'dna_seq_2', "display_id");
 	is( $seq_obj->seq, 'ACGCTCGCATCGCATT', "sequence");
 	$SeqStream->next_seq();
@@ -63,17 +63,19 @@ my $inSeqStream = Bio::SeqIO->new(-file => $outdata, -format => 'nexml');
 	#checking fifth sequence object
 	ok( my $seq_obj2 = $inSeqStream->next_seq() );
 	is( $seq_obj2->alphabet, 'rna', "alphabet" );
-	is( $seq_obj2->primary_id, 'RNA sequences.seq_2.seq_1', "primary_id");
-	is( $seq_obj2->display_id, 'RNA sequences.seq_2.seq_1', "display_id defaults to primary");
+	is( $seq_obj2->primary_id, 'RNA sequences.seq_2', "primary_id");
+	is( $seq_obj2->display_id, 'RNA sequences.seq_2', "display_id defaults to primary");
 	is( $seq_obj2->seq, 'ACGCUCGCAUCGCAUC', "sequence");
 
 	#check taxa
 	my $feat1 = ($seq_obj2->get_SeqFeatures())[0];
 	is( ($feat1->get_tag_values('taxa_id'))[0], 'taxa1', 'taxa id');
 	is( ($feat1->get_tag_values('taxa_label'))[0], 'Primary taxa block', 'taxa label');
-	is( ($feat1->get_tag_values('my_taxon'))[0], 'Homo sapiens', "taxon ok" );
+	is( ($feat1->get_tag_values('my_taxon'))[0], 'Pan paniscus', "taxon ok" );
 	my @taxa2 = $feat1->get_tag_values('taxon');
 	is( @taxa2, 5, 'number of taxa');
 	foreach my $taxon (@taxa2) {
 		ok( $expected_taxa{$taxon}, 'taxon ok')	
 	}
+	
+

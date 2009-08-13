@@ -3,7 +3,7 @@
 
 use strict;
 use Bio::Root::Test;
-test_begin( -tests=>1000 );
+test_begin( -tests=>46 );
 
 chdir ('../..'); # hack to allow run from t dir
 use_ok( 'Bio::Tree::Tree' );

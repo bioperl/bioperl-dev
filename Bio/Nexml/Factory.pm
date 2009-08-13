@@ -367,6 +367,7 @@ sub create_bperl_seq {
  			my $rowlabel;
  			#check if there is a label for the row, if not default to seqID
  			if (!defined ($rowlabel = $row->get_name())) {$rowlabel = $seqID;}
+ 			else {$seqID = $rowlabel;}
  			
  			#build the seq object using the factory create method
  			my $seqbuilder = new Bio::Seq::SeqFactory('-type' => 'Bio::Seq');
