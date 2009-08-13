@@ -406,7 +406,7 @@ sub write {
 	}
 	
 	#write nexml document to stream
-	my $ret = $self->_print($proj_doc->to_xml());
+	my $ret = $self->_print($proj_doc->to_xml(-compact=>1));
 	$self->flush;
 	return($ret);
 }
