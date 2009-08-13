@@ -181,7 +181,9 @@ sub write_tree {
 	
 	$nexml_doc->insert($forest);
 	
-	$self->_print($nexml_doc->to_xml());
+	my $ret = $self->_print($nexml_doc->to_xml());
+	$self->flush;
+	return $ret;
 }
 
 

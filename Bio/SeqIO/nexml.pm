@@ -199,9 +199,9 @@ sub write_seq {
 	
 	$nexml_doc->insert($matrix);
 	
-	$self->_print($nexml_doc->to_xml());
-	
-	return 1;
+	my $ret = $self->_print($nexml_doc->to_xml());
+	$self->flush;
+	return $ret
 }
 
 

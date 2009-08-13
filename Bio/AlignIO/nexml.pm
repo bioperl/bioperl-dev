@@ -169,10 +169,10 @@ sub write_aln {
 	
 	my $proj = Bio::Phylo::Factory->create_project();
 	$proj->insert($matrix);
-	$self->_print($proj->to_xml());
-	
-	return 1;
-	#return (Bio::Nexml::Util->write_aln(@_));	
+	my $ret = $self->_print($proj->to_xml());
+	$self->flush;
+	return $ret;
+
 }
 
 
