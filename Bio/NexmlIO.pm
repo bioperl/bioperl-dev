@@ -432,12 +432,30 @@ sub extract_seqs {
     }
 	
 	my %params = @_;
+	my $remove_spaces = 0;
 	my $ret = 0;
 	my ($format, $file) = @params{qw( -format -file)};
+	
+	for ($format) {
+    /^fasta$/i && do {
+        # this is ok, flag so that the nexmlid gets converted;
+        $remove_spaces = 1;
+        last;
+    };
+    # default
+    do {
+       $self->throw("Format '$format' not yet supported for extraction");
+    };
+}
 	
 	my $seqIO = Bio::SeqIO->new(-format => $format, -file => $file);
 	my $seqs = $self->{_seqs};
 	foreach my $seq (@$seqs) {
+		if ($remove_spaces) {
+			my $id = $seq->id;
+			$id =~ s/ /_/;
+			$seq->id($id);
+		}
 		$ret = $seqIO->write_seq($seq);
 	}
 	return $ret;
