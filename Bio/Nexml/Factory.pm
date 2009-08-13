@@ -513,7 +513,7 @@ sub create_bphylo_aln {
 
  Title   : create_bphylo_seq
  Usage   : my $bphylo_seq = $factory->create_bphylo_seq($bperl_seq);
- Function: Converts a L<Bio::Seq> object into Bio::Phylo::Matrices::Matix object
+ Function: Converts a L<Bio::Seq> object into Bio::Phylo::Matrices::Matrix object
  Returns : a Bio::Phylo::Matrices::Matrix object
  Args    : Bio::Seq object
  
