@@ -132,7 +132,7 @@ sub create_bperl_aln {
  		my $mol_type = lc($matrix->get_type());
  		unless ($mol_type eq 'dna' || $mol_type eq 'rna' || $mol_type eq 'protein')
  		{
- 			next;
+		        next;
  			# something for the back-burner: BioPerl has objects
 			# to handle arbitrary genotypes; might be cool to 
 			# be able to create something besides alignments 
@@ -148,7 +148,7 @@ sub create_bperl_aln {
 		$aln_feats->add_tag_value('NexmlIO_ID', $caller->{_ID});
 		#check if there is a taxa associated with this alignment
 		if ($taxa) {
-			$aln_feats->add_tag_value('taxa_id', $taxa->get_xml_id()) if $taxa->get_xml_id();
+			$aln_feats->add_tag_value('taxa_id', $taxa->get_xml_id());
 			$aln_feats->add_tag_value('taxa_label', $taxa->get_name()) if $taxa->get_name();
 		
 			my $taxon = $taxa->first;
@@ -240,39 +240,43 @@ sub create_bperl_tree {
  			my $tree = Bio::Tree::Tree->new(-id => "$basename.$tree_id");
 
 			#set the taxa info of the tree
-			$tree->add_tag_value('taxa_label', $taxa_label);
-			$tree->add_tag_value('taxa_id', $taxa_id);
+			$tree->add_tag_value('taxa_label', $taxa_label) if defined($taxa_label);
+			$tree->add_tag_value('taxa_id', $taxa_id) if defined($taxa_id);
 			$tree->add_tag_value('_NexmlIO_ID', $caller->{_ID});
 			
 			my $taxon = $taxa->first;
 			while($taxon) {
-				$tree->add_tag_value('taxon', $taxon->get_name());	
+				$tree->add_tag_value('taxon', $taxon->get_name()) if defined($taxon->get_name);	
 				$taxon = $taxa->next;
 			}
  			
  			#process terminals only, removing terminals as they get processed 
  			#which inturn creates new terminals to process until the entire tree has been processed
  			my $terminals = $t->get_terminals();
- 			for(my $i=0; $i<@$terminals; $i++)
+# 			for(my $i=0; $i<@$terminals; $i++)
+			while (my $terminal = shift @$terminals) 
  			{
- 				my $terminal = $$terminals[$i];
- 				my $new_node_id = $terminal->get_name();
+# 				my $terminal = $$terminals[$i];
+			    my $new_node_id = $terminal->get_name();
  				my $newNode;
- 				
+
  				if(exists $created_nodes{$new_node_id})
  				{
  					$newNode = $created_nodes{$new_node_id};
  				}
  				else
  				{
- 					$newNode = Bio::Tree::Node->new(-id => $new_node_id);
+ 					$newNode = Bio::Tree::Node->new();
+					$new_node_id ||= 'internal_'.$newNode->_creation_id;
+					$newNode->id($new_node_id);
+
  					$created_nodes{$new_node_id} = $newNode;
  				}
  				
  				#check if taxa data exists for the current node ($terminal)
 				if($taxa) {
 					my $taxon = $terminal->get_taxon();
-					$newNode->add_tag_value("taxon", $taxon->get_name()) if $taxon;
+					$newNode->add_tag_value("taxon", $taxon->get_name()) if $taxon && $taxon->get_name;
  				}
  				
  				#check if you've reached the root of the tree and if so, stop.
@@ -288,11 +292,14 @@ sub create_bperl_tree {
  				my $parentID = $parent->get_name();
  				if(exists $created_nodes{$parentID})
  				{
+
  					$created_nodes{$parentID}->add_Descendent($newNode);
  				}
  				else
  				{
- 					my $parent_node = Bio::Tree::Node->new(-id => $parentID);
+ 					my $parent_node = Bio::Tree::Node->new();
+					$parentID ||= 'internal_'.$parent_node->_creation_id;
+					$parent_node->id($parentID);
  					$parent_node->add_Descendent($newNode);
  					$created_nodes{$parentID} = $parent_node; 
  				}
@@ -302,7 +309,7 @@ sub create_bperl_tree {
  				#check if the parent of the removed node is now a terminal node and should be added for processing
  				if($parent->is_terminal())
  				{
- 					push(@$terminals, $terminal->get_parent());
+ 					push(@$terminals, $terminal->get_parent()) if $terminal->get_parent;
  				}
  			}
 			push @trees, $tree;
@@ -348,11 +355,11 @@ sub create_bperl_seq {
  		{
  			my $newSeq = $row->get_char();
  			my $feat = Bio::SeqFeature::Generic->new();
-			$feat->add_tag_value('matrix_label', $matrix->get_name());
+			$feat->add_tag_value('matrix_label', $matrix->get_name()) if defined($matrix->get_name);
 			$feat->add_tag_value('matrix_id', $matrix->get_xml_id());
 			$feat->add_tag_value('NexmlIO_ID', $caller->{_ID});
-			$feat->add_tag_value('taxa_id', $taxa_id);
-			$feat->add_tag_value('taxa_label', $taxa_label);
+			$feat->add_tag_value('taxa_id', $taxa_id) if defined($taxa_id);
+			$feat->add_tag_value('taxa_label', $taxa_label) if defined($taxa_label);
  			
  			$seqnum++;
  			#construct full sequence id by using bio::phylo "matrix label" and "row id"
@@ -378,11 +385,11 @@ sub create_bperl_seq {
 			if ($taxa) {
 				my $taxon = $taxa->first;
 				while ($taxon) { 
-					$feat->add_tag_value('taxon', $taxon->get_name);
+					$feat->add_tag_value('taxon', $taxon->get_name) if defined($taxon->get_name);
  					if($taxon eq $row->get_taxon) {
  						my $taxon_name = $taxon->get_name();
  						
- 						$feat->add_tag_value('my_taxon', "$taxon_name");
+ 						$feat->add_tag_value('my_taxon', "$taxon_name") if defined($taxon_name);
  						$feat->add_tag_value('id', $rowlabel);
  					}
  					$taxon = $taxa->next;
