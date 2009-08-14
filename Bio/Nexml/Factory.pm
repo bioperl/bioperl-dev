@@ -132,7 +132,7 @@ sub create_bperl_aln {
  		my $mol_type = lc($matrix->get_type());
  		unless ($mol_type eq 'dna' || $mol_type eq 'rna' || $mol_type eq 'protein')
  		{
-		        next;
+ 			next;
  			# something for the back-burner: BioPerl has objects
 			# to handle arbitrary genotypes; might be cool to 
 			# be able to create something besides alignments 
@@ -544,7 +544,7 @@ sub create_bphylo_aln {
 			
             for my $seq ( @seqs ) {
             	#create datum linked to taxa
-            	my $datum = create_bphylo_datum($seq, \@feats, $taxa, '-type_object' => $to);                                    	
+            	my $datum = create_bphylo_datum($seq, $taxa, \@feats, '-type_object' => $to);                                    	
                 $matrix->insert($datum);
             }  
             return $matrix;
@@ -571,9 +571,7 @@ sub create_bphylo_seq {
 	my $type 	= $seq->alphabet || $seq->_guess_alphabet || 'dna';
 	$type = uc($type);
    	
-	my @feats = $seq->get_all_SeqFeatures();	
-    
-    my $dat = create_bphylo_datum($seq, \@feats, $taxa, '-type' => $type);  
+    my $dat = create_bphylo_datum($seq, $taxa, '-type' => $type);  
         
 	# copy seq string
     my $seqstring = $seq->seq;
@@ -670,16 +668,25 @@ sub _create_bphylo_matrix_taxa {
  Usage   : my $bphylo_datum = $factory->create_bphylo_datum($bperl_datum);
  Function: Converts a L<Bio::Seq> object into Bio::Phylo::Matrices::datum object
  Returns : a Bio::Phylo::Matrices::datum object
- Args    : Bio::Seq object
+ Args    : Bio::Seq object, Bio::Phylo::Taxa object, 
+           [optional] arrayref to SeqFeatures,
+           [optional] key => value pairs to pass to Bio::Phylo constructor
  
 =cut
 
 sub create_bphylo_datum {
 	#mostly ripped from Bio::Phylo::Matrices::Datum::new_from_bioperl()
-	my ( $seq, $feats, $taxa, @args ) = @_;
+	my ( $seq, $taxa, @args ) = @_;
 	my $class = 'Bio::Phylo::Matrices::Datum';
+	my $feats;
 	# want $seq type-check here? Allowable: is-a Bio::PrimarySeq, 
         #  Bio::LocatableSeq /maj
+	if (@args % 2) { # odd
+	    $feats = shift @args;
+	    unless (ref($feats) eq 'ARRAY') {
+		Bio::Root::Root->throw("Third argument must be array of SeqFeatures");
+	    }
+	}
     	my $type = $seq->alphabet || $seq->_guess_alphabet || 'dna';
     	my $self = $class->new( '-type' => $type, @args );
         # copy seq string
@@ -695,8 +702,9 @@ sub create_bphylo_datum {
         my $name = $seq->display_id;
         $self->set_name( $name ) if defined $name;
         my $taxon;
+	my @feats = (defined $feats ? @$feats : $seq->get_all_SeqFeatures);
         # convert taxa
-        foreach my $feat (@$feats)
+        foreach my $feat (@feats)
         {
         	#get sequence id associated with taxa to compare
         	my $taxa_id = ($feat->get_tag_values('id'))[0] if $feat->has_tag('id');

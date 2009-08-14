@@ -135,7 +135,7 @@ sub new {
  	
  	#create unique ID by creating a scalar and using the memory address
  	my $ID = bless \(my $dummy), "UniqueID";
- 	$self->{'_ID'} = $ID;
+ 	($self->{'_ID'}) = sprintf("%s",\$ID) =~ /(0x[0-9a-fA-F]+)/;
  	
  	unless ($file_string =~ m/^\>/) {
  		$self->{'_doc'} = Bio::Phylo::IO->parse('-file' => $params{'-file'}, '-format' => 'nexml', '-as_project' => '1');

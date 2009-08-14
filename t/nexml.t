@@ -105,7 +105,10 @@ my $in_nexmlIO = Bio::NexmlIO->new(-file => test_input_file('characters+trees.ne
 #Write Data
 diag('Begin tests for write/read roundtrip');
 my $outdata = test_output_file();
+
+
 my $nexml_out = Bio::NexmlIO->new(-file => ">$outdata", -format => 'Nexml');	
+
 ok( $nexml_out->write(-seqs => \@seqs1, -alns =>\@alns1, -trees => \@trees1), "write to stream" );
 close($outdata);
 
@@ -206,4 +209,4 @@ my $in_nexmlIO_roundtrip = Bio::NexmlIO->new(-file => $outdata);
 		is( $tree->id, $trees_array->[$treeNum-1]->id, "extract_trees roundtrip $treeNum" );
 		$treeNum++;
 	}
-	
+
