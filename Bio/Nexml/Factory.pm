@@ -83,6 +83,10 @@ use strict;
 use Bio::Phylo::Matrices::Matrix;
 use Bio::Phylo::Forest::Tree;
 use Bio::SeqFeature::Generic;
+use Bio::PopGen::Population;
+use Bio::PopGen::Individual;
+use Bio::Annotation::Collection;
+use Bio::Annotation::SimpleValue;
 
 
 use base qw(Bio::Root::Root);
@@ -205,6 +209,92 @@ sub create_bperl_aln {
  	return \@alns;
 }
 
+=head2 create_bperl_popn
+
+ Title   : create_bperl_popn
+ Usage   : $pop = $fac->create_bperl_popn($proj)
+ Function: Converts Bio::Phylo::MatricesMatrix objects having
+           arbitrary "genotype" data into Bio::PopGen::Population
+           objects with associated Bio::PopGen::Individual objects
+ Returns : an array of Bio::PopGen::Population objects
+ Args    : Bio::Phylo::Project object
+ Note    : This method requires BioPerl revision 15922 or higher,
+           as it assumes the existence of annotation() attributes 
+           for Bio::PopGen objects
+
+=cut
+
+sub create_bperl_popn {
+    my ($self, $caller) = @_;
+    my @popns;
+    my $sv = 'Bio::Annotation::SimpleValue';
+    my $matrices = $caller->doc->get_matrices();
+    foreach my $mx (@$matrices) {
+	my $type = lc($mx->get_type);
+	my $popn = Bio::PopGen::Population->new();
+	my $taxa = $mx->get_taxa;
+	$popn->{_Nexml_ID} = $caller->{_ID} . $taxa->get_xml_id;
+	my $popn_ac = Bio::Annotation::Collection->new();
+	$popn_ac->add_Annotation('NexmlIO_ID', $sv->new(-value => $caller->{_ID}));
+	if ($taxa) {
+	    $popn_ac->add_Annotation('taxa_id', $sv->new(-value => $taxa->get_xml_id)) if $taxa->get_xml_id;
+	    $popn_ac->add_Annotation('taxa_label', $sv->new(-value => $taxa->get_name)) if $taxa->get_name;
+	    my $taxon = $taxa->first;
+	    while ($taxon) {
+		$popn_ac->add_Annotation('taxa', $sv->new(-value => $taxon->get_name));
+		$taxon = $taxa->next;
+	    }
+	}
+	$popn->annotation($popn_ac);
+
+	my $basename = $mx->get_name() || '';
+	$popn->name($basename);
+	my $rowNum = 0;
+	my $row = $mx->first;
+	while ($row) {
+	    my @alleles = $row->get_char();
+	    my $rowlabel;
+	    $rowNum++;
+	    
+	    #constuct rowID based on matrix label and row id
+	    my $rowID = ($basename ? "$basename." : '') . "row_$rowNum";
+	    
+	    #Check if there's a row label and if not default to rowID
+	    if( !defined($rowlabel = $row->get_name())) {$rowlabel = $rowID;}
+	    
+	    my $ind = Bio::PopGen::Individual->new(-unique_id=>$rowlabel);
+	    # the row defines the genotype of the individual;
+	    # each column represents a marker, and the row data within a 
+	    # column is the genotype of that marker for this individual/maj
+	    my @markers= (@{$mx->get_charlabels} || map {'c'.$_} (1..$mx->get_nchar));
+	    foreach my $a (@alleles) {
+		my $geno = Bio::PopGen::Genotype->new(-marker_name=>shift @markers, -alleles=>[$a]);
+		$ind->add_Genotype($geno);
+	    }
+
+	    #check if there is a taxa block associated w/ this alignment
+	    if($taxa)
+	    {
+		if (my $taxon = $taxa->get_by_name($row->get_taxon->get_name())) {
+		    #attach taxon to each individual 
+		    my $ind_ac = Bio::Annotation::Collection->new();
+		    my $taxon_name = $taxon->get_name();
+		    $ind_ac->add_Annotation('taxon', $sv->new(-value=>$taxon_name));
+		    $ind_ac->add_Annotation('id', $sv->new(-value=>$rowlabel));
+		    $ind_ac->add_Annotation('taxa_id', $sv->new(-value=>$taxa->get_xml_id));
+		    $ind->annotation($ind_ac);
+		}
+	    }
+
+	    $popn->add_Individual($ind);
+	    $self->debug("Reading r$rowlabel\n");
+	    
+	    $row = $mx->next();
+	}
+	push (@popns, $popn);
+    }
+    return \@popns;
+}
 
 =head2 create_bperl_tree
 
@@ -639,97 +729,135 @@ sub _create_bphylo_tree_taxa {
 }
 
 sub _create_bphylo_matrix_taxa {
-	my ($self, $aln) = @_;
-	
+	my ($self, $obj) = @_;
 	my $taxa = $fac->create_taxa();
-	my $taxon;
-	my @feats = $aln->get_all_SeqFeatures();
-			
-	foreach my $feat (@feats) {
-    if (my $taxa_id = ($feat->get_tag_values('taxa_id'))[0]) {
-		my $taxa_label = ($feat->get_tag_values('taxa_label'))[0];
-    
-		$taxa->set_name($taxa_label) if defined $taxa_label;
-		$taxa->set_xml_id($taxa_id) if defined $taxa_label;
-		my @taxa_bp = $feat->get_tag_values('taxon');
-		foreach my $taxon_name (@taxa_bp) {
-			$taxon = $fac->create_taxon(-name => $taxon_name);
-			$taxa->insert($taxon);
-		}
-        last;
-        }
+	my ($taxa_label, $taxa_id, @taxa_bp);
+
+	unless ( $obj->isa('Bio::AlignI') ||
+		 $obj->isa('Bio::PopGen::PopulationI') ) {
+	    $self->throw("Objects of class '".ref($obj)."' not supported");
 	}
-	return $taxa
+
+	$obj->isa('Bio::AlignI') && do {
+	    my @feats = $obj->get_all_SeqFeatures();
+	    foreach my $feat (@feats) {
+		$taxa_id = ($feat->get_tag_values('taxa_id'))[0];
+		if ($taxa_id) {
+		    $taxa_label = ($feat->get_tag_values('taxa_label'))[0]; 
+		    @taxa_bp = $feat->get_tag_values('taxon');
+		    last;
+		}
+	    }
+	};
+	$obj->isa('Bio::PopGen::PopulationI') && do {
+	    ($taxa_label) = $obj->annotation->get_Annotations('taxa_label');
+	    ($taxa_id) = $obj->annotation->get_Annotations('taxa_id');
+	    @taxa_bp = $obj->annotation->get_Annotations('taxa');
+	};
+
+	if (defined($taxa_label)) {
+	    $taxa->set_name($taxa_label);
+	    $taxa->set_xml_id($taxa_id);
+	}
+	foreach my $taxon_name (@taxa_bp) {
+	    my $taxon = $fac->create_taxon(-name => $taxon_name);
+	    $taxa->insert($taxon);
+	}
+	return $taxa;
 }
 
 =head2 create_bphylo_datum
 
  Title   : create_bphylo_datum
  Usage   : my $bphylo_datum = $factory->create_bphylo_datum($bperl_datum);
- Function: Converts a L<Bio::Seq> object into Bio::Phylo::Matrices::datum object
- Returns : a Bio::Phylo::Matrices::datum object
- Args    : Bio::Seq object, Bio::Phylo::Taxa object, 
-           [optional] arrayref to SeqFeatures,
-           [optional] key => value pairs to pass to Bio::Phylo constructor
+ Function: Converts a L<Bio::Seq> or Bio::PopGen::Individual object into 
+           a Bio::Phylo::Matrices::datum object
+ Returns : an array Bio::Phylo::Matrices::datum objects
+           (for Bio::Seq conversion, an array with a single element;
+            for Bio::PopGen::Individual conversion, an array with one
+            element per marker)
+ Args    : ( Bio::Seq | Bio::PopGen::IndividualI ) object, 
+           Bio::Phylo::Taxa object
  
 =cut
 
+# creating a datum for seqs is different from creating one for an individual:
+# one sequence-type 'datum' contains many characters (one for each residue),
+# one individual-type 'datum' contains just one character
+#
+# want for Bio::PopGen::Individual to return an array of Bio::Phylo 'data'
+# instead?
+
 sub create_bphylo_datum {
-	#mostly ripped from Bio::Phylo::Matrices::Datum::new_from_bioperl()
-	my ( $seq, $taxa, @args ) = @_;
-	my $class = 'Bio::Phylo::Matrices::Datum';
-	my $feats;
-	# want $seq type-check here? Allowable: is-a Bio::PrimarySeq, 
-        #  Bio::LocatableSeq /maj
-	if (@args % 2) { # odd
-	    $feats = shift @args;
-	    unless (ref($feats) eq 'ARRAY') {
-		Bio::Root::Root->throw("Third argument must be array of SeqFeatures");
+    #mostly ripped from Bio::Phylo::Matrices::Datum::new_from_bioperl()
+    my ( $self, $obj, $taxa, @args ) = @_;
+    my $class = 'Bio::Phylo::Matrices::Datum';
+    my ($type,$name, $taxa_id, $taxon_name, $desc, $datum);
+    
+    unless ( $obj->isa('Bio::SeqI') ||
+	     $obj->isa('Bio::LocatableSeq') ||
+	     $obj->isa('Bio::PopGen::IndividualI') ) {
+	$self->throw( "Objects of class '".ref($obj)."' not supported" );
+    }
+    $obj->isa('Bio::SeqI') || $obj->isa('Bio::LocatableSeq') && do {
+	$type = $obj->alphabet || $obj->_guess_alphabet || 'dna';
+	@args = ( '-type' => $type ) unless @args;
+	$datum = $class->new( @args );
+	# copy seq string
+	my $seqstring = $obj->seq;
+	if ( $seqstring and $seqstring =~ /\S/ ) {
+	    eval { $datum->set_char( $seqstring ) };
+	    if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
+		$datum->throw("\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n");
 	    }
 	}
-    	my $type = $seq->alphabet || $seq->_guess_alphabet || 'dna';
-    	my $self = $class->new( '-type' => $type, @args );
-        # copy seq string
-        my $seqstring = $seq->seq;
-        if ( $seqstring and $seqstring =~ /\S/ ) {
-        	eval { $self->set_char( $seqstring ) };
-        	if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
-        		$self->throw("\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n");
-        	}
-        }      
-        
-        # copy name
-        my $name = $seq->display_id;
-        $self->set_name( $name ) if defined $name;
-        my $taxon;
-	my @feats = (defined $feats ? @$feats : $seq->get_all_SeqFeatures);
-        # convert taxa
-        foreach my $feat (@feats)
-        {
-        	#get sequence id associated with taxa to compare
-        	my $taxa_id = ($feat->get_tag_values('id'))[0] if $feat->has_tag('id');
-        	if ($name eq $taxa_id)
-        	{
-        		my $taxon_name;
-        		if($feat->has_tag('my_taxon')) {
-        			$taxon_name = ($feat->get_tag_values('my_taxon'))[0]
-        		}
-        		else {
-        			$taxon_name = ($feat->get_tag_values('taxon'))[0];
-        		}
-        		$self->set_taxon($taxa->get_by_name($taxon_name));
-        	}
-        }
-          
-        # copy desc
-        my $desc = $seq->desc;   
-        $self->set_desc( $desc ) if defined $desc;   
-
+	# copy name
+	$name = $obj->display_id;
+	my $taxon;
+	# convert taxa
+	foreach my $feat ($obj->get_all_SeqFeatures)
+	{
+	    #get sequence id associated with taxa to compare
+	    $taxa_id = ($feat->get_tag_values('id'))[0] if $feat->has_tag('id');
+	    if ($name eq $taxa_id)
+	    {
+		if($feat->has_tag('my_taxon')) {
+		    $taxon_name = ($feat->get_tag_values('my_taxon'))[0]
+		}
+		else {
+		    $taxon_name = ($feat->get_tag_values('taxon'))[0];
+		}
+	    }
+	}
+	# copy desc
+	$desc = $obj->desc;   
+	
 	# only Bio::LocatableSeq objs have these fields...
-        for my $field ( qw(start end strand) ) {
-	    $self->$field( $seq->$field ) if $seq->can($field);
-        } 	
-        return $self;
+	for my $field ( qw(start end strand) ) {
+	    $self->$field( $obj->$field ) if $obj->can($field);
+	}
+	$datum->set_name( $name ) if defined $name;
+	$datum->set_taxon($taxa->get_by_name($taxon_name));
+	$datum->set_desc( $desc ) if defined $desc;   
+	return ($datum);
+    };
+    $obj->isa('Bio::PopGen::IndividualI') && do {
+	@args ||= ( -type => 'standard' );
+	my @data;
+	# load it and make assocs...
+	####
+	$name = $obj->unique_id;
+	($taxon_name) = $obj->annotation->get_Annotations('taxon');
+	foreach ($obj->get_marker_names) {
+	    $datum = $class->new(@args);
+	    $datum->set_name( $name ) if defined $name;
+	    $datum->set_taxon($taxa->get_by_name($taxon_name));
+	    $datum->set_char($obj->get_Genotypes(-marker=>$_));
+	    $datum->set_desc( $_ ); # marker name
+	    push @data, $datum;
+	}
+	return @data;
+    };
 }
 
 =head2 CREATOR
