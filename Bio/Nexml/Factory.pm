@@ -626,6 +626,11 @@ sub _create_bphylo_tree_taxa {
 	my $taxa = $fac->create_taxa();
 	my $taxon;
 	
+	#check if taxa exists
+	unless ($tree->has_tag('taxa_id')) {
+		return 0;
+	}
+	
 	#copy taxa details
 	$taxa->set_xml_id(($tree->get_tag_values('taxa_id'))[0]);
 	$taxa->set_name(($tree->get_tag_values('taxa_label'))[0]);
