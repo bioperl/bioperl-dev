@@ -1,4 +1,4 @@
-# $Id: Nexml.pm 15889 2009-07-29 13:35:29Z chmille4 $
+# $Id$
 # BioPerl module for Bio::NexmlIO
 #
 # Please direct questions and support issues to <bioperl-l@bioperl.org> 
@@ -104,9 +104,6 @@ use Bio::SeqIO::nexml;
 use Bio::AlignIO::nexml;
 use Bio::TreeIO::nexml;
 use Bio::Nexml::Factory;
-use Bio::Phylo::IO;
-use Bio::Phylo::Factory;
-use Bio::Phylo::Matrices;
 
 use base qw(Bio::Root::IO);
 
@@ -373,6 +370,7 @@ sub write {
 			($taxa_o) = $nexml_fac->create_bphylo_taxa($seq);
 			$taxa_hash{$seq->{_Nexml_ID}} = $taxa_o;
 		}
+		$DB::single=1;
 		$datum = $nexml_fac->create_bphylo_seq($seq, $taxa_o);
 		#check if this Bio::Phylo::Matrices::Matrix obj has already been created
 		if (defined $seq_matrices{ $seq->{_Nexml_matrix_ID} }) {
