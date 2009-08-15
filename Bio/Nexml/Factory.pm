@@ -1,4 +1,4 @@
-# $Id: Util.pm 15875 2009-07-21 19:20:00Z chmille4 $
+# $Id$
 #
 # BioPerl module for Bio::Nexml::Factory
 #
@@ -80,6 +80,9 @@ package Bio::Nexml::Factory;
 
 use strict;
 
+use Bio::Phylo::IO;
+use Bio::Phylo::Factory;
+use Bio::Phylo::Matrices;
 use Bio::Phylo::Matrices::Matrix;
 use Bio::Phylo::Forest::Tree;
 use Bio::SeqFeature::Generic;
@@ -533,7 +536,7 @@ sub create_bphylo_tree {
 
 sub _copy_tree {
 	my ( $tree, $bpnode, $parent, $taxa ) = @_;
-		my $node = create_bphylo_node($bpnode);
+		my $node = Bio::Nexml::Factory->create_bphylo_node($bpnode);
 		my $taxon;
 		if ($parent) {
 			$parent->set_child($node);
@@ -560,7 +563,7 @@ sub _copy_tree {
 =cut
 
 sub create_bphylo_node {
-	my ($bpnode) = @_;
+	my ($self, $bpnode) = @_;
 		my $node = Bio::Phylo::Forest::Node->new();
 		
 		#mostly ripped from Bio::Phylo::Forest::Node->new_from_bioperl()
@@ -634,7 +637,7 @@ sub create_bphylo_aln {
 			
             for my $seq ( @seqs ) {
             	#create datum linked to taxa
-            	my $datum = create_bphylo_datum($seq, $taxa, \@feats, '-type_object' => $to);                                    	
+            	my $datum = $self->create_bphylo_datum($seq, $taxa, \@feats, '-type_object' => $to);                                    	
                 $matrix->insert($datum);
             }  
             return $matrix;
@@ -661,7 +664,7 @@ sub create_bphylo_seq {
 	my $type 	= $seq->alphabet || $seq->_guess_alphabet || 'dna';
 	$type = uc($type);
    	
-    my $dat = create_bphylo_datum($seq, $taxa, '-type' => $type);  
+    my $dat = $self->create_bphylo_datum($seq, $taxa, '-type' => $type);  
         
 	# copy seq string
     my $seqstring = $seq->seq;
@@ -689,7 +692,7 @@ sub create_bphylo_seq {
 
 =head2 create_bphylo_taxa
 
- Title   : create_bphylo_seq
+ Title   : create_bphylo_taxa
  Usage   : my $taxa = $factory->create_bphylo_taxa($bperl_obj);
  Function: creates a taxa object from the data attached to a bioperl object
  Returns : a Bio::Phylo::Taxa object
@@ -733,12 +736,12 @@ sub _create_bphylo_matrix_taxa {
 	my $taxa = $fac->create_taxa();
 	my ($taxa_label, $taxa_id, @taxa_bp);
 
-	unless ( $obj->isa('Bio::AlignI') ||
+	unless ( $obj->isa('Bio::Align::AlignI') ||
 		 $obj->isa('Bio::PopGen::PopulationI') ) {
 	    $self->throw("Objects of class '".ref($obj)."' not supported");
 	}
 
-	$obj->isa('Bio::AlignI') && do {
+	$obj->isa('Bio::Align::AlignI') && do {
 	    my @feats = $obj->get_all_SeqFeatures();
 	    foreach my $feat (@feats) {
 		$taxa_id = ($feat->get_tag_values('taxa_id'))[0];
@@ -790,16 +793,23 @@ sub _create_bphylo_matrix_taxa {
 
 sub create_bphylo_datum {
     #mostly ripped from Bio::Phylo::Matrices::Datum::new_from_bioperl()
-    my ( $self, $obj, $taxa, @args ) = @_;
+    my ($self, $obj, $taxa, @args ) = @_;
     my $class = 'Bio::Phylo::Matrices::Datum';
     my ($type,$name, $taxa_id, $taxon_name, $desc, $datum);
-    
+    my ($feats);
+
     unless ( $obj->isa('Bio::SeqI') ||
 	     $obj->isa('Bio::LocatableSeq') ||
 	     $obj->isa('Bio::PopGen::IndividualI') ) {
 	$self->throw( "Objects of class '".ref($obj)."' not supported" );
     }
-    $obj->isa('Bio::SeqI') || $obj->isa('Bio::LocatableSeq') && do {
+    if (@args % 2) { # odd
+	$feats = shift @args;
+	unless (ref($feats) eq 'ARRAY') {
+	    $self->throw("Third argument must be array of SeqFeatures");
+	}
+    }
+    ($obj->isa('Bio::SeqI') || $obj->isa('Bio::LocatableSeq')) && do {
 	$type = $obj->alphabet || $obj->_guess_alphabet || 'dna';
 	@args = ( '-type' => $type ) unless @args;
 	$datum = $class->new( @args );
@@ -814,8 +824,10 @@ sub create_bphylo_datum {
 	# copy name
 	$name = $obj->display_id;
 	my $taxon;
+
+	my @feats = (defined $feats ? @$feats : $obj->get_all_SeqFeatures);
 	# convert taxa
-	foreach my $feat ($obj->get_all_SeqFeatures)
+	foreach my $feat (@feats)
 	{
 	    #get sequence id associated with taxa to compare
 	    $taxa_id = ($feat->get_tag_values('id'))[0] if $feat->has_tag('id');
@@ -834,7 +846,7 @@ sub create_bphylo_datum {
 	
 	# only Bio::LocatableSeq objs have these fields...
 	for my $field ( qw(start end strand) ) {
-	    $self->$field( $obj->$field ) if $obj->can($field);
+	    $datum->$field( $obj->$field ) if $obj->can($field);
 	}
 	$datum->set_name( $name ) if defined $name;
 	$datum->set_taxon($taxa->get_by_name($taxon_name));
@@ -842,7 +854,7 @@ sub create_bphylo_datum {
 	return ($datum);
     };
     $obj->isa('Bio::PopGen::IndividualI') && do {
-	@args ||= ( -type => 'standard' );
+	@args = ( -type => 'standard' ) unless @args;
 	my @data;
 	# load it and make assocs...
 	####
@@ -869,7 +881,7 @@ sub create_bphylo_datum {
  Title   : bioperl_create
  Usage   : $bioperl_obj = $fac->bioperl_create($obj_type, $biophylo_proj);
  Function: Create a specified bioperl object using a Bio::Phylo project
- Args    : scalar string ('aln', 'tree', 'seq') type designator
+ Args    : scalar string ('aln', 'tree', 'seq', 'popn') type designator
            Bio::Phylo::Project object
  Returns : Appropriate BioPerl object
 
@@ -878,7 +890,7 @@ sub create_bphylo_datum {
 sub bioperl_create {
     my $self = shift;
     my ($type, @args) = @_;
-    unless (grep /^type/,qw( seq aln tree )) {
+    unless (grep /^type/,qw( seq aln tree popn )) {
 	$self->throw("Unrecognized type for argument 1");
     }
     my $call = 'create_bioperl_'.$type;
