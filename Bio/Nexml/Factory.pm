@@ -80,17 +80,29 @@ package Bio::Nexml::Factory;
 
 use strict;
 
-use Bio::Phylo::IO;
+# check for Bio::Phylo
+BEGIN {
+    use Bio::Root::Root;
+    unless (eval "require Bio::Phylo; 1") {
+	Bio::Root::Root->throw("NeXML support requires the Bio::Phylo package to be installed. You can find out how to obtain Bio::Phylo at http://www.nexml.org.");
+    }
+}
+	    
+# isolate all Bio::Phylo includes here in Factory
+use Bio::Phylo::IO qw(parse unparse);
 use Bio::Phylo::Factory;
 use Bio::Phylo::Matrices;
 use Bio::Phylo::Matrices::Matrix;
+use Bio::Phylo::Matrices::Datum;
 use Bio::Phylo::Forest::Tree;
+
 use Bio::SeqFeature::Generic;
 use Bio::PopGen::Population;
 use Bio::PopGen::Individual;
 use Bio::Annotation::Collection;
 use Bio::Annotation::SimpleValue;
 
+use UNIVERSAL qw(isa);
 
 use base qw(Bio::Root::Root);
 
@@ -216,11 +228,11 @@ sub create_bperl_aln {
 
  Title   : create_bperl_popn
  Usage   : $pop = $fac->create_bperl_popn($proj)
- Function: Converts Bio::Phylo::MatricesMatrix objects having
+ Function: Converts Bio::Phylo::Matrices::Matrix objects having
            arbitrary "genotype" data into Bio::PopGen::Population
            objects with associated Bio::PopGen::Individual objects
  Returns : an array of Bio::PopGen::Population objects
- Args    : Bio::Phylo::Project object
+ Args    : is-a Bio::Root::IO instance with Nexml facility
  Note    : This method requires BioPerl revision 15922 or higher,
            as it assumes the existence of annotation() attributes 
            for Bio::PopGen objects
@@ -242,6 +254,7 @@ sub create_bperl_popn {
 	if ($taxa) {
 	    $popn_ac->add_Annotation('taxa_id', $sv->new(-value => $taxa->get_xml_id)) if $taxa->get_xml_id;
 	    $popn_ac->add_Annotation('taxa_label', $sv->new(-value => $taxa->get_name)) if $taxa->get_name;
+	    $popn_ac->add_Annotation('datatype', $sv->new(-value => $mx->get_type));
 	    my $taxon = $taxa->first;
 	    while ($taxon) {
 		$popn_ac->add_Annotation('taxa', $sv->new(-value => $taxon->get_name));
@@ -604,48 +617,98 @@ sub create_bphylo_node {
 
 sub create_bphylo_aln {
 	
-	my ($self, $aln, $taxa, @args) = @_;
+    my ($self, $aln, $taxa, @args) = @_;
 	
-	#most of the code below ripped from Bio::Phylo::Matrices::Matrix::new_from_bioperl()
-	if ( Bio::Phylo::Matrices::Matrix::isa( $aln, 'Bio::Align::AlignI' ) ) {
-		    $aln->unmatch;
-		    $aln->map_chars('\.','-');
-		    my @seqs = $aln->each_seq;
-		    my ( $type, $missing, $gap, $matchchar ); 
-		    if ( $seqs[0] ) {
-		    	$type = $seqs[0]->alphabet || $seqs[0]->_guess_alphabet || 'dna';
-		    }
-		    else {
-		    	$type = 'dna';
-		    }
-		    
-			my $matrix = $fac->create_matrix( 
-				'-type' => $type,
-				'-special_symbols' => {
-			    	'-missing'   => $aln->missing_char || '?',
-			    	'-matchchar' => $aln->match_char   || '.',
-			    	'-gap'       => $aln->gap_char     || '-',					
-				},
-				@args 
-			);			
-			# XXX create raw getter/setter pairs for annotation, accession, consensus_meta source
-			for my $field ( qw(description accession id annotation consensus_meta score source) ) {
-				$matrix->$field( $aln->$field );
-			}			
-			my $to = $matrix->get_type_object;	
-			my @feats = $aln->get_all_SeqFeatures();
-			
-            for my $seq ( @seqs ) {
-            	#create datum linked to taxa
-            	my $datum = $self->create_bphylo_datum($seq, $taxa, \@feats, '-type_object' => $to);                                    	
-                $matrix->insert($datum);
-            }  
-            return $matrix;
-		}
-		else {
-			$self->throw('Not a bioperl alignment!');
-		}
+    #most of the code below ripped from Bio::Phylo::Matrices::Matrix::new_from_bioperl()
+    if ( isa( $aln, 'Bio::Align::AlignI' ) ) {
+	$aln->unmatch;
+	$aln->map_chars('\.','-');
+	my @seqs = $aln->each_seq;
+	my ( $type, $missing, $gap, $matchchar ); 
+	if ( $seqs[0] ) {
+	    $type = $seqs[0]->alphabet || $seqs[0]->_guess_alphabet || 'dna';
+	}
+	else {
+	    $type = 'dna';
+	}
+	
+	my $matrix = $fac->create_matrix( 
+	    '-type' => $type,
+	    '-special_symbols' => {
+		'-missing'   => $aln->missing_char || '?',
+		'-matchchar' => $aln->match_char   || '.',
+		'-gap'       => $aln->gap_char     || '-',					
+	    },
+	    @args 
+	    );			
+	# XXX create raw getter/setter pairs for annotation, accession, consensus_meta source
+	for my $field ( qw(description accession id annotation consensus_meta score source) ) {
+	    $matrix->$field( $aln->$field );
+	}			
+	my $to = $matrix->get_type_object;	
+	my @feats = $aln->get_all_SeqFeatures();
+	
+	for my $seq ( @seqs ) {
+	    #create datum linked to taxa
+	    my $datum = $self->create_bphylo_datum($seq, $taxa, \@feats, '-type_object' => $to);                                    	
+	    $matrix->insert($datum);
+	}  
+	return $matrix;
+    }
+    else {
+	$self->throw('Not a bioperl alignment!');
+    }
 }
+
+=head2 create_bphylo_popn
+
+ Title   : create_bphylo_popn
+ Usage   : my $bphylo_matrix = $factory->create_bphylo_aln($bperl_popn);
+ Function: Converts a L<Bio::PopGen::PopulationI> object into a 
+           Bio::Phylo::Matrices::Matrix object
+ Returns : a Bio::Phylo::Matrices::Matrix object
+ Args    : a Bio::PopGen::PopulationI object, a Bio::Phylo::Taxa object,
+           [optional] key => value pairs passed to
+           Bio::Phylo::Factory::create_matrix, one of which may be
+           -type => ( standard | continuous | custom | dna | protein )
+           (default is 'standard')
+ 
+=cut
+
+sub create_bphylo_popn {
+	
+    my ($self, $popn, $taxa, @args) = @_;
+    
+    $self->throw("Arg 1 must be a 'Bio::PopGen::PopulationI' object") unless isa($popn, 'Bio::PopGen::PopulationI');
+    $self->throw("Remaining args must be in key=>value format")     if ( @args % 2 );
+    my %args = @args;
+    my $type = $args{'-type'} || $args{'type'} || 'standard';
+    $self->throw("Bio::Phylo type '$type' not defined/supported") unless (grep /^$type$/,qw( standard custom continuous restriction dna protein ));
+    my @inds = $popn->get_Individuals;
+
+    my $matrix = $fac->create_matrix( 
+	'-type' => $type,
+	'-special_symbols' => {
+	    '-missing'   => '?',
+	    '-matchchar' => '.',
+	    '-gap'       => '-',					
+	},
+	@args 
+	);			
+    # XXX create raw getter/setter pairs for annotation, accession, consensus_meta source
+#    for my $field ( qw(description accession id annotation consensus_meta score source) ) {
+#	$matrix->$field( $aln->$field );
+#    }			
+    my $to = $matrix->get_type_object;	
+    
+    for my $ind ( @inds ) {
+	#create datum linked to taxa
+	my $datum = $self->create_bphylo_datum($ind, $taxa, '-type_object' => $to);                                    	
+	$matrix->insert($datum);
+    }  
+    return $matrix;
+}
+
 
 
 
@@ -670,7 +733,7 @@ sub create_bphylo_seq {
     my $seqstring = $seq->seq;
     if ( $seqstring and $seqstring =~ /\S/ ) {
         eval { $dat->set_char( $seqstring ) };
-        if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
+        if ( $@ and isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
         	$self->throw("\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n");
         }
 	}              
@@ -696,7 +759,8 @@ sub create_bphylo_seq {
  Usage   : my $taxa = $factory->create_bphylo_taxa($bperl_obj);
  Function: creates a taxa object from the data attached to a bioperl object
  Returns : a Bio::Phylo::Taxa object
- Args    : L<Bio::Seq> object, or L<Bio::SimpleAlign> object, or L<Bio::Tree::Tree> object
+ Args    : L<Bio::Seq> object, L<Bio::SimpleAlign> object, 
+           L<Bio::Tree::Tree> object or L<Bio::PopGen::Population> object
  
 =cut
 
@@ -704,11 +768,12 @@ sub create_bphylo_taxa {
 	my $self = shift @_;
 	my ($obj) = @_;
 	
-	#check if tree or aln object
-	if ( UNIVERSAL::isa( $obj, 'Bio::Align::AlignI' ) || UNIVERSAL::isa( $obj, 'Bio::Seq')) {
+	#check if tree, aln, or population object
+	if ( isa( $obj, 'Bio::Align::AlignI' ) || isa( $obj, 'Bio::Seq') ||
+	     isa( $obj, 'Bio::PopGen::PopulationI') ) {
 		return $self->_create_bphylo_matrix_taxa(@_);
 	}
-	elsif ( UNIVERSAL::isa( $obj, 'Bio::Tree::TreeI' ) ) {
+	elsif ( isa( $obj, 'Bio::Tree::TreeI' ) ) {
 		return $self->_create_bphylo_tree_taxa(@_);
 	}
 }
@@ -817,7 +882,7 @@ sub create_bphylo_datum {
 	my $seqstring = $obj->seq;
 	if ( $seqstring and $seqstring =~ /\S/ ) {
 	    eval { $datum->set_char( $seqstring ) };
-	    if ( $@ and UNIVERSAL::isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
+	    if ( $@ and isa($@,'Bio::Phylo::Util::Exceptions::InvalidData') ) {
 		$datum->throw("\n\nThe BioPerl sequence object contains invalid data ($seqstring)\n");
 	    }
 	}
@@ -860,6 +925,11 @@ sub create_bphylo_datum {
 	####
 	$name = $obj->unique_id;
 	($taxon_name) = $obj->annotation->get_Annotations('taxon');
+	# missing data question:
+	# not all inds in a popn may have data for a given marker
+	# following code writes only markers with data present for
+	# the individual -- does Bio::Phylo take care of the missing
+	# data, or is that our responsibility?/maj
 	foreach ($obj->get_marker_names) {
 	    $datum = $class->new(@args);
 	    $datum->set_name( $name ) if defined $name;
