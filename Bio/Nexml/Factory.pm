@@ -111,10 +111,10 @@ sub new {
 =head2 create_bperl_aln
 
  Title   : create_bperl_aln
- Usage   : my @alns = $factory->create_bperl_aln($proj);
+ Usage   : my @alns = $factory->create_bperl_aln($objIO);
  Function: Converts Bio::Phylo::Matrices::Matrix objects into L<Bio::SimpleAlign> objects
  Returns : an array of L<Bio::SimpleAlign> objects
- Args    : Bio::Phylo::Project object
+ Args    : Bio::NexmlIO, Bio::SeqIO, Bio::AlignIO, or Bio::TreeIO
  
 see [http://search.cpan.org/~rvosa/Bio-Phylo/lib/Bio/Phylo/Project.pm Bio::Phylo::Project]
 
@@ -209,10 +209,10 @@ sub create_bperl_aln {
 =head2 create_bperl_tree
 
  Title   : create_bperl_tree
- Usage   : my @trees = $factory->create_bperl_seq($proj);
+ Usage   : my @trees = $factory->create_bperl_seq($objIO);
  Function: Converts Bio::Phylo::Forest::Tree objects into L<Bio::Tree::Tree> objects
  Returns : an array of L<Bio::Tree::Tree> objects
- Args    : Bio::Phylo::Project object
+ Args    : Bio::NexmlIO, Bio::SeqIO, Bio::AlignIO, or Bio::TreeIO
  
 see [http://search.cpan.org/~rvosa/Bio-Phylo/lib/Bio/Phylo/Project.pm Bio::Phylo::Project]
 
@@ -322,10 +322,10 @@ sub create_bperl_tree {
 =head2 create_bperl_seq
 
  Title   : create_bperl_seq
- Usage   : my @seqs = $factory->create_bperl_seq($proj);
+ Usage   : my @seqs = $factory->create_bperl_seq($objIO);
  Function: Converts Bio::Phylo::Matrices::Datum objects into L<Bio::Seq> objects
  Returns : an array of L<Bio::Seq> objects
- Args    : Bio::Phylo::Project object
+ Args    : Bio::NexmlIO, Bio::SeqIO, Bio::AlignIO, or Bio::TreeIO
  
 see [http://search.cpan.org/~rvosa/Bio-Phylo/lib/Bio/Phylo/Project.pm Bio::Phylo::Project]
 
