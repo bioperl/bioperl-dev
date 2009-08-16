@@ -682,7 +682,10 @@ sub create_bphylo_popn {
     $self->throw("Arg 1 must be a 'Bio::PopGen::PopulationI' object") unless isa($popn, 'Bio::PopGen::PopulationI');
     $self->throw("Remaining args must be in key=>value format")     if ( @args % 2 );
     my %args = @args;
-    my $type = $args{'-type'} || $args{'type'} || 'standard';
+    # look for type first among the obj annotations...
+    my $type = defined $popn->annotation && ($popn->annotation->get_Annotations('datatype'))[0]->value;
+    # then among the arguments; default finally to 'standard'
+    $type ||= $args{'-type'} || $args{'type'} || 'standard';
     $self->throw("Bio::Phylo type '$type' not defined/supported") unless (grep /^$type$/,qw( standard custom continuous restriction dna protein ));
     my @inds = $popn->get_Individuals;
 
@@ -700,11 +703,27 @@ sub create_bphylo_popn {
 #	$matrix->$field( $aln->$field );
 #    }			
     my $to = $matrix->get_type_object;	
-    
-    for my $ind ( @inds ) {
-	#create datum linked to taxa
-	my $datum = $self->create_bphylo_datum($ind, $taxa, '-type_object' => $to);                                    	
-	$matrix->insert($datum);
+    $matrix->set_charlabels([sort $popn->get_marker_names]);
+    # for 'standard' types, assign all unique alleles an integer
+    my $allele_tbl;
+    if ( $type eq 'standard' ) {
+## need to make two-d: chars X states = markers X alleles ##
+	my (%a,@st);
+# want to get alleles from markers not individs
+	for my $mrk (sort $popn->get_marker_names) {
+	    my @a = $popn->get_Marker($mrk)->get_Alleles;
+	    $a{$mrk}={};
+	    @{$a{$mrk}}{@a} = (0..$#a);
+	    push @st, [@a],
+	}
+	$allele_tbl = \%a;
+	$matrix->set_statelabels(\@st);
+    }
+	
+    for my $i ( @inds ) {
+	#create data linked to taxa
+	my @data = $self->create_bphylo_datum($i, $taxa, '-alleles'=>$allele_tbl,'-type_object' => $to);                                    	
+	$matrix->insert(@data);
     }  
     return $matrix;
 }
@@ -818,9 +837,16 @@ sub _create_bphylo_matrix_taxa {
 	    }
 	};
 	$obj->isa('Bio::PopGen::PopulationI') && do {
-	    ($taxa_label) = $obj->annotation->get_Annotations('taxa_label');
-	    ($taxa_id) = $obj->annotation->get_Annotations('taxa_id');
-	    @taxa_bp = $obj->annotation->get_Annotations('taxa');
+	    $taxa_label = ($obj->annotation->get_Annotations('taxa_label'))[0];
+	    $taxa_id = ($obj->annotation->get_Annotations('taxa_id'))[0];
+	    $taxa_label = $taxa_label ? $taxa_label->value : 'otus'.$$taxa;
+	    $taxa_id = $taxa_id ? $taxa_id->value : 'otus'.$$taxa;
+	    if ($obj->annotation->get_Annotations('taxa')) {
+		@taxa_bp = map {$_ ? $_->value : ()} $obj->annotation->get_Annotations('taxa');
+	    }
+	    else {
+		@taxa_bp = map {$_->unique_id} $obj->get_Individuals;
+	    }
 	};
 
 	if (defined($taxa_label)) {
@@ -920,22 +946,32 @@ sub create_bphylo_datum {
     };
     $obj->isa('Bio::PopGen::IndividualI') && do {
 	@args = ( -type => 'standard' ) unless @args;
+	my $alleles;
+	my @a;
+	for (local $_ = shift @args) {
+	    /alleles/ && do { $alleles = shift @args; last;};
+	    push @a, $_;
+	}
+	push @a, @args;
+	@args = @a;
 	my @data;
 	# load it and make assocs...
 	####
 	$name = $obj->unique_id;
-	($taxon_name) = $obj->annotation->get_Annotations('taxon');
+	$taxon_name = ($obj->annotation->get_Annotations('taxon'))[0];
+	$taxon_name = $taxon_name ? $taxon_name->value : $name;
 	# missing data question:
 	# not all inds in a popn may have data for a given marker
 	# following code writes only markers with data present for
 	# the individual -- does Bio::Phylo take care of the missing
 	# data, or is that our responsibility?/maj
-	foreach ($obj->get_marker_names) {
+	foreach my $mrk (sort $obj->get_marker_names) {
 	    $datum = $class->new(@args);
 	    $datum->set_name( $name ) if defined $name;
 	    $datum->set_taxon($taxa->get_by_name($taxon_name));
-	    $datum->set_char($obj->get_Genotypes(-marker=>$_));
-	    $datum->set_desc( $_ ); # marker name
+	    my @a = map { $alleles ? $$alleles{$mrk}{$_} : $_ } $obj->get_Genotypes(-marker=>$mrk)->get_Alleles;
+	    $datum->set_char(@a);
+	    $datum->set_desc( $mrk ); # marker name
 	    push @data, $datum;
 	}
 	return @data;
