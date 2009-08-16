@@ -85,6 +85,7 @@ use base qw(Bio::TreeIO);
 sub _initialize {
     my $self = shift;
     $self->SUPER::_initialize(@_);
+    $self->{_doc} = undef;
 }
 
 =head2 next_tree
@@ -112,14 +113,16 @@ sub next_tree {
  Usage   : $treeio->doc
  Function: Returns the biophylo nexml document object
  Returns : Bio::Phylo::Project
- Args    : none
-
+ Args    : none or Bio::Phylo::Project object
 
 =cut
 
 sub doc {
-	my $self = shift;
-	return $self->{'_doc'};
+	my ($obj,$value) = @_;
+   if( defined $value) {
+      $obj->{'_doc'} = $value;
+	}
+	return $obj->{'_doc'};
 }
 
 
@@ -146,11 +149,11 @@ sub _parse {
     my $fac = Bio::Nexml::Factory->new();
     
     
-    $self->{_doc} = parse(
+    $self->doc(parse(
  	'-file'       => $self->{'_file'},
  	'-format'     => 'nexml',
  	'-as_project' => '1'
- 	);
+ 	));
  	
  	$self->{'_trees'} = $fac->create_bperl_tree($self);
 }
@@ -174,14 +177,14 @@ sub write_tree {
 	my ($tree) = $fac->create_bphylo_tree($bp_tree, $taxa);
 	
 	my $forest = Bio::Phylo::Factory->create_forest();
-	my $nexml_doc = Bio::Phylo::Factory->create_project();
+	$self->doc(Bio::Phylo::Factory->create_project());
 	
 	$forest->set_taxa($taxa);
 	$forest->insert($tree);
 	
-	$nexml_doc->insert($forest);
+	$self->doc->insert($forest);
 	
-	my $ret = $self->_print($nexml_doc->to_xml());
+	my $ret = $self->_print($self->doc->to_xml());
 	$self->flush;
 	return $ret;
 }

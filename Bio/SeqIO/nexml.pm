@@ -88,7 +88,8 @@ use base qw(Bio::SeqIO);
 
 sub _initialize {
   my($self,@args) = @_;
-  $self->SUPER::_initialize(@args);  
+  $self->SUPER::_initialize(@args); 
+  $self->{_doc} = undef; 
 }
 
 =head2 next_seq
@@ -132,14 +133,16 @@ sub rewind {
  Usage   : $treeio->doc
  Function: Returns the biophylo nexml document object
  Returns : Bio::Phylo::Project
- Args    : none
-
+ Args    : none or Bio::Phylo::Project object
 
 =cut
 
 sub doc {
-	my $self = shift;
-	return $self->{'_doc'};
+	my ($obj,$value) = @_;
+   if( defined $value) {
+      $obj->{'_doc'} = $value;
+	}
+	return $obj->{'_doc'};
 }
 
 sub _parse {
@@ -149,11 +152,11 @@ sub _parse {
     $self->{'_parsed'}   = 1;
     $self->{'_seqiter'} = 0;
 	
-	$self->{_doc} = Bio::Phylo::IO->parse(
+	$self->doc(Bio::Phylo::IO->parse(
  	'-file'       => $self->{'_file'},
  	'-format'     => 'nexml',
  	'-as_project' => '1'
- 	);
+ 	));
  
  	
  		
@@ -195,11 +198,11 @@ sub write_seq {
 	my $feat = ($bp_seq->get_SeqFeatures())[0];
 	$matrix->set_name($feat->get_tag_values('matrix_label'));
 	
-	my $nexml_doc = Bio::Phylo::Factory->create_project();
+	$self->doc(Bio::Phylo::Factory->create_project());
 	
-	$nexml_doc->insert($matrix);
+	$self->doc->insert($matrix);
 	
-	my $ret = $self->_print($nexml_doc->to_xml());
+	my $ret = $self->_print($self->doc->to_xml());
 	$self->flush;
 	return $ret
 }

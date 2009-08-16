@@ -71,6 +71,12 @@ use Bio::Nexml::Factory;
 use base qw(Bio::AlignIO);
 
 
+sub _initialize {
+  my($self,@args) = @_;
+  $self->SUPER::_initialize(@args);  
+  $self->{_doc} = undef;
+}
+
 =head2 next_aln
 
  Title   : next_aln
@@ -115,14 +121,16 @@ sub rewind {
  Usage   : $treeio->doc
  Function: Returns the biophylo nexml document object
  Returns : Bio::Phylo::Project
- Args    : none
-
+ Args    : none or Bio::Phylo::Project object
 
 =cut
 
 sub doc {
-	my $self = shift;
-	return $self->{'_doc'};
+	my ($obj,$value) = @_;
+   if( defined $value) {
+      $obj->{'_doc'} = $value;
+	}
+	return $obj->{'_doc'};
 }
 
 sub _parse {
@@ -132,13 +140,11 @@ sub _parse {
     $self->{'_alnsiter'} = 0;
     my $fac = Bio::Nexml::Factory->new();
 	
-	
-	#
-	$self->{_doc} = parse(
+	$self->doc(parse(
  	'-file'       => $self->{'_file'},
  	'-format'     => 'nexml',
  	'-as_project' => '1'
- 	);
+ 	));
 
 	$self->{'_alns'} = $fac->create_bperl_aln($self);
  	if(@{ $self->{'_alns'} } == 0)
@@ -167,12 +173,11 @@ sub write_aln {
 	my ($matrix) = $fac->create_bphylo_aln($aln, $taxa);
 	$matrix->set_taxa($taxa);
 	
-	my $proj = Bio::Phylo::Factory->create_project();
-	$proj->insert($matrix);
-	my $ret = $self->_print($proj->to_xml());
+	$self->doc(Bio::Phylo::Factory->create_project());
+	$self->doc->insert($matrix);
+	my $ret = $self->_print($self->doc->to_xml());
 	$self->flush;
 	return $ret;
-
 }
 
 
