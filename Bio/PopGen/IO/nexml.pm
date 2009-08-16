@@ -36,14 +36,14 @@ C<Bio::PopGen::Population::annotation> and
 C<Bio::PopGen::Individual::annotation> attributes. These are accessed
 in general as follows:
 
- @nexml_attr = $obj->annotation->get_Annotation($access_tag);
+ @nexml_attr = map {$_->value} $obj->annotation->get_Annotations($access_tag);
 
 where we describe the valid access tag descriptors below. Note that
 C<get_Annotation> returns an array, so that the following idiom is
 often useful, when an annotation represents a simple "key => value"
 pair:
 
- ($nexml_attr) = $popn->annotation->get_Annotation($access_tag);
+ $nexml_attr = ($popn->annotation->get_Annotations($access_tag))[0]->value;
 
 Valid access tags are:
 
@@ -123,6 +123,8 @@ use lib '../../..';
 use Bio::Root::Root;
 use Bio::Nexml::Factory;
 use Bio::Phylo::IO qw(parse unparse);
+use Bio::Annotation::Collection;
+use Bio::Annotation::SimpleValue;
 
 use base qw(Bio::PopGen::IO);
 
@@ -211,7 +213,16 @@ sub write_population{
 	    $self->warn("Arg not a Bio::PopGen::PopulationI; skipping");
 	    next;
 	}
-	my ($type) = $_->get_Annotations('datatype') || 'standard';
+	unless (defined $_->annotation) {
+	    $self->warn("Nexml annotations not prepared for this population--proceeding by setting a default; see pod for Bio::PopGen::IO::nexml for information");
+	    my $ac = Bio::Annotation::Collection->new();
+	    $ac->add_Annotation('datatype', Bio::Annotation::SimpleValue->new(-value => 'standard'));
+	    $_->annotation($ac);
+	    for my $i ($_->get_Individuals) {
+		$i->annotation || $i->annotation(Bio::Annotation::Collection->new());
+	    }
+	}
+#	my $type = ($_->annotation->get_Annotations('datatype'))[0]->value;
 	my $taxa = $fac->create_bphylo_taxa($_);
 	my $matrix = $fac->create_bphylo_popn($_, $taxa);
 	$matrix->set_taxa($taxa);
