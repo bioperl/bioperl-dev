@@ -5,7 +5,6 @@ use strict;
 use Bio::Root::Test;
 test_begin( -tests=>46 );
 
-chdir ('../..'); # hack to allow run from t dir
 use_ok( 'Bio::Tree::Tree' );
 use_ok( 'Bio::TreeIO' );
 use_ok('Bio::TreeIO::nexml'); # checks that your module is there and loads ok

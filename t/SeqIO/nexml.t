@@ -3,8 +3,6 @@
 
 use strict;
 
-chdir('../..'); # hack to allow run from t
-
 use Bio::Root::Test;
 test_begin( -tests=>44 );
 use_ok( 'Bio::PrimarySeq' );
