@@ -15,7 +15,7 @@
 
 =head1 NAME
 
-Bio::SeqIO::nexml - nexml sequence input/output stream
+Bio::SeqIO::nexml - NeXML sequence input/output stream
 
 =head1 SYNOPSIS
 
@@ -23,7 +23,8 @@ Do not use this module directly.  Use it via the Bio::SeqIO class.
 
 =head1 DESCRIPTION
 
-This object can transform Bio::Seq objects to and from nexml xml files.
+This object can transform Bio::Seq objects to and from NeXML format.
+For more information on the NeXML standard, visit L<http://www.nexml.org>.
 
 =head1 FEEDBACK
 

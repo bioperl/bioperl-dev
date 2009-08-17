@@ -16,7 +16,7 @@
 
 =head1 NAME
 
-Bio::NexmlIO - stream handler for nexml documents
+Bio::NexmlIO - stream handler for NeXML documents
 
 =head1 SYNOPSIS
 
@@ -39,11 +39,22 @@ Bio::NexmlIO - stream handler for nexml documents
 
 =head1 DESCRIPTION
 
-Bio::NexmlIO is a handler for a Nexml document.  A Nexml document can represent three different data types: simple sequences, alignments, and trees. NexmlIO has four main methods next_tree, next_seq, next_aln, and write. NexmlIO returns bioperl seq, tree, and aln objects which can be manipulated then passed to the write method of a new NexmlIO instance to allow the creation of a nexml document.
+Bio::NexmlIO is an I/O handler for a NeXML document.  A NeXML document can
+represent three different data types: simple sequences, alignments,
+and trees. NexmlIO has four main methods next_tree, next_seq,
+next_aln, and write. NexmlIO returns bioperl seq, tree, and aln
+objects which can be manipulated then passed to the write method of a
+new NexmlIO instance to allow the creation of a NeXML document.
 
-Each bioperl object contains all the information necessary to recreate a Bio::Phylo::Taxa object, so each time a bioperl object is converted to a biophylo object I check to see if its associated taxa has already been created (with a hash using the NexmlIO_ID and Taxa_ID to create a unique string). If not I create it; if so, I just use that taxa object to link the Bio::Phylo tree or matrix to.
+Each bioperl object contains all the information necessary to recreate
+a Bio::Phylo::Taxa object, so each time a bioperl object is converted
+to a biophylo object, the bioperl object is checked to see if its
+associated taxa has already been created (against a hash using the
+NexmlIO_ID and Taxa_ID to create a unique string). If not, it is
+created; if so, that taxa object is used to link the Bio::Phylo tree
+or matrix.
 
-For more information on the Nexml format, see L<http://www.nexml.org>.
+For more information on the NeXML format, see L<http://www.nexml.org>.
 
 =head1 FEEDBACK
 

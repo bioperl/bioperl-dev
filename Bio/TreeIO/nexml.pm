@@ -14,7 +14,7 @@
 
 =head1 NAME
 
-Bio::TreeIO::nexml - A TreeIO driver module for parsing Nexml tree files
+Bio::TreeIO::nexml - A TreeIO driver module for parsing NeXML tree files
 
 =head1 SYNOPSIS
 
@@ -25,7 +25,8 @@ Bio::TreeIO::nexml - A TreeIO driver module for parsing Nexml tree files
 
 =head1 DESCRIPTION
 
-This is a driver module for parsing tree data in a Nexml format.
+This is a driver module for parsing tree data in a NeXML format. For
+more information on NeXML, visit L<http://www.nexml.org>.
 
 =head1 FEEDBACK
 

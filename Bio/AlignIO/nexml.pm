@@ -9,17 +9,16 @@
 
 =head1 NAME
 
-Bio::AlignIO::nexml - nexml sequence input/output stream
+Bio::AlignIO::nexml - NeXML format sequence alignment input/output stream driver
 
 =head1 SYNOPSIS
 
-Do not use this module directly.  Use it via the L<Bio::AlignIO> 
-class.
+Do not use this module directly.  Use it via the L<Bio::AlignIO> class.
 
 =head1 DESCRIPTION
 
 This object can transform L<Bio::SimpleAlign> objects to and from
-nexml files.
+NeXML format. For more information on NeXML, visit L<http://www.nexml.org>.
 
 =head1 FEEDBACK
 
