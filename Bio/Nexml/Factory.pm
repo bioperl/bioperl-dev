@@ -80,21 +80,20 @@ package Bio::Nexml::Factory;
 
 use strict;
 
-# check for Bio::Phylo
 BEGIN {
     use Bio::Root::Root;
     unless (eval "require Bio::Phylo; 1") {
-	Bio::Root::Root->throw("NeXML support requires the Bio::Phylo package to be installed. You can find out how to obtain Bio::Phylo at http://www.nexml.org.");
+	Bio::Root::Root->throw("Bio::Phylo package required; see http://www.nexml.org for download details");
     }
 }
-	    
-# isolate all Bio::Phylo includes here in Factory
-use Bio::Phylo::IO qw(parse unparse);
+	
 use Bio::Phylo::Factory;
 use Bio::Phylo::Matrices;
 use Bio::Phylo::Matrices::Matrix;
 use Bio::Phylo::Matrices::Datum;
 use Bio::Phylo::Forest::Tree;
+use Bio::Phylo::Matrices;
+use Bio::Phylo::IO;
 
 use Bio::SeqFeature::Generic;
 use Bio::PopGen::Population;
@@ -708,6 +707,7 @@ sub create_bphylo_popn {
     my $allele_tbl;
     if ( $type eq 'standard' ) {
 ## need to make two-d: chars X states = markers X alleles ##
+	$DB::single=1;
 	my (%a,@st);
 # want to get alleles from markers not individs
 	for my $mrk (sort $popn->get_marker_names) {
@@ -722,8 +722,8 @@ sub create_bphylo_popn {
 	
     for my $i ( @inds ) {
 	#create data linked to taxa
-	my @data = $self->create_bphylo_datum($i, $taxa, '-alleles'=>$allele_tbl,'-type_object' => $to);                                    	
-	$matrix->insert(@data);
+	my $datum = $self->create_bphylo_datum($i, $taxa, '-alleles'=>$allele_tbl,'-type_object' => $to);                                    	
+	$matrix->insert($datum);
     }  
     return $matrix;
 }
@@ -965,16 +965,17 @@ sub create_bphylo_datum {
 	# following code writes only markers with data present for
 	# the individual -- does Bio::Phylo take care of the missing
 	# data, or is that our responsibility?/maj
+	$datum = $class->new(@args);
 	foreach my $mrk (sort $obj->get_marker_names) {
-	    $datum = $class->new(@args);
-	    $datum->set_name( $name ) if defined $name;
-	    $datum->set_taxon($taxa->get_by_name($taxon_name));
+	    my $d = $class->new(@args);
+	    $d->set_name( $mrk);
+	    $d->set_taxon($taxa->get_by_name($taxon_name));
 	    my @a = map { $alleles ? $$alleles{$mrk}{$_} : $_ } $obj->get_Genotypes(-marker=>$mrk)->get_Alleles;
-	    $datum->set_char(@a);
-	    $datum->set_desc( $mrk ); # marker name
-	    push @data, $datum;
+	    $d->set_char(@a);
+	    $d->set_desc( $obj->{_population} ? $obj->{_population}->get_Marker($mrk)->description : $mrk ); 
+	    $datum->concat($d);
 	}
-	return @data;
+	return $datum;
     };
 }
 

@@ -370,7 +370,6 @@ sub write {
 			($taxa_o) = $nexml_fac->create_bphylo_taxa($seq);
 			$taxa_hash{$seq->{_Nexml_ID}} = $taxa_o;
 		}
-		$DB::single=1;
 		$datum = $nexml_fac->create_bphylo_seq($seq, $taxa_o);
 		#check if this Bio::Phylo::Matrices::Matrix obj has already been created
 		if (defined $seq_matrices{ $seq->{_Nexml_matrix_ID} }) {

@@ -3,12 +3,11 @@
 
 use strict;
 
-chdir('..'); # hack to allow run from t
-use lib ('..');
 use Bio::Root::Test;
 use Bio::Tree::Tree;
 use Bio::TreeIO;
-test_begin( -tests=>125 );
+test_begin( -tests=>125,
+	    -requires_modules => [qw(Bio::Phylo)]);
 
 use_ok('Bio::NexmlIO');
 
@@ -53,14 +52,14 @@ my $in_nexmlIO = Bio::NexmlIO->new(-file => test_input_file('characters+trees.ne
 	ok( my $seq1 = $in_nexmlIO->next_seq() );
 	isa_ok($seq1, 'Bio::Seq');
 	is( $seq1->alphabet,		'dna',					"alphabet" );
-	is( $seq1->primary_id,	'DNA sequences.seq_1',	"primary_id");
+	is( $seq1->primary_id,	'dna_seq_1',	"primary_id");
 	is( $seq1->display_id,	'dna_seq_1',			"display_id");
 	is( $seq1->seq,			'ACGCTCGCATCGCATC',		"sequence");
 
 	#checking second sequence object
 	ok( my $seq2 = $in_nexmlIO->next_seq() );
 	is( $seq2->alphabet,		'dna',					"alphabet" );
-	is( $seq2->primary_id,	'DNA sequences.seq_2',	"primary_id");
+	is( $seq2->primary_id,	'dna_seq_2',	"primary_id");
 	is( $seq2->display_id,	'dna_seq_2',			"display_id");
 	is( $seq2->seq,			'ACGCTCGCATCGCATT',		"sequence");
 	ok( my $seq3 = $in_nexmlIO->next_seq() );
@@ -158,14 +157,14 @@ my $in_nexmlIO_roundtrip = Bio::NexmlIO->new(-file => $outdata);
 	ok( my $seq5 = $in_nexmlIO_roundtrip->next_seq() );
 	isa_ok($seq5, 'Bio::Seq');
 	is( $seq5->alphabet,		'dna',					"alphabet" );
-	is( $seq5->primary_id,	'DNA sequences.seq_1',	"primary_id");
+	is( $seq5->primary_id,	'dna_seq_1',	"primary_id");
 	is( $seq5->display_id,	'dna_seq_1',			"display_id");
 	is( $seq5->seq,			'ACGCTCGCATCGCATC',		"sequence");
 
 	#checking second sequence object
 	ok( my $seq6 = $in_nexmlIO_roundtrip->next_seq() );
 	is( $seq6->alphabet,		'dna',					"alphabet" );
-	is( $seq6->primary_id,	'DNA sequences.seq_2',	"primary_id");
+ 	is( $seq6->primary_id,	'dna_seq_2',	"primary_id");
 	is( $seq6->display_id,	'dna_seq_2',			"display_id");
 	is( $seq6->seq,			'ACGCTCGCATCGCATT',		"sequence");
 	#check extract_seqs method

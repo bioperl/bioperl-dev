@@ -220,9 +220,9 @@ sub write_population{
 	    $_->annotation($ac);
 	    for my $i ($_->get_Individuals) {
 		$i->annotation || $i->annotation(Bio::Annotation::Collection->new());
+		$i->{_population} = $_; # kludge to access marker descriptions later
 	    }
 	}
-#	my $type = ($_->annotation->get_Annotations('datatype'))[0]->value;
 	my $taxa = $fac->create_bphylo_taxa($_);
 	my $matrix = $fac->create_bphylo_popn($_, $taxa);
 	$matrix->set_taxa($taxa);
