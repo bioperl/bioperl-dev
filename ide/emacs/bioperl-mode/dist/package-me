@@ -1,0 +1,3 @@
+#!/bin/bash
+tar -cvf bioperl-mode.tar --exclude-tag-all=SKIP --exclude-vcs --directory=.. --exclude=#*.* --exclude=*.*~ .
+md5sum bioperl-mode.tar > bioperl-mode.tar.md5
