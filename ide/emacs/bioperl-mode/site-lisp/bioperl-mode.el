@@ -32,6 +32,16 @@
 ;;
 ;;  - compile to byte code
 ;;
+;; back-compatibility issue
+;; - require a completing-read that works with emacs 21
+;;   * no "test-completion" metho
+;;   * completing-read COLLECTION of 22 is TABLE of 21, 
+;;     which must be an alist 
+;; issues
+;; - bioperl-view-mode isn't always getting its keymap
+;; - missing tool in tool-bar??
+;; - xemacs support?
+;;
 ;; Installation
 ;;
 ;;  The files bioperl-mode.el, bioperl-skel.el, and bioperl-init.el
@@ -103,6 +113,12 @@
 (defcustom bioperl-mode-active-on-perl-mode-flag t
   "If set, perl-mode will begin with bioperl-mode active.
 Boolean."
+  :type 'boolean
+  :group 'bioperl)
+
+(defcustom bioperl-mode-safe-flag t
+  "If set, bioperl-mode with substitute `exec-path' with `bioperl-safe-PATH'.
+Nil means use your current `exec-path'."
   :type 'boolean
   :group 'bioperl)
 
@@ -281,9 +297,11 @@ If LOCAL is set, remove hook from the buffer-local value of perl-mode-hook."
 ;; list getters
 ;;
 
-(defun bioperl-method-names (module) 
+(defun bioperl-method-names (module &optional as-alist) 
 
-  "Returns a list of method names as given in the pod of MODULE. MODULE is in double-colon format.
+  "Returns a list of method names as given in the pod of MODULE. 
+MODULE is in double-colon format. If AS-ALIST is t, return an
+alist with elts as (NAME . nil).
 
 This function looks first to see if methods for MODULE are
 already loaded in `bioperl-method-pod-cache'; if not, calls
@@ -293,16 +311,23 @@ already loaded in `bioperl-method-pod-cache'; if not, calls
   (unless (bioperl-path-from-perl module)
     (error "Module specified by MODULE not found in installation"))
   ;; check the cache; might get lucky...
-  (if (string-equal module bioperl-cached-module)
-      (mapcar 'car bioperl-method-pod-cache)
-    (mapcar 'car (bioperl-slurp-methods-from-pod module))))
+  (let ( (ret) ) 
+    (setq ret 
+	  (if (string-equal module bioperl-cached-module)
+	      (mapcar 'car bioperl-method-pod-cache)
+	    (mapcar 'car (bioperl-slurp-methods-from-pod module)))) 
+    (if as-alist
+	(mapcar (lambda (x) (list x nil)) ret)
+      ret)))
 
 
-(defun bioperl-module-names (module-dir &optional retopt)
+(defun bioperl-module-names (module-dir &optional retopt as-alist)
   "Returns a list of modules contained in the directory indicated by MODULE-DIR.
 MODULE-DIR is in double-colon format.  Optional RETOPT: nil,
 return module names only (default); t, return directory names
-only; other, return all names as a flat list.
+only; other, return all names as a flat list. Optional AS-ALIST:
+if t, return an alist with elts (NAME . nil) (when used in 
+completing functions, for back-compat with Emacs 21).
 
  This function is responsible for the lazy loading of the module
 names cache: it will look first in `bioperl-module-names-cache'; if
@@ -310,37 +335,38 @@ the MODULE-DIR is not available,
 `bioperl-add-module-names-to-cache' will be called."
   (let (
 	(module-components (split-string module-dir "::"))
-	(alist nil)
+	(unlist (lambda (x) (if (listp x) (car x) x)) )
+	(unlist-lists (lambda (x) (if (listp x) (car x) nil)) )
+	(unlist-strs  (lambda (x) (if (listp x) nil x)) )
+	(ret)
 	)
     (setq alist (deep-assoc module-components bioperl-module-names-cache))
     (if (and alist (cdr alist))
 	(cond 
 	 ( (not (booleanp retopt)) 
-	   (mapcar (lambda (x) (if (listp x) (car x) x)) 
-		   (cdr alist)))
+	   (setq ret (mapcar unlist (cdr alist))))
 	 ((not retopt)
-	  (delete nil (mapcar 
-		       (lambda (x) (if (listp x) nil x)) 
-		       (cdr alist))))
+	  (setq ret (delete nil (mapcar unlist-strs (cdr alist)))))
 	 ( retopt
-	  (delete nil (mapcar 
-		       (lambda (x) (if (listp x) (car x) nil)) 
-		       (cdr alist)))))
+	  (setq ret (delete nil (mapcar unlist-lists (cdr alist))))))
       (if (bioperl-add-module-names-to-cache module-dir)
 	  (cond
 	   ( (not (booleanp retopt))
-	     (mapcar 
-	      (lambda (x) (if (listp x) (car x) x)) 
-	      (cdr (deep-assoc module-components bioperl-module-names-cache))))
+	     (setq ret
+		   (mapcar unlist 
+			   (cdr (deep-assoc module-components bioperl-module-names-cache)))))
 	   ((not retopt)
-	     (delete nil (mapcar 
-			  (lambda (x) (if (listp x) nil x)) 
-			  (cdr (deep-assoc module-components bioperl-module-names-cache)))))
-	   ( retopt
-	     (delete nil (mapcar 
-			  (lambda (x) (if (listp x) (car x) nil)) 
+	    (setq ret
+		  (delete nil (mapcar unlist-strs
 			  (cdr (deep-assoc module-components bioperl-module-names-cache))))))
-	nil))))
+	   ( retopt
+	     (setq ret
+		   (delete nil (mapcar unlist-lists
+			  (cdr (deep-assoc module-components bioperl-module-names-cache))))))
+	nil)))
+    (if (not as-alist) 
+	ret
+      (mapcar (lambda (x) (list x nil)) ret))))
 
 
 ;;
@@ -368,7 +394,8 @@ MODULE is in double-colon format."
       (unless pmfile
 	(error "Module specified by MODULE not found in installation"))
       ;; safe path
-      (setq exec-path bioperl-safe-PATH)
+      (if bioperl-mode-safe-flag
+	  (setq exec-path bioperl-safe-PATH))
       ;; untaint pod2text args
       (setq args (remove 
 		  nil 
@@ -412,7 +439,8 @@ MODULE is in double-colon format."
     (unless pmfile
       (error "Module specified by MODULE not found in installation"))
     ;; safe path
-    (setq exec-path bioperl-safe-PATH)
+    (if bioperl-mode-safe-flag
+	(setq exec-path bioperl-safe-PATH))
     (save-excursion
       (set-buffer pod-buf)
       (setq header-line-format (concat section " - BioPerl module " module))
@@ -484,65 +512,66 @@ This function, when successful, also sets the cache vars
 	(old-exec-path exec-path)
 	)
     ;; safe path
-    (setq exec-path bioperl-safe-PATH)
-    (with-temp-buffer
-      (if (not (= 0
-		(call-process bioperl-system-pod2text
+      (if bioperl-mode-safe-flag
+	  (setq exec-path bioperl-safe-PATH))
+      (with-temp-buffer
+	(if (not (= 0
+		    (call-process bioperl-system-pod2text
 				  nil t t pmfile "-a")))
-	  (error "pos2text failed"))
-            ;; clip to desired section
-      (goto-char (point-min))
-      (if (search-forward "= APPENDIX" (point-max) t)
-	  (progn
-	    (beginning-of-line)
-	    (delete-region (point-min) (point))
-	    ;; looking down into appendix
-	    ;; 
-	    (while (re-search-forward "^==\\s +\\([a-zA-Z0-9_]+\\)" 
-				      (point-max) t)
-	      (setq method (match-string 1))
-	      (setq data-elt (cons method '()))
-	      ;; now we have the current method...
-	      ;; find the boundary of this method's pod
-	      (save-excursion
-		(setq bound (progn (re-search-forward "^=" 
-						      (point-max) 1)
-				   (beginning-of-line)
-				   (point))))
-	      ;; now parse out the guts of this method's pod
-	      ;; getting pod-keys and their content...
-	      (while (re-search-forward 
-		      "^\\s +\\([A-Za-z]+\\)\\s *:\\s *\\(.*\\)$"
-		      bound t)
-		(setq pod-key (match-string 1))
-		(setq content (match-string 2))
-		(save-excursion 
-		  (setq content 
-			(concat content 
-				(buffer-substring 
-				 (point) (if (re-search-forward "^\\s +[A-Za-z]+\\s *:" bound 1)
-					     (progn (beginning-of-line) (point))
-					   (point)))))
-		  )
-		;; squeeze whitespace from content
-		(setq content (replace-regexp-in-string "\n+" "!!" content))
-		(setq content (replace-regexp-in-string ";$" "" content))
-		(setq content (replace-regexp-in-string "\\s +" " " content))
+	    (error "pos2text failed"))
+	;; clip to desired section
+	(goto-char (point-min))
+	(if (search-forward "= APPENDIX" (point-max) t)
+	    (progn
+	      (beginning-of-line)
+	      (delete-region (point-min) (point))
+	      ;; looking down into appendix
+	      ;; 
+	      (while (re-search-forward "^==\\s +\\([a-zA-Z0-9_]+\\)" 
+					(point-max) t)
+		(setq method (match-string 1))
+		(setq data-elt (cons method '()))
+		;; now we have the current method...
+		;; find the boundary of this method's pod
+		(save-excursion
+		  (setq bound (progn (re-search-forward "^=" 
+							(point-max) 1)
+				     (beginning-of-line)
+				     (point))))
+		;; now parse out the guts of this method's pod
+		;; getting pod-keys and their content...
+		(while (re-search-forward 
+			"^\\s +\\([A-Za-z]+\\)\\s *:\\s *\\(.*\\)$"
+			bound t)
+		  (setq pod-key (match-string 1))
+		  (setq content (match-string 2))
+		  (save-excursion 
+		    (setq content 
+			  (concat content 
+				  (buffer-substring 
+				   (point) (if (re-search-forward "^\\s +[A-Za-z]+\\s *:" bound 1)
+					       (progn (beginning-of-line) (point))
+					     (point)))))
+		    )
+		  ;; squeeze whitespace from content
+		  (setq content (replace-regexp-in-string "\n+" "!!" content))
+		  (setq content (replace-regexp-in-string ";$" "" content))
+		  (setq content (replace-regexp-in-string "\\s +" " " content))
 		;; here we have, for the current method,
-		;; the current pod-key and its content...
+		  ;; the current pod-key and its content...
+		  (setq data-elt-cdr (cdr data-elt))
+		  (setcdr data-elt (push (cons pod-key content) data-elt-cdr )))
+		;; copy the data-elt into the data alist...
 		(setq data-elt-cdr (cdr data-elt))
-		(setcdr data-elt (push (cons pod-key content) data-elt-cdr )))
-	      ;; copy the data-elt into the data alist...
-	      (setq data-elt-cdr (cdr data-elt))
-	      (push (cons (car data-elt) data-elt-cdr) data))
-	    ;; set cache vars
-	    (setq bioperl-method-pod-cache 
-		  (sort data (lambda (a b) (string-lessp (car a) (car b)))))
-	    (setq bioperl-cached-module module)
-	    ;; return the data alist for this module...
-	    bioperl-method-pod-cache )
-	;; the APPENDIX was not found...return nil
-	nil ) ))))
+		(push (cons (car data-elt) data-elt-cdr) data))
+	      ;; set cache vars
+	      (setq bioperl-method-pod-cache 
+		    (sort data (lambda (a b) (string-lessp (car a) (car b)))))
+	      (setq bioperl-cached-module module)
+	      ;; return the data alist for this module...
+	      bioperl-method-pod-cache )
+	  ;; the APPENDIX was not found...return nil
+	  nil ) ))))
 
 ;;
 ;; directory slurpers
@@ -693,7 +722,7 @@ not t or nil, return a directory only."
 	)
     (setq module-components (split-string module "::"))
     ;; unixize...
-    (setq pth (subst-char-in-string ?\\ ?/ bioperl-module-path))
+    (setq pth (replace-regexp-in-string "\\\\" "/" bioperl-module-path))
     
     (while (not (null module-components))
       (setq pth (concat pth "/" (car module-components)))
@@ -833,7 +862,7 @@ if t, the reader barfs out whatever was finally entered."
 	  (setq done t)
 	(setq mod (completing-read 
 		   (concat prompt-prefix nmspc " Module: ")
-		   (bioperl-module-names nmspc) nil (not no-retry)
+		   (bioperl-module-names nmspc nil t) nil (not no-retry)
 		   (if mod (replace-regexp-in-string "^\*" "" mod) nil)))
 	;; allow a backup into namespace completion
 	(if (or no-retry (not (string-equal mod "")))
@@ -852,7 +881,7 @@ if t, the reader barfs out whatever was finally entered."
       (unless (or (not done) (not (and nmspc mod)) (not get-method))
 	(setq mth (completing-read
 		   (concat prompt-prefix "Method in " nmspc "::" mod ": ")
-		   (bioperl-method-names (concat nmspc "::" mod)) nil (not no-retry)))
+		   (bioperl-method-names (concat nmspc "::" mod) t) nil (not no-retry)))
 	(if (or no-retry (not (string-equal mth "")))
 	    (setq done t)
 	    ;; allow a backup into module completion
@@ -873,7 +902,7 @@ Allows the lazy build of the `bioperl-module-names-cache'."
 	    (lambda (x) (setq x (if (listp x) (car x) x) ) (if (string-match "[a-zA-Z0-9_:]+" x) t nil))
 	    ))
   (let (
-	( collection (if (string-equal str "") '("Bio") (bioperl-make-collection str t)) )
+	( collection (if (string-equal str "") '(("Bio" . nil )) (bioperl-make-collection str t)) )
 	( str-trunc (if (string-match ":" str)
 			(progn (string-match  "^\\(\\(?:[a-zA-Z0-9_]+::\\)+\\)\\(?::*\\|[a-zA-Z0-9_]*\\)$" str) (match-string 1 str))
 		      str) )
@@ -887,10 +916,14 @@ Allows the lazy build of the `bioperl-module-names-cache'."
 	(setq collection (bioperl-make-collection str-trunc t)))
     (if (not collection) 
 	nil
-      (setq collection (sort collection 'string-lessp))
+      (setq collection (sort collection (lambda (x y) (string< (car x) (car y)))))
       (cond
        ((not (booleanp flag)) ;; 'lambda' or test-completion option
-	(test-completion str collection pred)
+	;; this is a back-compat issue: emacs 21 will send 'lambda', 
+	;; but doesn't have 'test-completion
+	(if (boundp 'test-completion)
+	    (test-completion str collection pred)
+	  (try-completion str collection pred))
 	)
        ( (not flag) ;; try-completion option
 	   (try-completion str collection pred)
@@ -918,10 +951,12 @@ colons.  RETOPT is as for `bioperl-module-names'."
 		       m) )
 	   ( dirs nil )
 	   )
-      (setq dirs (bioperl-module-names module-dir retopt))
+      (setq dirs (bioperl-module-names module-dir retopt t))
       (if dirs
-	  (append complet (mapcar (lambda (x) (concat module-dir "::" x)) dirs))
-	nil)
+	  (setq complet (append complet (mapcar (lambda (x) (concat module-dir "::" 
+						      (if (listp x) (car x) x))) dirs)))
+	(setq complet nil))
+      (mapcar (lambda (x) (list x nil)) complet)
       )))
 
 ;;
@@ -930,7 +965,7 @@ colons.  RETOPT is as for `bioperl-module-names'."
 
 (defun bioperl-check-system-pod2text ()
   "See if `bioperl-system-pod2text' is naughty."
-  (if (and bioperl-system-pod2text (string-match "pod2text\\(\\|\\.bat|\\.exe\\)$" bioperl-system-pod2text))
+  (if (and bioperl-system-pod2text (string-match "pod2text\\(\\|\\.bat\\|\\.exe\\)$" bioperl-system-pod2text))
       t
     nil))
 

@@ -137,7 +137,9 @@ be used by `defcustom' to initialize"
   (let ( (old-exec-path exec-path)
 	 (pth nil))
     ;; safe path
-    (setq exec-path bioperl-safe-PATH)
+    (if (or (not (boundp 'bioperl-mode-safe-flag))
+	    bioperl-mode-safe-flag)
+	(setq exec-path bioperl-safe-PATH))
     ;; see if pod2text runs...if so do the easy thing
     (setq bioperl-system-pod2text
      (if (eq (call-process "pod2text" nil nil t) 0)
@@ -159,7 +161,9 @@ initializaton."
 	(old-exec-path exec-path) 
 	(pth nil) )
     ;; safe path
-    (setq exec-path bioperl-safe-PATH)
+    (if (or (not (boundp 'bioperl-mode-safe-flag))
+	    bioperl-mode-safe-flag)
+	(setq exec-path bioperl-safe-PATH))
     ;; ask perl first...
     (setq pth
 	  (with-temp-buffer
@@ -172,26 +176,28 @@ initializaton."
     ;; reset path
     (setq exec-path old-exec-path)
     ;; file name port issue - unixize
-    (subst-char-in-string ?\\ ?/ pth t)
+    (setq pth (replace-regexp-in-string "\\\\" "/" pth))
     (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil))
 
     ;; try the environment
     (unless pth
-      (setq pth (getenv "PERL5LIB"))
-      ;; unixize
-      (subst-char-in-string ?\\ ?/ pth t)
-      (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil))
+      (if (setq pth (getenv "PERL5LIB"))
+	  (progn
+	    ;; unixize
+	    (setq pth (replace-regexp-in-string "\\\\" "/" pth))
+	    (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil))))
       )
     ;; fall back to pwd
     (unless pth
       (setq pth (nth 1 (split-string (pwd))))
       ;; unixize
-      (subst-char-in-string ?\\ ?/ pth t)
+      (setq pth (replace-regexp-in-string "\\\\" "/" pth))
+
       (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil))
       )
     (if pth
 	(setq bioperl-module-path pth)
-      (message "Can't find Bio modules; try setting bioperl-module-path manually")
+      (message "Can't find Bio modules; defaulting to pwd -- try setting bioperl-module-path manually")
       (setq bioperl-module-path "."))
   pth))
 
