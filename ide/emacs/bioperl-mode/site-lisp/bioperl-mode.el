@@ -694,6 +694,8 @@ MODULE-DIR is in double-colon format."
   (interactive)
   (unless bioperl-module-path
     (error "bioperl-module-path not yet set; you can set it with bioperl-find-module-path"))
+  (unless (file-exists-p (concat bioperl-module-path "/Bio"))
+    (error "Bio modules not present in `bioperl-module-path'; set `bioperl-module-path' manually"))
   (let (
 	(found (thing-at-point-looking-at "Bio::[a-zA-Z_:]+"))
 	(module nil)
@@ -713,6 +715,8 @@ directory over a .pm file if there is a choice. If DIR-FIRST is
 not t or nil, return a directory only."
   (unless bioperl-module-path
     (error "bioperl-module-path not yet set; you can set it with bioperl-find-module-path"))
+  (unless (file-exists-p (concat bioperl-module-path "/Bio"))
+    (error "Bio modules not present in `bioperl-module-path'; set `bioperl-module-path' manually"))
   (unless (stringp module)
     (error "string arg required at MODULE"))
   (let (

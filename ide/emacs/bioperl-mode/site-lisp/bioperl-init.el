@@ -181,12 +181,19 @@ initializaton."
 
     ;; try the environment
     (unless pth
-      (if (setq pth (getenv "PERL5LIB"))
+      (let (
+	    ( plib (concat (getenv "PERL5LIB") path-separator (getenv "PATH")))
+	    ( pths )
+	    )
+	(if plib
 	  (progn
+	    (setq pths (split-string plib path-separator))
+	    (while (and (not pth) pths)
 	    ;; unixize
-	    (setq pth (replace-regexp-in-string "\\\\" "/" pth))
-	    (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil))))
-      )
+;;	    (setq pth (replace-regexp-in-string "\\\\" "/" pth))
+	      (setq pth (pop pths))
+	      (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil)))
+	    ))))
     ;; fall back to pwd
     (unless pth
       (setq pth (nth 1 (split-string (pwd))))
