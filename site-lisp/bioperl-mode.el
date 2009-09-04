@@ -1,5 +1,7 @@
 ;; $Id$
 
+;; use multiple paths in bioperl-module-path
+
 ;;
 ;; Bioperl minor (haha!) mode
 ;; 
@@ -34,7 +36,7 @@
 ;;
 ;; back-compatibility issue
 ;; - require a completing-read that works with emacs 21
-;;   * no "test-completion" metho
+;;   * no "test-completion" method
 ;;   * completing-read COLLECTION of 22 is TABLE of 21, 
 ;;     which must be an alist 
 ;; issues
@@ -146,8 +148,9 @@ On init, set is attempted by `bioperl-find-system-pod2text'."
 
 (defcustom bioperl-module-path nil
   "Local path to Bioperl modules.
-On init, set is attempted by `bioperl-find-module-path'"
-  :type 'file
+On init, set is attempted by `bioperl-find-module-path' Can indicate multiple search paths; define as PATH in your OS. The environment variable BPMODE_PATH will override everything."
+;; better type 'choice; do later
+  :type 'string
   :initialize 'bioperl-find-module-path
   :group 'bioperl)
 
@@ -373,7 +376,7 @@ the MODULE-DIR is not available,
 ;; pod slurpers
 ;;
 
-(defun bioperl-view-full-pod (module) 
+(defun bioperl-view-full-pod (module &optional n) 
   "Open the Bioperl POD for the MODULE for viewing in another buffer.
 MODULE is in double-colon format."
   (unless bioperl-system-pod2text 
@@ -383,12 +386,16 @@ MODULE is in double-colon format."
     (error "Unexpected command in bioperl-system-pod2text; aborting..."))
   (unless (and module (stringp module))
     (error "String required at arg MODULE"))
+  (unless (and n (numberp n))
+    (error "Number required at arg N"))
+  (unless n
+    (setq n 0))
   (if (not module)
       nil
     (let (
 	  (old-exec-path exec-path)
 	  (pod-buf (generate-new-buffer "*BioPerl POD*"))
-	  (pmfile (bioperl-path-from-perl module))
+	  (pmfile (bioperl-path-from-perl module nil n))
 	  (args bioperl-pod2text-args)
 	  )
       (unless pmfile
@@ -415,8 +422,11 @@ MODULE is in double-colon format."
     ;;return val
     t ))
 
-(defun bioperl-view-pod-section (module section)
-  "Open the Bioperl POD for the module PMFILE for viewing in another buffer."
+(defun bioperl-view-pod-section (module section &optional n)
+  "Open the Bioperl POD for the module PMFILE for viewing in another buffer.
+MODULE is in double-colon format. SECTION is a string; one of
+SYNOPSIS, DESCRIPTION, or APPENDIX. N is the index of the desired
+component of bioperl-module-path."
   (unless bioperl-system-pod2text 
     (unless (bioperl-find-system-pod2text)
       (error "Can't find pod2text; try setting bioperl-system-pod2text manually")))
@@ -428,12 +438,15 @@ MODULE is in double-colon format."
     (error "String required at arg SECTION"))
   (unless (member (upcase section) '("SYNOPSIS" "DESCRIPTION" "APPENDIX"))
     (error "SECTION not recognized or handled yet"))
-
+  (unless (and n (numberp n))
+    (error "Number required at arg N"))
+  (unless n
+    (setq n 0))
   (let (
 	(pod-buf (generate-new-buffer "*BioPerl POD*"))
 	(args '("-a"))
 	(ret nil)
-	(pmfile (bioperl-path-from-perl module))
+	(pmfile (bioperl-path-from-perl module nil n))
 	(old-exec-path exec-path)
 	)
     (unless pmfile
@@ -466,6 +479,7 @@ MODULE is in double-colon format."
 	(setq exec-path old-exec-path)
     )
     ret ))
+
 
 (defun bioperl-slurp-methods-from-pod (module) 
   "Parse pod for individual methods for module MODULE.
@@ -577,12 +591,26 @@ This function, when successful, also sets the cache vars
 ;; directory slurpers
 ;;
 
-(defun bioperl-add-module-names-to-cache (module-dir)
+(defun bioperl-add-module-names-to-cache (module-dir &optional n)
   "Add alists to `bioperl-module-names-cache'.
 MODULE-DIR is in double colon format. Allows for lazy build of
-the cache.  Returns t if we added anything, nil if not"
+the cache.  Returns t if we added anything, nil if not. N is the index
+of the desired bioperl-module-path component.
+
+Cache alist format:
+ ( "Bio" . 
+   ( (MODULE_NAME PATH_INDEX) ...        ; .pm file base names
+     (DIRNAME . nil) ...           ; dirname read but not yet followed
+     (DIRNAME . ( ... ) ) ... )    ; dirname assoc with >=1 level structure
+ )	      
+"				     
+ 
   (unless (and module-dir (stringp module-dir))
     (error "String required at arg MODULE-DIR"))
+  (unless (and n (numberp n))
+    (error "Number required at arg N"))
+  (unless n
+    (setq n 0))
   (let (
 	(pth (bioperl-path-from-perl module-dir 1))
 	(module-components (split-string module-dir "::"))
@@ -641,16 +669,24 @@ the cache.  Returns t if we added anything, nil if not"
 	))
   ret ))
 
-(defun bioperl-slurp-module-names (module-dir)
+(defun bioperl-slurp-module-names (module-dir &optional n)
   "Return list of basenames for .pm files contained in MODULE-DIR.
-MODULE-DIR is in double-colon format."
+MODULE-DIR is in double-colon format. N is the index of the desired 
+bioperl-module-path component."
   (unless (and module-dir (stringp module-dir))
     (error "String required at arg MODULE-DIR"))
+  (unless (and n (numberp n))
+    (error "Number required at arg N"))
+  (unless n
+    (setq n 0))
   (let (
-	(pth (bioperl-path-from-perl module-dir 1))
+	(module-path (elt (split-string bioperl-module-path path-separator) 0))
+	(pth (bioperl-path-from-perl module-dir 1 n))
 	(modules nil)
 	(fnames nil)
        )
+    (if (and (> n 0) (> n (1- (length module-path))))
+	(error "Path index out of bounds at arg N"))
     ;; following (elt ... 0) checks if pth is dir or symlink
     ;; possible bug...
     ;; try including directory names too, as (list (cons name nil))
@@ -677,7 +713,7 @@ MODULE-DIR is in double-colon format."
 ;;
 
 (defun bioperl-module-at-point ()
-  "Look for something like a module declaration at point, and return it."
+  "Look for something like a module identifier at point, and return it."
   (interactive)
   (let (
 	(found (thing-at-point-looking-at "Bio::[a-zA-Z_:]+"))
@@ -689,44 +725,60 @@ MODULE-DIR is in double-colon format."
       (setq module (apply 'buffer-substring (match-data)))
       module)))
 
-(defun bioperl-find-module-at-point ()
-  "Look for something like a module declaration at point, and return a filepath corresponding to it."
+(defun bioperl-find-module-at-point (&optional n)
+  "Look for something like a module declaration at point, and return a filepath corresponding to it.
+N is the index of the desired bioperl-module-path component."
   (interactive)
+  (unless (and n (numberp n))
+    (error "Number required at arg N"))
+  (unless n
+    (setq n 0))
   (unless bioperl-module-path
-    (error "bioperl-module-path not yet set; you can set it with bioperl-find-module-path"))
-  (unless (file-exists-p (concat bioperl-module-path "/Bio"))
-    (error "Bio modules not present in `bioperl-module-path'; set `bioperl-module-path' manually"))
-  (let (
-	(found (thing-at-point-looking-at "Bio::[a-zA-Z_:]+"))
-	(module nil)
-	(pth nil)
+      (error "bioperl-module-path not yet set; you can set it with bioperl-find-module-path"))
+  (let ( 
+	(module-path (elt (split-string bioperl-module-path path-separator) n))
+	(found) (module) (pth)
 	)
+    (if (and (> n 0) (> n (1- (length module-path))))
+	(error "Path index out of bounds at arg N"))
+    (unless (file-exists-p (concat module-path "/Bio"))
+      (error (concat "Bio modules not present in " module-path "; set `bioperl-module-path' manually")))
+    (setq found (thing-at-point-looking-at "Bio::[a-zA-Z_:]+"))
     (if (not found) 
 	nil
       (setq module (apply 'buffer-substring (match-data)))
-      (setq pth (bioperl-path-from-perl module)))
+      (setq pth (bioperl-path-from-perl module n)))
     pth))
 
 
-(defun bioperl-path-from-perl (module &optional dir-first) 
+(defun bioperl-path-from-perl (module &optional dir-first n) 
   "Return a path to the module file represented by the perl string MODULE.
 Returns nil if no path found. If DIR-FIRST is t, return a
 directory over a .pm file if there is a choice. If DIR-FIRST is
-not t or nil, return a directory only."
+not t or nil, return a directory only. N is an integer, indicating the
+desired member of bioperl-module-path to search."
   (unless bioperl-module-path
     (error "bioperl-module-path not yet set; you can set it with bioperl-find-module-path"))
   (unless (file-exists-p (concat bioperl-module-path "/Bio"))
     (error "Bio modules not present in `bioperl-module-path'; set `bioperl-module-path' manually"))
   (unless (stringp module)
     (error "string arg required at MODULE"))
+  (unless (and n (numberp n))
+    (error "number arg required at N"))
+  ; default
+  (unless n
+    (setq n 0))
   (let (
-	(module-components '())
-	(pth nil)
+	(module-path (elt (split-string bioperl-module-path path-separator) n))
+	(module-components (split-string module "::"))
+	(pth)
 	(dir (if (not (boundp 'dir-first)) nil dir-first))
 	)
+    (if (and (> n 0) (> n (1- (length module-path))))
+	(error "Path index out of bounds at arg N"))
     (setq module-components (split-string module "::"))
     ;; unixize...
-    (setq pth (replace-regexp-in-string "\\\\" "/" bioperl-module-path))
+    (setq pth (replace-regexp-in-string "\\\\" "/" module-path))
     
     (while (not (null module-components))
       (setq pth (concat pth "/" (car module-components)))
@@ -744,7 +796,7 @@ not t or nil, return a directory only."
 	    (setq pth nil)))))
     pth))
 
-(defun bioperl-split-name (module &optional dir-first)
+(defun bioperl-split-name (module &optional dir-first n)
   "Examine MODULE and return a list splitting the argument into an existing namespace and module name.
 MODULE is in double-colon format. This checks existence as well,
 and returns nil if no split corresponds to an existing file. The
@@ -755,25 +807,37 @@ if there is a choice. If DIR-FIRST is not t or nil, return only
 \(namespace nil) or nil.
 
 Finally, if the namespace portion of MODULE exists, but the module
-specified by MODULE does not, (namespace ) is returned."
+specified by MODULE does not, (namespace nil) is returned.
+N specifies the index of the desired bioperl-module-path component. "
+
   (unless (or (not module) (stringp module))
     (error "String arg required at MODULE"))
+  (unless (and n (numberp n))
+    (error "Number required at arg N"))
+  (unless n
+    (setq n 0))
   (if (not module)
       (list nil nil)
     (if (not (string-match "^Bio" module))
 	nil
-      ( let ( (nmspc) (mod) (pmfile) )
+      ( let (
+	     (module-path (elt 
+			   (split-string bioperl-module-path path-separator) n))
+	     (nmspc) (mod) (pmfile) 
+	     )
+	(if (and (> n 0) (> n (1- (length module-path))))
+	    (error "Path index out of bounds at arg N"))
 	(if (not (string-match "::\\([a-zA-Z0-9_]+\\)$" module))
 	    (setq nmspc module)
 	  (setq mod (match-string 1 module))
 	  (setq nmspc (substring module 0 (- (match-beginning 1) 2))))
 	(cond
 	 ( (not (booleanp dir-first))
-	   (if (bioperl-path-from-perl module dir-first)
+	   (if (bioperl-path-from-perl module dir-first n)
 	       (list module nil)
 	     (list (concat "*" module) nil)) )
 	 ( t 
-	   (setq pmfile (bioperl-path-from-perl module dir-first))
+	   (setq pmfile (bioperl-path-from-perl module dir-first n))
 	   (if pmfile
 	       (if (string-match "\.pm$" pmfile)
 		   (list nmspc mod)
@@ -781,7 +845,7 @@ specified by MODULE does not, (namespace ) is returned."
 	     (if dir-first
 		 (progn (setq nmspc (concat nmspc "::" mod))
 			(setq mod nil)))
-	     (if (bioperl-path-from-perl nmspc 1)
+	     (if (bioperl-path-from-perl nmspc 1 n)
 		 (list nmspc (concat "*" mod))
 	       (list (concat "*" nmspc) nil))
 	     ))) 

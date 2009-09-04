@@ -159,26 +159,29 @@ as 'use lib'. SYMB and VAL are dummies allowing `defcustom' to do
 initializaton."
   (let (
 	(old-exec-path exec-path) 
-	(pth nil) )
-    ;; safe path
-    (if (or (not (boundp 'bioperl-mode-safe-flag))
-	    bioperl-mode-safe-flag)
-	(setq exec-path bioperl-safe-PATH))
-    ;; ask perl first...
-    (setq pth
-	  (with-temp-buffer
-	    (call-process 
-	     "perl" nil t t
-	     "-MConfig" "-e" "print $Config{sitelib}")
-	    (goto-char (point-min))
-	    (thing-at-point 'line)
-	    ))
-    ;; reset path
-    (setq exec-path old-exec-path)
-    ;; file name port issue - unixize
-    (setq pth (replace-regexp-in-string "\\\\" "/" pth))
-    (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil))
-
+	(pth) )
+    ;; ask BPMODE_PATH first...
+    (setq pth (getenv "BPMODE_PATH"))
+    ;; then ask Perl...
+    (unless pth 
+      ;; safe path
+      (if (or (not (boundp 'bioperl-mode-safe-flag))
+	      bioperl-mode-safe-flag)
+	  (setq exec-path bioperl-safe-PATH))
+      
+      (setq pth
+	    (with-temp-buffer
+	      (call-process 
+	       "perl" nil t t
+	       "-MConfig" "-e" "print $Config{sitelib}")
+	      (goto-char (point-min))
+	      (thing-at-point 'line)
+	      ))
+      ;; reset exec-path
+      (setq exec-path old-exec-path)
+      ;; file name port issue - unixize
+      (setq pth (replace-regexp-in-string "\\\\" "/" pth))
+      (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil)))
     ;; try the environment
     (unless pth
       (let (
@@ -199,7 +202,6 @@ initializaton."
       (setq pth (nth 1 (split-string (pwd))))
       ;; unixize
       (setq pth (replace-regexp-in-string "\\\\" "/" pth))
-
       (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil))
       )
     (if pth
