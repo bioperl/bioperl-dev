@@ -386,7 +386,7 @@ MODULE is in double-colon format."
     (error "Unexpected command in bioperl-system-pod2text; aborting..."))
   (unless (and module (stringp module))
     (error "String required at arg MODULE"))
-  (unless (and n (numberp n))
+  (unless (or (not n) (numberp n))
     (error "Number required at arg N"))
   (unless n
     (setq n 0))
@@ -438,7 +438,7 @@ component of bioperl-module-path."
     (error "String required at arg SECTION"))
   (unless (member (upcase section) '("SYNOPSIS" "DESCRIPTION" "APPENDIX"))
     (error "SECTION not recognized or handled yet"))
-  (unless (and n (numberp n))
+  (unless (or (not n) (numberp n))
     (error "Number required at arg N"))
   (unless n
     (setq n 0))
@@ -598,8 +598,8 @@ the cache.  Returns t if we added anything, nil if not. N is the index
 of the desired bioperl-module-path component.
 
 Cache alist format:
- ( "Bio" . 
-   ( (MODULE_NAME PATH_INDEX) ...        ; .pm file base names
+ ( \"Bio\" . 
+   ( (MODULE_NAME PATH_INDEX_STRING) ...        ; .pm file base names
      (DIRNAME . nil) ...           ; dirname read but not yet followed
      (DIRNAME . ( ... ) ) ... )    ; dirname assoc with >=1 level structure
  )	      
@@ -607,12 +607,14 @@ Cache alist format:
  
   (unless (and module-dir (stringp module-dir))
     (error "String required at arg MODULE-DIR"))
-  (unless (and n (numberp n))
+  (unless (or (not n) (numberp n))
     (error "Number required at arg N"))
   (unless n
     (setq n 0))
+  (if (and (> n 0) (> n (1- (length (split-string bioperl-module-path path-separator)))))
+      (error "Path index out of bounds at arg N"))
   (let (
-	(pth (bioperl-path-from-perl module-dir 1))
+	(pth (bioperl-path-from-perl module-dir 1 n))
 	(module-components (split-string module-dir "::"))
 	(module-string nil)
 	(modules nil)
@@ -625,21 +627,45 @@ Cache alist format:
     (if (not pth)
 	;; no path returned for module-dir...
 	nil
-      (setq cache-pos (deep-assoc module-components bioperl-module-names-cache))
-      (if (and cache-pos (cdr cache-pos))
-	  nil ;; an alist already present at this location...
-	;; otherwise, none or a stub; do real work
-	;; find the key at which to add info...
-	;; value return by assoc is really a pointer into the
-	;; original alist.
-	(if cache-pos
-	    ;; easy
-	    (progn
-	      (setcdr cache-pos (bioperl-slurp-module-names module-dir))
-	      (setq ret t))
-	  ;; hard
+      (setq cache-pos (deep-assoc-all module-components bioperl-module-names-cache))
+      (setq cache-pos (car (delete 
+			    nil
+			    (mapcar (lambda (x) (if (listp (cdr x)) x nil)) 
+				    cache-pos))))
+      (if cache-pos ;; something there
+	  ;; easy - a stub
+	  (if (null (cdr cache-pos))
+		(setcdr cache-pos (bioperl-slurp-module-names module-dir n))
+	      ;; less hard - branch exists
+	      (let* ( 
+		     (mod-alist (bioperl-slurp-module-names module-dir n))
+		     (mod-alist-keys (mapcar 'car mod-alist))
+		     (cache-item) (key)
+		     )
+		(while (setq key (pop mod-alist-keys))
+		  (setq cache-item (assoc key cache-pos))
+		  (if (null cache-item)
+		      nil
+		    (if (member n (split-string (cdr cache-item) path-separator))
+		      ;; deja vu
+			(setq mod-alist-keys nil) ;; fall-through
+;		      (setq cache-item (cdr cache-item))
+;		      (setcdr (assoc key mod-alist) (concat (cdr (assoc key mod-alist)) path-separator cache-item))
+		      (setcdr cache-item (concat (cdr (assoc key mod-alist)) path-separator (cdr cache-item)))
+		      (setq ret t))))
+		))
+
+	  ;; hard - branch dne
 	  (setq keys module-components)
-	  (while (deep-assoc (append good-keys (list (car keys))) bioperl-module-names-cache)
+	  (while (
+		  let ( (da (deep-assoc-all 
+			     (append good-keys (list (car keys))) 
+			     bioperl-module-names-cache) ) )
+		   (setq da (car (delete nil
+					 (mapcar (lambda (x) 
+						   (if (listp (cdr x)) x nil)) 
+						 da))))
+		   (car da) );; has a member whose cdr is a list 
 	    (setq good-keys (append good-keys (list (car keys))))
 	    (setq keys (cdr keys)))
 	  ;; keys contains the directories we need to add, in order
@@ -655,7 +681,7 @@ Cache alist format:
 	  (while keys 
 	    (setq this-key (pop keys))
 	    (setq module-string (if module-string (concat module-string "::" this-key) this-key))
-	    (setq modules (bioperl-slurp-module-names module-string))
+	    (setq modules (bioperl-slurp-module-names module-string n))
 	    (if (not modules)
 		(setq keys nil)
 	      (setq ret t)
@@ -666,16 +692,22 @@ Cache alist format:
 		(setq bioperl-module-names-cache (list (cons this-key modules)))
 		(setq cache-pos (assoc this-key bioperl-module-names-cache)))
 	    )))
-	))
+	)
   ret ))
 
 (defun bioperl-slurp-module-names (module-dir &optional n)
-  "Return list of basenames for .pm files contained in MODULE-DIR.
+  "Return list of the  basenames for .pm files contained in MODULE-DIR.
 MODULE-DIR is in double-colon format. N is the index of the desired 
-bioperl-module-path component."
+bioperl-module-path component.
+
+Return is a list of the form
+
+ ( (MODULE_NAME . PATH_INDEX_STRING) ... 
+   (DIR_NAME . nil) ... )
+"
   (unless (and module-dir (stringp module-dir))
     (error "String required at arg MODULE-DIR"))
-  (unless (and n (numberp n))
+  (unless (or (not n) (numberp n))
     (error "Number required at arg N"))
   (unless n
     (setq n 0))
@@ -696,9 +728,9 @@ bioperl-module-path component."
 	  (setq fnames (directory-files pth))
 	  (while fnames 
 	    (let ( (str (pop fnames)))
-	      ;; files - strings
+	      ;; files - conses with path-index cdr
 	      (if (string-match "\\([a-zA-Z0-9_]+\\)\.pm$" str)
-		  (push (match-string 1 str) modules))
+		  (push (cons (match-string 1 str) (number-to-string n))  modules))
 	      ;; directories - conses with nil cdr
 	      (if (string-match "^\\([a-zA-Z0-9_]+\\)$" str)
 		  (if (not (string-equal (match-string 1 str) "README")) (push (cons (match-string 1 str) nil) modules)))
@@ -729,7 +761,7 @@ bioperl-module-path component."
   "Look for something like a module declaration at point, and return a filepath corresponding to it.
 N is the index of the desired bioperl-module-path component."
   (interactive)
-  (unless (and n (numberp n))
+  (unless (or (not n) (numberp n))
     (error "Number required at arg N"))
   (unless n
     (setq n 0))
@@ -742,7 +774,7 @@ N is the index of the desired bioperl-module-path component."
     (if (and (> n 0) (> n (1- (length module-path))))
 	(error "Path index out of bounds at arg N"))
     (unless (file-exists-p (concat module-path "/Bio"))
-      (error (concat "Bio modules not present in " module-path "; set `bioperl-module-path' manually")))
+      (error (concat "Bio modules not present in path component" module-path )))
     (setq found (thing-at-point-looking-at "Bio::[a-zA-Z_:]+"))
     (if (not found) 
 	nil
@@ -759,11 +791,9 @@ not t or nil, return a directory only. N is an integer, indicating the
 desired member of bioperl-module-path to search."
   (unless bioperl-module-path
     (error "bioperl-module-path not yet set; you can set it with bioperl-find-module-path"))
-  (unless (file-exists-p (concat bioperl-module-path "/Bio"))
-    (error "Bio modules not present in `bioperl-module-path'; set `bioperl-module-path' manually"))
   (unless (stringp module)
     (error "string arg required at MODULE"))
-  (unless (and n (numberp n))
+  (unless (or (not n) (numberp n))
     (error "number arg required at N"))
   ; default
   (unless n
@@ -776,6 +806,8 @@ desired member of bioperl-module-path to search."
 	)
     (if (and (> n 0) (> n (1- (length module-path))))
 	(error "Path index out of bounds at arg N"))
+    (unless (file-exists-p (concat module-path "/Bio"))
+      (error (concat "Bio modules not present in path component " module-path)))
     (setq module-components (split-string module "::"))
     ;; unixize...
     (setq pth (replace-regexp-in-string "\\\\" "/" module-path))
@@ -812,7 +844,7 @@ N specifies the index of the desired bioperl-module-path component. "
 
   (unless (or (not module) (stringp module))
     (error "String arg required at MODULE"))
-  (unless (and n (numberp n))
+  (unless (or (not n) (numberp n))
     (error "Number required at arg N"))
   (unless n
     (setq n 0))
@@ -1028,6 +1060,15 @@ colons.  RETOPT is as for `bioperl-module-names'."
       )))
 
 ;;
+;; utilities
+;;
+
+(defun bioperl-clear-module-cache ()
+  (interactive)
+  "Clears the variable `bioperl-module-names-cache'. Run if you change `bioperl-module-path'."
+  (setq bioperl-module-names-cache nil))
+
+;;
 ;; taint checkers
 ;;
 
@@ -1040,6 +1081,20 @@ colons.  RETOPT is as for `bioperl-module-names'."
 ;;
 ;; utilities (out of bioperl- namespace)
 ;;
+
+(defun assoc-all (key alist)
+  "Return all conses associated with key in alist."
+  (let ( (ret) (ptr (copy-alist alist)) (c (assoc key alist)) )
+    (if (not c)
+	nil
+      (while ptr
+	(if (not (listp (car ptr)))
+	    (setq ptr (cdr ptr))
+	  (if (equal key (car (car ptr)))
+	      (push (car ptr) ret))
+	  (setq ptr (cdr ptr))))
+    (nreverse ret))))
+    
 
 (defun deep-assoc (keys alist)
   "Return the association of a set of keys in an alist tree."
@@ -1057,6 +1112,30 @@ colons.  RETOPT is as for `bioperl-module-names'."
 	  (deep-assoc keys (cdr newlist))
 	(deep-assoc nil nil)))
     )))
+
+(defun deep-assoc-all (keys alist)
+  "Return all associations AT THE TIP described by the set of KEYS in an alist tree.
+So this is not completely general, but is specialized to the structure of `bioperl-module-names-cache'."
+  (cond
+   ((not keys) 
+    nil)
+   ((not (listp alist))
+    nil)
+   ((= (length keys) 1)
+    (assoc-all (pop keys) alist))
+   (t
+    (let* ( (key (pop keys))
+	    (newlist (assoc-all key alist)) ) 
+      (if newlist
+	  (let ( ( i 0 ) (r)  )
+	    (while (< i (length newlist))
+	      (if (listp (cdr (elt newlist i)))
+		  (setq r (deep-assoc-all keys (cdr (elt newlist i)))))
+	      (setq i (1+ i)))
+	    r)
+	(deep-assoc-all nil nil)))
+    )))
+
 
 (defun pm-p (x)
   (not (null (string-match "[.]pm\$" x))))
