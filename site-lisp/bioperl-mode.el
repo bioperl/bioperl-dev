@@ -329,47 +329,62 @@ already loaded in `bioperl-method-pod-cache'; if not, calls
 MODULE-DIR is in double-colon format.  Optional RETOPT: nil,
 return module names only (default); t, return directory names
 only; other, return all names as a flat list. Optional AS-ALIST:
-if t, return an alist with elts (NAME . nil) (when used in 
+if t, return an alist with elts (NAME . PATH_STRING) (when used in 
 completing functions, for back-compat with Emacs 21).
 
  This function is responsible for the lazy loading of the module
 names cache: it will look first in `bioperl-module-names-cache'; if
 the MODULE-DIR is not available,
 `bioperl-add-module-names-to-cache' will be called."
-  (let (
+  (let* (
 	(module-components (split-string module-dir "::"))
 	(unlist (lambda (x) (if (listp x) (car x) x)) )
-	(unlist-lists (lambda (x) (if (listp x) (car x) nil)) )
-	(unlist-strs  (lambda (x) (if (listp x) nil x)) )
+	(choose-dirs (lambda (x) (if (listp (cdr x)) x nil)) )
+	(choose-mods  (lambda (x) (if (listp (cdr x)) nil x)) )
 	(ret)
+	(alists (deep-assoc-all module-components bioperl-module-names-cache))
+	(alist)
 	)
-    (setq alist (deep-assoc module-components bioperl-module-names-cache))
+    ;; here pick the directory alist
+    (if (listp (cdr (car alists)))
+	(setq alist (car alists))
+      (setq alist (elt alists 1)))
+    
     (if (and alist (cdr alist))
 	(cond 
-	 ( (not (booleanp retopt)) 
-	   (setq ret (mapcar unlist (cdr alist))))
+	 ( (not (booleanp retopt))
+	   (if (stringp (cdr alist))
+	       (setq ret alist)
+	     (setq ret (cdr alist))))
 	 ((not retopt)
-	  (setq ret (delete nil (mapcar unlist-strs (cdr alist)))))
+	   (if (stringp (cdr alist))
+	       (setq ret alist)
+	     (setq ret (delete nil (mapcar choose-mods (cdr alist))))
+	     ))
 	 ( retopt
-	  (setq ret (delete nil (mapcar unlist-lists (cdr alist))))))
+	   (if (stringp (cdr alist))
+	       (setq ret nil)
+	     (setq ret (delete nil (mapcar choose-dirs (cdr alist))))
+	     )))
       (if (bioperl-add-module-names-to-cache module-dir)
 	  (cond
 	   ( (not (booleanp retopt))
 	     (setq ret
-		   (mapcar unlist 
-			   (cdr (deep-assoc module-components bioperl-module-names-cache)))))
+		   (cdr (deep-assoc module-components bioperl-module-names-cache)))) 
 	   ((not retopt)
 	    (setq ret
-		  (delete nil (mapcar unlist-strs
+		  (delete nil (mapcar choose-mods
 			  (cdr (deep-assoc module-components bioperl-module-names-cache))))))
 	   ( retopt
 	     (setq ret
-		   (delete nil (mapcar unlist-lists
+		   (delete nil (mapcar choose-dirs
 			  (cdr (deep-assoc module-components bioperl-module-names-cache))))))
 	nil)))
     (if (not as-alist) 
-	ret
-      (mapcar (lambda (x) (list x nil)) ret))))
+	(if (stringp (cdr ret))
+	    (car ret)
+	  (mapcar 'car ret))
+      ret)))
 
 
 ;;
@@ -613,11 +628,12 @@ Cache alist format:
     (setq n 0))
   (if (and (> n 0) (> n (1- (length (split-string bioperl-module-path path-separator)))))
       (error "Path index out of bounds at arg N"))
-  (let (
+  (let* (
 	(pth (bioperl-path-from-perl module-dir 1 n))
 	(module-components (split-string module-dir "::"))
 	(module-string nil)
 	(modules nil)
+	(cache (deep-assoc-all module-components bioperl-module-names-cache))
 	(cache-pos nil)
 	(keys nil)
 	(this-key nil)
@@ -627,73 +643,76 @@ Cache alist format:
     (if (not pth)
 	;; no path returned for module-dir...
 	nil
-      (setq cache-pos (deep-assoc-all module-components bioperl-module-names-cache))
-      (setq cache-pos (car (delete 
-			    nil
-			    (mapcar (lambda (x) (if (listp (cdr x)) x nil)) 
-				    cache-pos))))
+      (setq cache-pos 
+	    (cond
+	     ((not cache)
+	      nil)
+	     ((stringp (cdr (car cache)))
+	      (elt cache 1))
+	     ( t
+	       (elt cache 0))))
       (if cache-pos ;; something there
 	  ;; easy - a stub
 	  (if (null (cdr cache-pos))
+	      (progn 
 		(setcdr cache-pos (bioperl-slurp-module-names module-dir n))
+		(setq ret t))
 	      ;; less hard - branch exists
-	      (let* ( 
-		     (mod-alist (bioperl-slurp-module-names module-dir n))
-		     (mod-alist-keys (mapcar 'car mod-alist))
-		     (cache-item) (key)
-		     )
-		(while (setq key (pop mod-alist-keys))
-		  (setq cache-item (assoc key cache-pos))
-		  (if (null cache-item)
-		      nil
-		    (if (member n (split-string (cdr cache-item) path-separator))
+	    (let* ( 
+		   (mod-alist (bioperl-slurp-module-names module-dir n))
+		   (mod-alist-keys (mapcar 'car mod-alist))
+		   (cache-item) (key)
+		   )
+	      (while (setq key (pop mod-alist-keys))
+		(setq cache-item (assoc key cache-pos))
+		(if (null cache-item)
+		    nil
+		  (if (member n (split-string (cdr cache-item) path-separator))
 		      ;; deja vu
-			(setq mod-alist-keys nil) ;; fall-through
-;		      (setq cache-item (cdr cache-item))
-;		      (setcdr (assoc key mod-alist) (concat (cdr (assoc key mod-alist)) path-separator cache-item))
-		      (setcdr cache-item (concat (cdr (assoc key mod-alist)) path-separator (cdr cache-item)))
-		      (setq ret t))))
-		))
+		      (setq mod-alist-keys nil) ;; fall-through
+		    (setcdr cache-item (concat (cdr (assoc key mod-alist)) path-separator (cdr cache-item)))
+		    (setq ret t))))
+	      ))
 
-	  ;; hard - branch dne
-	  (setq keys module-components)
-	  (while (
-		  let ( (da (deep-assoc-all 
-			     (append good-keys (list (car keys))) 
-			     bioperl-module-names-cache) ) )
-		   (setq da (car (delete nil
-					 (mapcar (lambda (x) 
-						   (if (listp (cdr x)) x nil)) 
-						 da))))
-		   (car da) );; has a member whose cdr is a list 
-	    (setq good-keys (append good-keys (list (car keys))))
-	    (setq keys (cdr keys)))
-	  ;; keys contains the directories we need to add, in order
-	  ;; address for doing additions: cache-pos
-	  (setq cache-pos (deep-assoc good-keys bioperl-module-names-cache))
-	  (setq module-string (pop good-keys))
-	  (while good-keys
-	    (setq module-string (concat module-string "::" (pop good-keys))))
-	  ;; module-string is suitable for passing to bioperl-slurp-module-names
-	  
-	  ;; move down the module directory, slurping up methods and placing
-	  ;; in cache
-	  (while keys 
-	    (setq this-key (pop keys))
-	    (setq module-string (if module-string (concat module-string "::" this-key) this-key))
-	    (setq modules (bioperl-slurp-module-names module-string n))
-	    (if (not modules)
-		(setq keys nil)
-	      (setq ret t)
-	      (if cache-pos
-		  (progn
-		    (setcdr cache-pos (append (cdr cache-pos)  (list (cons this-key modules))))
-		    (setq cache-pos (assoc this-key cache-pos)))
-		(setq bioperl-module-names-cache (list (cons this-key modules)))
-		(setq cache-pos (assoc this-key bioperl-module-names-cache)))
+	;; hard - branch dne
+	(setq keys module-components)
+	(while (
+		let ( (da (deep-assoc-all 
+			   (append good-keys (list (car keys))) 
+			   bioperl-module-names-cache) ) )
+		 (setq da (car (delete nil
+				       (mapcar (lambda (x) 
+						 (if (listp (cdr x)) x nil)) 
+					       da))))
+		 (car da) );; has a member whose cdr is a list 
+	  (setq good-keys (append good-keys (list (car keys))))
+	  (setq keys (cdr keys)))
+	;; keys contains the directories we need to add, in order
+	;; address for doing additions: cache-pos
+	(setq cache-pos (deep-assoc good-keys bioperl-module-names-cache))
+	(setq module-string (pop good-keys))
+	(while good-keys
+	  (setq module-string (concat module-string "::" (pop good-keys))))
+	;; module-string is suitable for passing to bioperl-slurp-module-names
+	
+	;; move down the module directory, slurping up methods and placing
+	;; in cache
+	(while keys 
+	  (setq this-key (pop keys))
+	  (setq module-string (if module-string (concat module-string "::" this-key) this-key))
+	  (setq modules (bioperl-slurp-module-names module-string n))
+	  (if (not modules)
+	      (setq keys nil)
+	    (setq ret t)
+	    (if cache-pos
+		(progn
+		  (setcdr cache-pos (append (cdr cache-pos)  (list (cons this-key modules))))
+		  (setq cache-pos (assoc this-key cache-pos)))
+	      (setq bioperl-module-names-cache (list (cons this-key modules)))
+	      (setq cache-pos (assoc this-key bioperl-module-names-cache)))
 	    )))
-	)
-  ret ))
+      )
+    ret ))
 
 (defun bioperl-slurp-module-names (module-dir &optional n)
   "Return list of the  basenames for .pm files contained in MODULE-DIR.
@@ -929,20 +948,21 @@ The module name for this method is assumed to be present in
 (defun bioperl-completing-read (initial-input &optional get-method dir-first prompt-prefix no-retry)
   "Specialized completing read for bioperl-mode.
 INITIAL-INPUT is a namespace/module name in double-colon format,
-or nil. Returns a list: (namespace module) if GET-METHOD is nil,
-\(namespace module method) if GET-METHOD is t. DIR-FIRST is
+or nil. Returns a list: (namespace module path-string) if GET-METHOD is nil,
+\(namespace module method path-string) if GET-METHOD is t. DIR-FIRST is
 passed along to `bioperl-split-name'; controls what is returned
 when a namespace name is also a module name (e.g., Bio::SeqIO).
 If NO-RETRY is nil, the reader works hard to return a valid entity;
 if t, the reader barfs out whatever was finally entered."
   (let ( (parsed (bioperl-split-name initial-input dir-first)) 
-	 (nmspc) (mod) (mth) 
+	 (nmspc) (mod) (mth) (pthn) (name-list)
 	 (done nil))
     (if (not parsed)
 	nil
       (setq nmspc (elt parsed 0))
       (setq mod (elt parsed 1)))
     (while (not done)
+      ;; namespace completion
       (unless (and nmspc (not (string-match "^\*" nmspc)))
 	(cond 
 	 ( (not nmspc) nil )
@@ -957,42 +977,93 @@ if t, the reader barfs out whatever was finally entered."
 	  ;; back up
 	  (setq nmspc (car (split-string nmspc "::[^:]+$")))
 	  (setq done nil)))
+      ;; module completion
       (if (or (not nmspc)
 		  (and mod (not (string-match "^\*" mod))))
 	  (setq done t)
-	(setq mod (completing-read 
-		   (concat prompt-prefix nmspc " Module: ")
-		   (bioperl-module-names nmspc nil t) nil (not no-retry)
-		   (if mod (replace-regexp-in-string "^\*" "" mod) nil)))
-	;; allow a backup into namespace completion
-	(if (or no-retry (not (string-equal mod "")))
-	    (setq done t)
-	  ;; try again, backing up
-	  (setq done nil)
- 	  (let ( (splt (bioperl-split-name nmspc nil)) )
-	    (if (elt splt 1)
-		(progn
-		  (setq nmspc (elt splt 0))
-		  ;; kludge : "pretend" mod is not found using the "*"
-		  (setq mod (concat "*" (elt splt 1))))
-	      (setq nmspc (concat "*" nmspc))
-	      (setq mod nil)))
-	  (setq initial-input nmspc)))
-      (unless (or (not done) (not (and nmspc mod)) (not get-method))
-	(setq mth (completing-read
-		   (concat prompt-prefix "Method in " nmspc "::" mod ": ")
-		   (bioperl-method-names (concat nmspc "::" mod) t) nil (not no-retry)))
-	(if (or no-retry (not (string-equal mth "")))
-	    (setq done t)
+	(let (
+	      ;; local vars here
+	      )
+	  (setq name-list (bioperl-module-names nmspc nil t))
+	  (setq mod (completing-read 
+		     (concat prompt-prefix nmspc " Module: ")
+		     name-list nil (not no-retry)
+		     (if mod (replace-regexp-in-string "^\*" "" mod) nil)))
+	  ;; allow a backup into namespace completion
+	  (if (or no-retry (not (string-equal mod "")))
+	      (setq done t)
+	    ;; retry setup
+	    ;; try again, backing up
+	    (setq done nil)
+	    (let ( (splt (bioperl-split-name nmspc nil)) )
+	      (if (elt splt 1)
+		  (progn
+		    (setq nmspc (elt splt 0))
+		    ;; kludge : "pretend" mod is not found using the "*"
+		    (setq mod (concat "*" (elt splt 1))))
+		(setq nmspc (concat "*" nmspc))
+		(setq mod nil)))
+	    (setq initial-input nmspc))))
+      ;; path completion
+      (unless (not (and nmspc mod))
+	(if (not name-list)
+	  (setq name-list (bioperl-module-names 
+			   nmspc nil t)))
+	(setq pthn (cdr (assoc mod name-list)))
+	(if (not (string-match path-separator pthn))
+	    ;; single path 
+	    (setq pthn (string-to-number pthn))
+	  ;; multiple paths (e.g., "0;1") - do completion
+	  (let* (
+		 (module-path 
+		  (split-string bioperl-module-path path-separator))
+		 (pthns (mapcar 'string-to-number
+				(split-string pthn path-separator)))
+		 (i -1)
+		 (module-path-list 
+		  (mapcar 
+		   (lambda (x) (setq i (1+ i)) (list x i) )
+		   module-path))
+		 )
+	    ;; filter list by pthns
+	    (setq module-path-list
+		  (delete nil (mapcar 
+			       (lambda (x) (if (member (elt x 1) pthns) x nil))
+			       module-path-list)))
+	    (if (not module-path-list)
+		(error "Shouldn't be here. Run `bioperl-clear-module-cache' and try again"))
+	    (setq pthn (completing-read 
+			(concat prompt-prefix "Library: ")
+			module-path-list
+			nil (not no-retry) (car (car module-path-list))))
+	    (if (string-equal pthn "")
+		(setq pthn (car (car module-path-list))))
+	    (setq pthn (elt (assoc pthn module-path-list) 1))
+	    )))
+      ;; method completion
+      (unless (or (not done) (not (and nmspc mod pthn)) (not get-method))
+	(let (
+	      (name-list (bioperl-method-names (concat nmspc "::" mod) t))
+	      )
+	  (setq mth (completing-read
+		     (concat prompt-prefix "Method in " nmspc "::" mod ": ")
+		     (bioperl-method-names (concat nmspc "::" mod) t) nil (not no-retry)))
+	  (if (or no-retry (not (string-equal mth "")))
+	      (setq done t)
+	    ;; retry setup
 	    ;; allow a backup into module completion
-	  (setq done nil)
- 	  (let ( (splt (bioperl-split-name (concat nmspc "::" mod) nil)) )
-	    (setq nmspc (elt splt 0))
-	    ;; kludge : "pretend" mod is not found using the "*"
-	    (setq mod (concat "*" (elt splt 1))))) ))
+	    (setq done nil)
+	    (let ( 
+		  (splt (bioperl-split-name (concat nmspc "::" mod) nil))
+		  )
+	      (setq nmspc (elt splt 0))
+	      ;; kludge : "pretend" mod is not found using the "*"
+	      (setq mod (concat "*" (elt splt 1))))))
+	))
+    ;; return values
     (if get-method
-	(list nmspc mod mth)
-      (list nmspc mod)) ))
+	(list nmspc mod mth pthn)
+      (list nmspc mod pthn)) ))
 
 (defun bioperl-namespace-completion-function (str pred flag)
   "A custom completion function for bioperl-mode.
@@ -1048,15 +1119,19 @@ colons.  RETOPT is as for `bioperl-module-names'."
 			     (m (list (pop l))) )
 		       (while l
 			 (push (concat (car m) "::" (pop l)) m) )
-		       m) )
+		       (mapcar (lambda (x) (cons x nil)) m ) ) )
 	   ( dirs nil )
 	   )
       (setq dirs (bioperl-module-names module-dir retopt t))
       (if dirs
-	  (setq complet (append complet (mapcar (lambda (x) (concat module-dir "::" 
-						      (if (listp x) (car x) x))) dirs)))
+	  (setq complet (append 
+			 complet 
+			 (mapcar (lambda (x) 
+				   (list
+				    (concat module-dir "::" (car x)) 
+				    (cdr x))) dirs)))
 	(setq complet nil))
-      (mapcar (lambda (x) (list x nil)) complet)
+      complet
       )))
 
 ;;
@@ -1082,22 +1157,16 @@ colons.  RETOPT is as for `bioperl-module-names'."
 ;; utilities (out of bioperl- namespace)
 ;;
 
-(defun assoc-all (key alist)
-  "Return all conses associated with key in alist."
-  (let ( (ret) (ptr (copy-alist alist)) (c (assoc key alist)) )
-    (if (not c)
-	nil
-      (while ptr
-	(if (not (listp (car ptr)))
-	    (setq ptr (cdr ptr))
-	  (if (equal key (car (car ptr)))
-	      (push (car ptr) ret))
-	  (setq ptr (cdr ptr))))
-    (nreverse ret))))
     
+(defun assoc-all (key alist &optional ret)
+  "Return list of *pointers* (like assoc) to all matching conses in the alist."
+  (let ( (c (assoc key alist)) (r) ) 
+    (if c 
+	(assoc-all key (cdr alist) (if ret (add-to-list 'ret c t 'eq) (list c)))
+      ret)))
 
 (defun deep-assoc (keys alist)
-  "Return the association of a set of keys in an alist tree."
+  "Return the associations of a set of keys in an alist tree."
   (cond
    ((not keys) 
     nil)
