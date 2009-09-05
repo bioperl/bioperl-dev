@@ -181,7 +181,7 @@ Use `bioperl-add-module-names-to-cache' to, well, do it.")
 ;; User-interface functions
 ;;
 
-(defun bioperl-insert-module (namespace module &optional beg pt end)
+(defun bioperl-insert-module (namespace module &optional dummy beg pt end)
   "Insert BioPerl module declaration interactively, using completion."
   (interactive
    (let* (
@@ -216,8 +216,11 @@ Use `bioperl-add-module-names-to-cache' to, well, do it.")
 ;; pod viewers
 ;;
 
-(defun bioperl-view-pod (module)
-  "View the full pod for a BioPerl module."
+;; TODO: refactor bioperl-view-pod to take separate nmspc mod parms...
+(defun bioperl-view-pod (module &optional n)
+  "View the full pod for a BioPerl module. Use completion facilities to browse interactively.
+MODULE is in double-colon format. N is an index associated with a
+component of `bioperl-module-path'."
   (interactive
    (let (
 	 (mod (bioperl-completing-read (bioperl-module-at-point) nil t "[pod] "))
@@ -226,11 +229,12 @@ Use `bioperl-add-module-names-to-cache' to, well, do it.")
      (list (apply 'concat 
 		  (elt mod 0) 
 		  (if (elt mod 1) (list "::" (elt mod 1)) 
-		    (signal 'quit t))))))
-  (bioperl-view-full-pod module))
+		    (signal 'quit t))) (car (last mod)))))
+  (bioperl-view-full-pod module n))
 
-(defun bioperl-view-pod-method (namespace module method)
-  "View desired method pod interactively. Use completion facilities to browse."
+(defun bioperl-view-pod-method (namespace module method &optional n)
+  "View desired method pod interactively. Use completion facilities to browse interactively.
+N is an index associated with a component of `bioperl-module-path'."
   (interactive 
    (let (
 	 (cr (bioperl-completing-read (bioperl-module-at-point) t nil "[pod mth] ") )
@@ -246,8 +250,9 @@ Use `bioperl-add-module-names-to-cache' to, well, do it.")
       (bioperl-render-method-pod-from-cons cache-pos))
     ))
 
-(defun bioperl-view-pod-synopsis (module)
-  "View the pod synopsis for a Bioperl module."
+(defun bioperl-view-pod-synopsis (module &optional n)
+  "View the pod synopsis for a Bioperl module.
+N is an index associated with a component of `bioperl-module-path'."
   (interactive
    (let (
 	 (mod (bioperl-completing-read (bioperl-module-at-point) nil t "[pod syn] "))
@@ -256,11 +261,12 @@ Use `bioperl-add-module-names-to-cache' to, well, do it.")
      (list (apply 'concat 
 		  (elt mod 0) 
 		  (if (elt mod 1) (list "::" (elt mod 1)) 
-		    (signal 'quit t) )))))
-  (bioperl-view-pod-section module "SYNOPSIS"))
+		    (signal 'quit t) )) (car (last mod)))))
+  (bioperl-view-pod-section module "SYNOPSIS" n))
 
-(defun bioperl-view-pod-description (module)
-  "View the pod synopsis for a BioPerl module."
+(defun bioperl-view-pod-description (module &optional n)
+  "View the pod synopsis for a BioPerl module.
+N is an index associated with a component of `bioperl-module-path'."
   (interactive
    (let (
 	 (mod (bioperl-completing-read (bioperl-module-at-point) nil t "[pod dsc] " ))
@@ -269,11 +275,12 @@ Use `bioperl-add-module-names-to-cache' to, well, do it.")
      (list (apply 'concat 
 		  (elt mod 0) 
 		  (if (elt mod 1) (list "::" (elt mod 1)) 
-		    (signal 'quit t))))))
-  (bioperl-view-pod-section module "DESCRIPTION"))
+		    (signal 'quit t))) (car (last mod)))))
+  (bioperl-view-pod-section module "DESCRIPTION" n))
 
-(defun bioperl-view-pod-appendix (module)
-  "View the pod appendix (containing individual method information) for a Bioperl module."
+(defun bioperl-view-pod-appendix (module &optional n)
+  "View the pod appendix (containing individual method information) for a Bioperl module.
+N is an index associated with a component of `bioperl-module-path'."
   (interactive
    (let (
 	 (mod (bioperl-completing-read (bioperl-module-at-point) nil t "[pod apx] "))
@@ -282,8 +289,8 @@ Use `bioperl-add-module-names-to-cache' to, well, do it.")
      (list (apply 'concat 
 		  (elt mod 0) 
 		  (if (elt mod 1) (list "::" (elt mod 1)) 
-		    (signal 'quit t))))))
-  (bioperl-view-pod-section module "APPENDIX"))
+		    (signal 'quit t))) (car (last mod)))))
+  (bioperl-view-pod-section module "APPENDIX" n))
 
 ;; "uninstall..."
 
@@ -430,7 +437,9 @@ MODULE is in double-colon format."
 			  args)))
       (save-excursion
 	(set-buffer pod-buf)
-	(setq header-line-format (concat "POD - BioPerl module " module))
+	(setq header-line-format (concat "POD - BioPerl module " module " @ " 
+					 (file-name-squish
+					  (elt (split-string bioperl-module-path path-separator) n)) ))
 	(apply 'call-process bioperl-system-pod2text
 	       nil t t pmfile args)
 	(goto-char (point-min))
@@ -476,7 +485,9 @@ component of bioperl-module-path."
 	(setq exec-path bioperl-safe-PATH))
     (save-excursion
       (set-buffer pod-buf)
-      (setq header-line-format (concat section " - BioPerl module " module))
+      (setq header-line-format (concat section " - BioPerl module " module 
+				       " @ " (file-name-squish
+					      (elt (split-string bioperl-module-path path-separator) n)) ))
       (apply 'call-process bioperl-system-pod2text
 				  nil t t pmfile args)
       (goto-char (point-min))
@@ -673,7 +684,7 @@ Cache alist format:
 		(setq cache-item (assoc key cache-pos))
 		(if (null cache-item)
 		    nil
-		  (if (member n (split-string (cdr cache-item) path-separator))
+		  (if (member n (mapcar 'string-to-number (split-string (cdr cache-item) path-separator)))
 		      ;; deja vu
 		      (setq mod-alist-keys nil) ;; fall-through
 		    (setcdr cache-item (concat (cdr (assoc key mod-alist)) path-separator (cdr cache-item)))
@@ -935,8 +946,11 @@ The module name for this method is assumed to be present in
 	  (message "No pod available")
 	(save-excursion
 	  (set-buffer pod-buf)
-	  ;; nice header
-	  (setq header-line-format (concat "Method " method "() - BioPerl module " module))
+	  (setq header-line-format (concat "Method " method 
+					   "() - BioPerl module " module
+					   " @ " 
+					   (file-name-squish
+					    (elt (split-string bioperl-module-path path-separator) n))))
 	  (insert "\n")
 	  (while (setq cur-tag (pop tags))
 	    (setq cur-content (cdr (assoc cur-tag content)))
@@ -951,6 +965,7 @@ The module name for this method is assumed to be present in
 ;; completion tricks
 ;;
 
+;; TODO: modularize...
 (defun bioperl-completing-read (initial-input &optional get-method dir-first prompt-prefix no-retry)
   "Specialized completing read for bioperl-mode.
 INITIAL-INPUT is a namespace/module name in double-colon format,
@@ -981,7 +996,10 @@ if t, the reader barfs out whatever was finally entered."
 	(if (not (string-equal nmspc ""))
 	    t
 	  ;; back up
-	  (setq nmspc (car (split-string nmspc "::[^:]+$")))
+	  (setq nmspc 
+		(if (string-match ":" nmspc)
+		    (car (split-string nmspc "::[^:]+$"))
+		  nil))
 	  (setq done nil)))
       ;; module completion
       (if (or (not nmspc)
@@ -1011,13 +1029,13 @@ if t, the reader barfs out whatever was finally entered."
 		(setq mod nil)))
 	    (setq initial-input nmspc))))
       ;; path completion
-      (unless (or (not (and nmspc mod)) (not done))
+      (unless (or (not (and nmspc mod)) (not done) no-retry)
 	(if (not name-list)
 	  (setq name-list (bioperl-module-names 
 			   nmspc nil t)))
 	(setq pthn (cdr (assoc mod name-list)))
 	(if (not pthn) 
-	    (error "Shouldn't be here. Check `bioperl-module-path' and try running `bioperl-clear-module-cache'."))
+	    (error "Shouldn't be here(1). Check `bioperl-module-path' and try running `bioperl-clear-module-cache'."))
 	(if (not (string-match path-separator pthn))
 	    ;; single path 
 	    (setq pthn (string-to-number pthn))
@@ -1039,9 +1057,9 @@ if t, the reader barfs out whatever was finally entered."
 			       (lambda (x) (if (member (elt x 1) pthns) x nil))
 			       module-path-list)))
 	    (if (not module-path-list)
-		(error "Shouldn't be here. Run `bioperl-clear-module-cache' and try again"))
+		(error "Shouldn't be here(2). Run `bioperl-clear-module-cache' and try again"))
 	    (setq pthn (completing-read 
-			(concat prompt-prefix "Lib: ")
+			(concat prompt-prefix nmspc "::" mod " Lib: ")
 			module-path-list
 			nil t (car (car module-path-list))))
 	    (if (string-equal pthn "")
@@ -1049,6 +1067,7 @@ if t, the reader barfs out whatever was finally entered."
 	    (setq pthn (elt (assoc pthn module-path-list) 1))
 	    )))
       ;; method completion
+      (setq nmspc (replace-regexp-in-string "::$" "" nmspc))
       (unless (or (not done) (not (and nmspc mod)) (not get-method))
 	;; path completion if necessary
 	(if pthn
@@ -1075,7 +1094,7 @@ if t, the reader barfs out whatever was finally entered."
 				 (lambda (x) (if (member (elt x 1) pthns) x nil))
 				 module-path-list)))
 	      (if (not module-path-list)
-		  (error "Shouldn't be here. Run `bioperl-clear-module-cache' and try again"))
+		  (error "Shouldn't be here(3). Run `bioperl-clear-module-cache' and try again"))
 	      (setq pthn (completing-read 
 			  (concat prompt-prefix "Lib: ")
 			  module-path-list
@@ -1265,6 +1284,21 @@ So this is not completely general, but is specialized to the structure of `biope
 
 (defun pm-p (x)
   (not (null (string-match "[.]pm\$" x))))
+
+(defun file-name-squish (fname)
+  "Squish long file names with central elipses.
+FNAME is the file name as string. Doesn't work very hard."
+  (let* (
+	 (fname-list (split-string fname "/"))
+	 (squished)
+	 )
+    (if (> (length fname-list) 3)
+	(concat (elt fname-list 0) "/" 
+		(elt fname-list 1) "/"
+		(if (= (length fname-list) 4) (elt fname-list 2)  "...")
+		"/"
+		(car (last fname-list)))
+      fname)))
 
 ;; hook into perl-mode
 
