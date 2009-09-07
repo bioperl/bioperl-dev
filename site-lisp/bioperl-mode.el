@@ -171,7 +171,7 @@ in `bioperl-cached-module'.")
   "Contains the filepath whose method pod information is
   currently stored in `bioperl-method-pod-cache'.")
 
-(defvar bioperl-module-names-cache nil
+(defvar bioperl-module-names-cache '( ("Bio" . nil) )
   "Storage for an alist tree structure of available module names.
 Structure follows the Bio library tree:
  ( (\"Bio\" \"Seq\" ( \"SeqIO\" \"fasta\" \"msf\" ...) \"PrimarySeqI\" ...  ) )
