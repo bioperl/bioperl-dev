@@ -379,19 +379,22 @@ the MODULE-DIR is not available,
 	     (setq ret (delete nil (mapcar choose-dirs (cdr alist))))
 	     )))
       (if (bioperl-add-module-names-to-cache module-dir)
-	  (cond
-	   ( (not (booleanp retopt))
-	     (setq ret
-		   (cdr (deep-assoc module-components bioperl-module-names-cache)))) 
-	   ((not retopt)
-	    (setq ret
-		  (delete nil (mapcar choose-mods
-			  (cdr (deep-assoc module-components bioperl-module-names-cache))))))
-	   ( retopt
-	     (setq ret
-		   (delete nil (mapcar choose-dirs
-			  (cdr (deep-assoc module-components bioperl-module-names-cache))))))
-	nil)))
+	  (progn
+	    (setq alists (deep-assoc-all module-components bioperl-module-names-cache))
+	    (setq alist (if (listp (cdr (elt alists 0))) (elt alists 0) (elt alists 1)))
+	    (cond
+	     ( (not (booleanp retopt))
+	       (setq ret
+		     (cdr alist))) 
+	     ((not retopt)
+	      (setq ret
+		    (delete nil (mapcar choose-mods
+					(cdr alist)))))
+	     ( retopt
+	       (setq ret
+		     (delete nil (mapcar choose-dirs
+					 (cdr alist)))))
+	     nil))))
     (if (not as-alist) 
 	(if (stringp (cdr ret))
 	    (car ret)
@@ -648,14 +651,15 @@ Cache alist format:
   (let* (
 	(pth (bioperl-path-from-perl module-dir 1 n))
 	(module-components (split-string module-dir "::"))
-	(module-string nil)
-	(modules nil)
+	(module-string)
+	(modules)
+	(alist)
 	(cache (deep-assoc-all module-components bioperl-module-names-cache))
-	(cache-pos nil)
-	(keys nil)
-	(this-key nil)
-	(good-keys nil)
-	(ret nil)
+	(cache-pos)
+	(keys)
+	(this-key)
+	(good-keys)
+	(ret)
        )
     (if (not pth)
 	;; no path returned for module-dir...
@@ -681,7 +685,9 @@ Cache alist format:
 		   (cache-item) (key)
 		   )
 	      (while (setq key (pop mod-alist-keys))
-		(setq cache-item (assoc key cache-pos))
+		(setq alist (assoc-all key cache-pos))
+		(setq cache-item (if (stringp (cdr (elt alist 0))) 
+				     (elt alist 0) (elt alist 1)))
 		(if (null cache-item)
 		    nil
 		  (if (member n (mapcar 'string-to-number (split-string (cdr cache-item) path-separator)))
@@ -695,41 +701,54 @@ Cache alist format:
 	(setq keys module-components)
 	(while (
 		let ( (da (deep-assoc-all 
-			   (append good-keys (list (car keys))) 
+			   (append (reverse good-keys) (list (car keys))) 
 			   bioperl-module-names-cache) ) )
-		 (setq da (car (delete nil
-				       (mapcar (lambda (x) 
-						 (if (listp (cdr x)) x nil)) 
-					       da))))
+		 (setq da (if (stringp (elt da 0)) (elt da 1) (elt da 0)))
 		 (car da) );; has a member whose cdr is a list 
-	  (setq good-keys (append good-keys (list (car keys))))
+	  (setq good-keys (push (car keys) good-keys))
 	  (setq keys (cdr keys)))
+	(push (pop good-keys) keys)
+	(setq good-keys (nreverse good-keys))
 	;; keys contains the directories we need to add, in order
 	;; address for doing additions: cache-pos
-	(setq cache-pos (deep-assoc good-keys bioperl-module-names-cache))
+	(setq alist (deep-assoc-all good-keys bioperl-module-names-cache))
+	(setq cache-pos 
+	      (if (stringp (cdr (elt alist 0))) (elt alist 1) (elt alist 0)))
 	(setq module-string (pop good-keys))
+	;; prep for bioperl-anastomose
 	(while good-keys
 	  (setq module-string (concat module-string "::" (pop good-keys))))
 	;; module-string is suitable for passing to bioperl-slurp-module-names
-	
-	;; move down the module directory, slurping up methods and placing
-	;; in cache
-	(while keys 
-	  (setq this-key (pop keys))
-	  (setq module-string (if module-string (concat module-string "::" this-key) this-key))
-	  (setq modules (bioperl-slurp-module-names module-string n))
-	  (if (not modules)
-	      (setq keys nil)
-	    (setq ret t)
-	    (if cache-pos
-		(progn
-		  (setcdr cache-pos (append (cdr cache-pos)  (list (cons this-key modules))))
-		  (setq cache-pos (assoc this-key cache-pos)))
-	      (setq bioperl-module-names-cache (list (cons this-key modules)))
-	      (setq cache-pos (assoc this-key bioperl-module-names-cache)))
-	    )))
+	(setq ret (bioperl-anastomose keys module-string cache-pos n)))
       )
     ret ))
+
+(defun bioperl-anastomose (keys module-string cache-pos n)
+  "Extends `bioperl-module-names-cache' recursively. No user-serviceable parts inside.
+Call first CACHE-POS set to node to be extended.
+MODULE-STRING must indicate directory corresponding to CACHE-POS."
+  (unless cache-pos
+    (setq cache-pos bioperl-module-names-cache))
+  (if (not keys)
+      t ; success
+    (let (
+	  (this-key (pop keys))
+	  (modules)
+	  (cache-ins-pos)
+	  (alist)
+	  )
+      (setq alist (assoc-all this-key cache-pos))
+      (setq cache-ins-pos (if (stringp (cdr (elt alist 0))) (elt alist 1) (elt alist 0)))
+      (setq module-string (if module-string 
+			      (concat module-string "::" this-key) 
+			    this-key))
+      (setq modules (bioperl-slurp-module-names module-string n))
+      (if (not modules)
+	  nil ; fail
+	(setcdr cache-ins-pos modules )
+	(bioperl-anastomose keys module-string (cdr cache-ins-pos) n)
+	t))))
+	
 
 (defun bioperl-slurp-module-names (module-dir &optional n)
   "Return list of the  basenames for .pm files contained in MODULE-DIR.
