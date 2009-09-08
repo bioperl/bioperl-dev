@@ -34,11 +34,6 @@
 ;;
 ;;  - compile to byte code
 ;;
-;; back-compatibility issue
-;; - require a completing-read that works with emacs 21
-;;   * no "test-completion" method
-;;   * completing-read COLLECTION of 22 is TABLE of 21, 
-;;     which must be an alist 
 ;; issues
 ;; - bioperl-view-mode isn't always getting its keymap
 ;; - missing tool in tool-bar??
@@ -98,9 +93,6 @@
 (require 'skeleton)
 (require 'bioperl-skel)
 (require 'bioperl-init)
-
-;; (load-file "~/bioperl/docproj/bioperl-mode/bioperl-init.el")
-;; (load-file "~/bioperl/docproj/bioperl-mode/bioperl-skel.el")
 
 (defconst bioperl-mode-revision "$Id$"
   "The revision string of bioperl-mode.el")
@@ -243,7 +235,7 @@ N is an index associated with a component of `bioperl-module-path'."
      cr))
   (if (not method) (signal 'quit t))
   (let (
-	( cache-pos (if method (assoc method bioperl-method-pod-cache) nil) )
+	( cache-pos (if method (assoc-string method bioperl-method-pod-cache t) nil) )
 	)
     (if (not cache-pos)
 	(message "No such method")
@@ -693,7 +685,7 @@ Cache alist format:
 		  (if (member n (mapcar 'string-to-number (split-string (cdr cache-item) path-separator)))
 		      ;; deja vu
 		      (setq mod-alist-keys nil) ;; fall-through
-		    (setcdr cache-item (concat (cdr (assoc key mod-alist)) path-separator (cdr cache-item)))
+		    (setcdr cache-item (concat (cdr (assoc-string key mod-alist t)) path-separator (cdr cache-item)))
 		    (setq ret t))))
 	      ))
 
@@ -972,7 +964,7 @@ The module name for this method is assumed to be present in
 					    (elt (split-string bioperl-module-path path-separator) n))))
 	  (insert "\n")
 	  (while (setq cur-tag (pop tags))
-	    (setq cur-content (cdr (assoc cur-tag content)))
+	    (setq cur-content (cdr (assoc-string cur-tag content t)))
 	    (setq cur-content (replace-regexp-in-string "!!" "\t\n" cur-content))
 	    (insert cur-tag " : " cur-content))
 	  (goto-char (point-min))
@@ -1052,7 +1044,7 @@ if t, the reader barfs out whatever was finally entered."
 	(if (not name-list)
 	  (setq name-list (bioperl-module-names 
 			   nmspc nil t)))
-	(setq pthn (cdr (assoc mod name-list)))
+	(setq pthn (cdr (assoc-string mod name-list t)))
 	(if (not pthn) 
 	    (error "Shouldn't be here(1). Check `bioperl-module-path' and try running `bioperl-clear-module-cache'."))
 	(if (not (string-match path-separator pthn))
@@ -1083,7 +1075,7 @@ if t, the reader barfs out whatever was finally entered."
 			nil t (car (car module-path-list))))
 	    (if (string-equal pthn "")
 		(setq pthn (car (car module-path-list))))
-	    (setq pthn (elt (assoc pthn module-path-list) 1))
+	    (setq pthn (elt (assoc-string pthn module-path-list t) 1))
 	    )))
       ;; method completion
       (setq nmspc (replace-regexp-in-string "::$" "" nmspc))
@@ -1120,7 +1112,7 @@ if t, the reader barfs out whatever was finally entered."
 			nil t (car (car module-path-list))))
 	      (if (string-equal pthn "")
 		  (setq pthn (car (car module-path-list))))
-	      (setq pthn (elt (assoc pthn module-path-list) 1))
+	      (setq pthn (elt (assoc-string pthn module-path-list t) 1))
 	      )
 	    ))
 	(setq name-list (bioperl-method-names (concat nmspc "::" mod) nil pthn))
@@ -1254,24 +1246,26 @@ colons.  RETOPT is as for `bioperl-module-names'."
 
     
 (defun assoc-all (key alist &optional ret)
-  "Return list of *pointers* (like assoc) to all matching conses in the alist."
-  (let ( (c (assoc key alist)) (r) ) 
+  "Return list of *pointers* (like assoc) to all matching conses in the alist.
+Uses `assoc-string' for case control."
+  (let ( (c (assoc-string key alist t)) (r) ) 
     (if c 
 	(assoc-all key (cdr alist) (if ret (add-to-list 'ret c t 'eq) (list c)))
       ret)))
 
 (defun deep-assoc (keys alist)
-  "Return the associations of a set of keys in an alist tree."
+  "Return the associations of a set of keys in an alist tree.
+Uses `assoc-string' for case control."
   (cond
    ((not keys) 
     nil)
    ((not (listp alist))
     nil)
    ((= (length keys) 1)
-    (assoc (pop keys) alist))
+    (assoc-string (pop keys) alist t))
    (t
     (let* ( (key (pop keys))
-	    (newlist (assoc key alist)) ) 
+	    (newlist (assoc-string key alist t)) ) 
       (if newlist
 	  (deep-assoc keys (cdr newlist))
 	(deep-assoc nil nil)))
