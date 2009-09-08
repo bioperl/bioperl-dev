@@ -341,7 +341,7 @@ names cache: it will look first in `bioperl-module-names-cache'; if
 the MODULE-DIR is not available,
 `bioperl-add-module-names-to-cache' will be called."
   (let* (
-	(module-components (split-string module-dir "::"))
+	(module-components (split-string module-dir "::" t))
 	(unlist (lambda (x) (if (listp x) (car x) x)) )
 	(choose-dirs (lambda (x) (if (listp (cdr x)) x nil)) )
 	(choose-mods  (lambda (x) (if (listp (cdr x)) nil x)) )
@@ -847,7 +847,7 @@ desired member of bioperl-module-path to search."
     (setq n 0))
   (let (
 	(module-path (elt (split-string bioperl-module-path path-separator) n))
-	(module-components (split-string module "::"))
+	(module-components (split-string module "::" t))
 	(pth)
 	(dir (if (not (boundp 'dir-first)) nil dir-first))
 	)
@@ -855,7 +855,7 @@ desired member of bioperl-module-path to search."
 	(error "Path index out of bounds at arg N"))
     (unless (file-exists-p (concat module-path "/Bio"))
       (error (concat "Bio modules not present in path component " module-path)))
-    (setq module-components (split-string module "::"))
+    (setq module-components (split-string module "::" t))
     ;; unixize...
     (setq pth (replace-regexp-in-string "\\\\" "/" module-path))
     
@@ -1190,7 +1190,7 @@ colons.  RETOPT is as for `bioperl-module-names'."
 			    (match-string 1 module-dir)))
     (let* (
 	   ( dirs (bioperl-module-names module-dir retopt t) )
-	   ( modules (split-string module-dir "::") )
+	   ( modules (split-string module-dir "::" t) )
 	   ( complet ) 
 	   )
       ;; check once and recalc
@@ -1202,7 +1202,7 @@ colons.  RETOPT is as for `bioperl-module-names'."
 		    (string-match  "^\\(\\(?:[a-zA-Z0-9_]+::\\)+\\)\\(?::*\\|[a-zA-Z0-9_]*\\)$" str) 
 		    (match-string 1 str)))
 	    (setq dirs (bioperl-module-names module-dir retopt t))
-	    (setq modules (split-string module-dir "::"))
+	    (setq modules (split-string module-dir "::" t))
 	    ))
       (if (not dirs)
 	  ;; fail
