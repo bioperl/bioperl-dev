@@ -642,7 +642,7 @@ Cache alist format:
       (error "Path index out of bounds at arg N"))
   (let* (
 	(pth (bioperl-path-from-perl module-dir 1 n))
-	(module-components (split-string module-dir "::"))
+	(module-components (split-string module-dir "::" t))
 	(module-string)
 	(modules)
 	(alist)
