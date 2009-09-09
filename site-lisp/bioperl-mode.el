@@ -296,105 +296,6 @@ If LOCAL is set, remove hook from the buffer-local value of perl-mode-hook."
 ;;
 
 ;;
-;; list getters
-;;
-
-(defun bioperl-method-names (module &optional as-alist n) 
-
-  "Returns a list of method names as given in the pod of MODULE. 
-MODULE is in double-colon format. If AS-ALIST is t, return an
-alist with elts as (NAME . nil). N is an index associated with a 
-component of `bioperl-module-path'.
-
-This function looks first to see if methods for MODULE are
-already loaded in `bioperl-method-pod-cache'; if not, calls
-`bioperl-slurp-methods-from-pod'."
-  (unless (stringp module) 
-    (error "String required at arg MODULE"))
-  (unless (bioperl-path-from-perl module nil n)
-    (error "Module specified by MODULE not found in installation"))
-  ;; check the cache; might get lucky...
-  (let ( (ret) ) 
-    (setq ret 
-	  (if (string-equal module bioperl-cached-module)
-	      (progn
-		(mapcar 'car bioperl-method-pod-cache)
-		;; path handling...
-		)
-	    (mapcar 'car (bioperl-slurp-methods-from-pod module n)))) 
-    ;; fix alist for path handling??
-    (if as-alist
-	(mapcar (lambda (x) (list x nil)) ret)
-      ret)))
-
-
-(defun bioperl-module-names (module-dir &optional retopt as-alist)
-  "Returns a list of modules contained in the directory indicated by MODULE-DIR.
-MODULE-DIR is in double-colon format.  Optional RETOPT: nil,
-return module names only (default); t, return directory names
-only; other, return all names as a flat list. Optional AS-ALIST:
-if t, return an alist with elts (NAME . PATH_STRING) (when used in 
-completing functions, for back-compat with Emacs 21).
-
- This function is responsible for the lazy loading of the module
-names cache: it will look first in `bioperl-module-names-cache'; if
-the MODULE-DIR is not available,
-`bioperl-add-module-names-to-cache' will be called."
-  (let* (
-	(module-components (split-string module-dir "::" t))
-	(unlist (lambda (x) (if (listp x) (car x) x)) )
-	(choose-dirs (lambda (x) (if (listp (cdr x)) x nil)) )
-	(choose-mods  (lambda (x) (if (listp (cdr x)) nil x)) )
-	(ret)
-	(alists (deep-assoc-all module-components bioperl-module-names-cache))
-	(alist)
-	)
-    ;; here pick the directory alist
-    (if (listp (cdr (car alists)))
-	(setq alist (car alists))
-      (setq alist (elt alists 1)))
-    
-    (if (and alist (cdr alist))
-	(cond 
-	 ( (not (booleanp retopt))
-	   (if (stringp (cdr alist))
-	       (setq ret alist)
-	     (setq ret (cdr alist))))
-	 ((not retopt)
-	   (if (stringp (cdr alist))
-	       (setq ret alist)
-	     (setq ret (delete nil (mapcar choose-mods (cdr alist))))
-	     ))
-	 ( retopt
-	   (if (stringp (cdr alist))
-	       (setq ret nil)
-	     (setq ret (delete nil (mapcar choose-dirs (cdr alist))))
-	     )))
-      (if (bioperl-add-module-names-to-cache module-dir)
-	  (progn
-	    (setq alists (deep-assoc-all module-components bioperl-module-names-cache))
-	    (setq alist (if (listp (cdr (elt alists 0))) (elt alists 0) (elt alists 1)))
-	    (cond
-	     ( (not (booleanp retopt))
-	       (setq ret
-		     (cdr alist))) 
-	     ((not retopt)
-	      (setq ret
-		    (delete nil (mapcar choose-mods
-					(cdr alist)))))
-	     ( retopt
-	       (setq ret
-		     (delete nil (mapcar choose-dirs
-					 (cdr alist)))))
-	     nil))))
-    (if (not as-alist) 
-	(if (stringp (cdr ret))
-	    (car ret)
-	  (mapcar 'car ret))
-      ret)))
-
-
-;;
 ;; pod slurpers
 ;;
 
@@ -541,7 +442,7 @@ This function, when successful, also sets the cache vars
 	(pmfile (bioperl-path-from-perl module nil n))
 	)
     (unless pmfile
-      (error (concat "Module specified by MODULE not found in installation at path component " (number-to-string (if n n 0)) ".\nCheck contents of `bioperl-module-path' and call `bioperl-clear-names-cache'.") ))
+      (error (concat "Module specified by MODULE not found in installation at path component " (number-to-string (if n n 0)) ".\nCheck contents of `bioperl-module-path' and call `bioperl-clear-module-cache'.") ))
     (let (
 	(method nil)
 	(pod-key nil)
@@ -613,6 +514,101 @@ This function, when successful, also sets the cache vars
 	      bioperl-method-pod-cache )
 	  ;; the APPENDIX was not found...return nil
 	  nil ) ))))
+
+;;
+;; list getters
+;;
+
+(defun bioperl-method-names (module &optional as-alist n) 
+
+  "Returns a list of method names as given in the pod of MODULE. 
+MODULE is in double-colon format. If AS-ALIST is t, return an
+alist with elts as (NAME . nil). N is an index associated with a 
+component of `bioperl-module-path'.
+
+This function looks first to see if methods for MODULE are
+already loaded in `bioperl-method-pod-cache'; if not, calls
+`bioperl-slurp-methods-from-pod'."
+  (unless (stringp module) 
+    (error "String required at arg MODULE"))
+  (unless (bioperl-path-from-perl module nil n)
+    (error "Module specified by MODULE not found in installation"))
+  ;; check the cache; might get lucky...
+  (let ( (ret) ) 
+    (setq ret 
+	  (if (string-equal module bioperl-cached-module)
+	      (progn
+		(mapcar 'car bioperl-method-pod-cache)
+		;; path handling...
+		)
+	    (mapcar 'car (bioperl-slurp-methods-from-pod module n)))) 
+    ;; fix alist for path handling??
+    (if as-alist
+	(mapcar (lambda (x) (list x nil)) ret)
+      ret)))
+
+
+(defun bioperl-module-names (module-dir &optional retopt as-alist)
+  "Returns a list of modules contained in the directory indicated by MODULE-DIR.
+MODULE-DIR is in double-colon format.  Optional RETOPT: nil,
+return module names only (default); t, return directory names
+only; other, return all names as a flat list. Optional AS-ALIST:
+if t, return an alist with elts (NAME . PATH_STRING) (when used in 
+completing functions). This function checks all paths specified
+in `bioperl-module-path'.
+
+
+ This function is responsible for the lazy loading of the module
+names cache: it will look first in `bioperl-module-names-cache';
+if the MODULE-DIR is not available,
+`bioperl-add-module-names-to-cache' will be called."
+  (let* (
+	(module-components (split-string module-dir "::" t))
+	(unlist (lambda (x) (if (listp x) (car x) x)) )
+	(choose-dirs (lambda (x) (if (listp (cdr x)) x nil)) )
+	(choose-mods  (lambda (x) (if (listp (cdr x)) nil x)) )
+	(ret) (i)
+	(pths (split-string bioperl-module-path path-separator))
+	(alists) (alist)
+	)
+    ;; add to cache
+    (setq i 0)
+    (while (< i (length pths))
+      (bioperl-add-module-names-to-cache module-dir i)
+      (setq i (1+ i)))
+    ;; search
+    (setq alists (deep-assoc-all module-components bioperl-module-names-cache))
+    ;; here pick the directory alist
+    (setq alist (if (stringp (cdr (elt alists 0)))
+		    (elt alists 1) (elt alists 0)))
+    ;;
+    ;; don't short circuit trying to add-to-cache here;
+    ;; need to add paths not already present.
+    ;;
+    (if (and alist (cdr alist))
+	(cond 
+	 ( (not (booleanp retopt))
+	   (if (stringp (cdr alist))
+	       (setq ret alist)
+	     (setq ret (cdr alist))))
+	 ((not retopt)
+	   (if (stringp (cdr alist))
+	       (setq ret alist)
+	     (setq ret (delete nil (mapcar choose-mods (cdr alist))))
+	     ))
+	 ( retopt
+	   (if (stringp (cdr alist))
+	       (setq ret nil)
+	     (setq ret (delete nil (mapcar choose-dirs (cdr alist))))
+	     ))))
+    (if (not ret)
+	nil
+      (if (not as-alist) 
+	  (if (stringp (cdr ret))
+	      (car ret)
+	    (mapcar 'car ret))
+	ret))))
+
 
 ;;
 ;; directory slurpers
@@ -737,7 +733,11 @@ MODULE-STRING must indicate directory corresponding to CACHE-POS."
       (setq modules (bioperl-slurp-module-names module-string n))
       (if (not modules)
 	  nil ; fail
-	(setcdr cache-ins-pos modules )
+	(let ( (cache-item) (uniq-modules) )
+	  (while (setq cache-item (pop modules))
+	    (if (or (null (cdr cache-ins-pos)) (not (member cache-item (cdr cache-ins-pos))))
+		(push cache-item uniq-modules)))
+	  (setcdr cache-ins-pos (append (cdr cache-ins-pos) uniq-modules )))
 	(bioperl-anastomose keys module-string (cdr cache-ins-pos) n)
 	t))))
 	
@@ -795,7 +795,7 @@ Return is a list of the form
   "Look for something like a module identifier at point, and return it."
   (interactive)
   (let (
-	(found (thing-at-point-looking-at "Bio::[a-zA-Z_:]+"))
+	(found (thing-at-point-looking-at "Bio::[a-zA-Z0-9_:]+"))
 	(module nil)
 	(pth nil)
 	)
@@ -822,7 +822,7 @@ N is the index of the desired bioperl-module-path component."
 	(error "Path index out of bounds at arg N"))
     (unless (file-exists-p (concat module-path "/Bio"))
       (error (concat "Bio modules not present in path component" module-path )))
-    (setq found (thing-at-point-looking-at "Bio::[a-zA-Z_:]+"))
+    (setq found (thing-at-point-looking-at "Bio::[a-zA-Z0-9_:]+"))
     (if (not found) 
 	nil
       (setq module (apply 'buffer-substring (match-data)))
@@ -886,7 +886,7 @@ if there is a choice. If DIR-FIRST is not t or nil, return only
 \(namespace nil) or nil.
 
 Finally, if the namespace portion of MODULE exists, but the module
-specified by MODULE does not, (namespace nil) is returned.
+ specified by MODULE does not, (namespace nil) is returned.
 N specifies the index of the desired bioperl-module-path component. "
 
   (unless (or (not module) (stringp module))
@@ -1141,7 +1141,7 @@ if t, the reader barfs out whatever was finally entered."
 
 (defun bioperl-namespace-completion-function (str pred flag)
   "A custom completion function for bioperl-mode.
-Allows the lazy build of the `bioperl-module-names-cache'."
+Allows the lazy build of the `bioperl-module-names-cache' via `bioperl-make-collection' and `bioperl-module-names'."
   (if (not pred) 
       (setq pred 
 	    (lambda (x) (setq x (if (listp x) (car x) x) ) (if (string-match "[a-zA-Z0-9_:]+" x) t nil))
@@ -1182,7 +1182,11 @@ Allows the lazy build of the `bioperl-module-names-cache'."
 (defun bioperl-make-collection (module-dir &optional retopt)
   "Create a completion collection for MODULE-DIR.
 MODULE-DIR is in double-colon format, possibly with two trailing
-colons.  RETOPT is as for `bioperl-module-names'."
+colons.  RETOPT is as for `bioperl-module-names'.
+
+This function searches all paths specified in
+`bioperl-module-path'."
+
   ;; handle the boundary
   (if (or (not module-dir) (not (string-match ":" module-dir)))
       '("Bio::")
@@ -1199,8 +1203,8 @@ colons.  RETOPT is as for `bioperl-module-names'."
 	    ;; trim back to last ::
 	    (setq module-dir
 		  (progn 
-		    (string-match  "^\\(\\(?:[a-zA-Z0-9_]+::\\)+\\)\\(?::*\\|[a-zA-Z0-9_]*\\)$" str) 
-		    (match-string 1 str)))
+		    (string-match  "^\\(\\(?:[a-zA-Z0-9_]+::\\)+\\)\\(?::*\\|[a-zA-Z0-9_]*\\)$" module-dir) 
+		    (match-string 1 module-dir)))
 	    (setq dirs (bioperl-module-names module-dir retopt t))
 	    (setq modules (split-string module-dir "::" t))
 	    ))
@@ -1228,7 +1232,8 @@ colons.  RETOPT is as for `bioperl-module-names'."
 (defun bioperl-clear-module-cache ()
   (interactive)
   "Clears the variable `bioperl-module-names-cache'. Run if you change `bioperl-module-path'."
-  (setq bioperl-module-names-cache nil))
+  (setq bioperl-module-names-cache nil)
+  (setq bioperl-module-names-cache '(("Bio"))))
 
 ;;
 ;; taint checkers
