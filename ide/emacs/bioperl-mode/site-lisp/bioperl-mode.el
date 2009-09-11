@@ -333,6 +333,7 @@ MODULE is in double-colon format."
 			  args)))
       (save-excursion
 	(set-buffer pod-buf)
+	(pod-mode)
 	(setq header-line-format (concat "POD - BioPerl module " module " @ " 
 					 (file-name-squish
 					  (elt (split-string bioperl-module-path path-separator) n)) ))
@@ -381,6 +382,7 @@ component of bioperl-module-path."
 	(setq exec-path bioperl-safe-PATH))
     (save-excursion
       (set-buffer pod-buf)
+      (pod-mode)
       (setq header-line-format (concat section " - BioPerl module " module 
 				       " @ " (file-name-squish
 					      (elt (split-string bioperl-module-path path-separator) n)) ))
@@ -397,6 +399,11 @@ component of bioperl-module-path."
 	    (beginning-of-line)
 	    (delete-region (point) (point-max))
 	    (goto-char (point-min))
+	    (while (re-search-forward "^====\\s +\\([a-zA-Z0-9_:()]+\\)\\s +==+" (point-max) t)
+	      (replace-match "\\1" nil nil))
+	    (goto-char (point-min))
+	    (while (re-search-forward "^==\\s +\\([a-zA-Z0-9_:()]+\\)\\s +==+" (point-max) t)
+	      (replace-match "  \\1" nil nil))
 	    (bioperl-view-mode)
 	    (pop-to-buffer pod-buf)
 	    (setq ret t))
@@ -957,16 +964,22 @@ The module name for this method is assumed to be present in
 	  (message "No pod available")
 	(save-excursion
 	  (set-buffer pod-buf)
+	  (pod-mode)
 	  (setq header-line-format (concat "Method " method 
 					   "() - BioPerl module " module
 					   " @ " 
 					   (file-name-squish
 					    (elt (split-string bioperl-module-path path-separator) n))))
+	  (insert "  " method)
 	  (insert "\n")
 	  (while (setq cur-tag (pop tags))
 	    (setq cur-content (cdr (assoc-string cur-tag content t)))
-	    (setq cur-content (replace-regexp-in-string "!!" "\t\n" cur-content))
-	    (insert cur-tag " : " cur-content))
+	    (setq cur-content (replace-regexp-in-string "!!$" "\n" cur-content))
+	    (setq cur-content (replace-regexp-in-string "!!" 
+							"\n             " cur-content))
+	    (insert "    " cur-tag)
+	    (insert-char ?  (- 8 (length cur-tag)))
+	    (insert ": " cur-content))
 	  (goto-char (point-min))
 	  (bioperl-view-mode)
 	  (pop-to-buffer pod-buf)))

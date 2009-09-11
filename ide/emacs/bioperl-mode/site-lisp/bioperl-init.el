@@ -262,6 +262,92 @@ come."
   ;; and now, a total kludge.
     (view-mode))
 
+(defface pod-section-face
+  '( (t (:weight bold :foreground "maroon3") ) )
+  "Highlight for pod section names.")
+(defface pod-bioperl-identifier-face
+  '( (t (:foreground "blue3" :weight bold)))
+  "Highlight for bioperl identifiers")
+(defface pod-method-pod-tag-face
+  '( (t (:foreground "blue4")) )
+  "Highlight for method pod tags (Title, Usage, etc.)")
+(defface pod-blue-man-face
+  '( (t (:background "blue" :foreground "dark blue")))
+  "My world is blue.")
+(defface pod-subsec-header-face
+  '( (t (:weight bold :slant italic :foreground "blue4")))
+  "Highlight pod subsection headers")
+(defface pod-method-subsec-face
+  '( (t (:slant italic :foreground "maroon4")))
+  "Highlight for APPENDIX subsections")
+(defface pod-method-name-face
+  '( (t (:weight bold) ) )
+  "Highlight pod method names")
+(defface pod-key-value-arg-face
+  '( (t (:slant italic :foreground "green3")) )
+  "Highlight for key-value keys (-something)" )
+(defface pod-deref-symb-face
+  '( (t (:weight bold :foreground "blue4")))
+  "Highlight '->' ")
+(defface pod-assoc-symb-face
+  '( (t (:weight bold :foreground "green3")))
+  "Highlight '=>' ")
+
+(defvar bioperl-pod-font-lock-keywords
+  '( 
+    ;; rudimentary perl syntax highlighting
+    ("[%$][{]?\\([a-zA-Z0-9_]+\\)[}]?" 1 'font-lock-variable-name-face)
+    ("[^a-zA-Z0-9]@[{]?\\([a-zA-Z0-9_]+\\)[}]?" 1 'font-lock-variable-name-face)
+    ("\\(\\<[a-zA-Z0-9_]+\\>\\)()" 0 font-lock-function-name-face )
+    ("\\(\\<[a-zA-Z0-9_]+\\>\\)[\(]" 1 font-lock-function-name-face )
+    ("\\>->\\(\\<[a-zA-Z0-9_]+\\>\\)" 1 font-lock-function-name-face)
+    ("\\>->\\<" . 'pod-deref-symb-face)
+    ("\\(?:\\s \\|\\>\\)\\(=>\\)\\(?:\\s \\|\\<\\|[\'\"]\\)" 1 'pod-assoc-symb-face)
+    ("\\(?:\\W\\|\\s \\)\\(-[a-zA-Z0-9_]+\\)\\>" 1 'pod-key-value-arg-face)
+    ("'[^']+'" . 'font-lock-string-face)
+    ("\#\\s +.*"  0 'font-lock-comment-face t)
+    ;; headers
+    ("^\\(?:[A-Z]+\\s \\)+" . 'pod-section-face )
+    ("^\\s \\{2\\}\\([A-Z][a-z]+\\s \\)+" . (0 'pod-subsec-header-face))
+    ("^\\s \\{2\\}[a-z_][a-zA-Z0-9_()]+\\s " . 'pod-method-name-face)
+    ("^\\s +[a-zA-Z]+\\s *:\\s " . 'pod-method-pod-tag-face)
+    ("^[A-Z].*" . 'pod-method-subsec-face)
+    ("Bio::\\(?:[a-zA-Z0-9_:]+\\)+" . 'pod-bioperl-identifier-face) 
+     )
+  "Font lock keywords for highlighting Perl pod."
+)
+
+(defconst bioperl-pod-font-lock-defaults
+  '(bioperl-pod-font-lock-keywords nil nil nil ))
+
+(define-derived-mode pod-mode fundamental-mode "Pod Fundamental"
+  "Derived fundamental mode for highlighting BioPerl pod."
+  :group 'bioperl
+  :syntax-table nil
+  :abbrev-table nil
+  (set (make-local-variable 'font-lock-defaults)
+       bioperl-pod-font-lock-defaults))
+
+(defun bioperl-pod-synopsis-region (buffer)
+  "Return beginning & end of SYNOPSIS region (excluding the header)."
+  (unless (bufferp buffer)
+    (error "Buffer required at arg BUFFER"))
+  (save-excursion
+    (goto-char (point-min))
+    (let ( (beg) (end) )
+      (setq beg 
+	    (if (re-search-forward "^SYNOPSIS" (point-max) t)
+		(progn (forward-line 1) (if (bolp) (point) nil))
+	      nil))
+      (setq end
+	    (if (re-search-forward "^[A-Z]" (point-max) t)
+		(progn (beginning-of-line) (if (bolp) (point) nil))
+	    nil))
+      (if (not (and beg end))
+	  nil
+	`(,beg ,end)))))
+	  
+
 (defun bioperl-perl-mode-infect ()
   "Add this function to `perl-mode-hook' to associate bioperl-mode with perl-mode."
   (unless (or (not (display-graphic-p)) (key-binding [tool-bar bpmode]) )
