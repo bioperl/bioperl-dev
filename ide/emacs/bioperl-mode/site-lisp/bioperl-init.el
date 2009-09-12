@@ -293,6 +293,7 @@ come."
   '( (t (:weight bold :foreground "green3")))
   "Highlight '=>' ")
 
+
 (defvar bioperl-pod-font-lock-keywords
   '( 
     ;; rudimentary perl syntax highlighting
@@ -304,7 +305,8 @@ come."
     ("\\>->\\<" . 'pod-deref-symb-face)
     ("\\(?:\\s \\|\\>\\)\\(=>\\)\\(?:\\s \\|\\<\\|[\'\"]\\)" 1 'pod-assoc-symb-face)
     ("\\(?:\\W\\|\\s \\)\\(-[a-zA-Z0-9_]+\\)\\>" 1 'pod-key-value-arg-face)
-    ("'[^']+'" . 'font-lock-string-face)
+;    ("'[^']+'" . 'font-lock-string-face)
+    (pod-find-syntactic-string 1 'font-lock-string-face)
     ("\#\\s +.*"  0 'font-lock-comment-face t)
     ;; headers
     ("^\\(?:[A-Z]+\\s \\)+" . 'pod-section-face )
@@ -318,7 +320,7 @@ come."
 )
 
 (defconst bioperl-pod-font-lock-defaults
-  '(bioperl-pod-font-lock-keywords nil nil nil ))
+  '(bioperl-pod-font-lock-keywords t nil nil ))
 
 (define-derived-mode pod-mode fundamental-mode "Pod Fundamental"
   "Derived fundamental mode for highlighting BioPerl pod."
@@ -327,6 +329,11 @@ come."
   :abbrev-table nil
   (set (make-local-variable 'font-lock-defaults)
        bioperl-pod-font-lock-defaults))
+
+(defun pod-find-syntactic-string (bound)
+  "String searcher for bioperl-mode font-lock."
+  ;; try to infer from symbol context
+  (re-search-forward "\\(?:[$@%]\\|->\\|=>\\).*?\\(['][^']+[']\\|[\"][^\"]+[\"]\\)" bound t))
 
 (defun bioperl-pod-synopsis-region (buffer)
   "Return beginning & end of SYNOPSIS region (excluding the header)."
