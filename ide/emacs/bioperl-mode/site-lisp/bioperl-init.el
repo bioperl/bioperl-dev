@@ -243,6 +243,12 @@ come."
   :lighter "[bio]"
   :keymap bioperl-mode-map
   :group 'bioperl
+  ;; version check
+  (if (string-match "\\(2[0-9]\\)\.[0-9]+\\(?:\.[0-9]+\\)?" (emacs-version))
+      (if (>= (string-to-number (match-string 1 (emacs-version))) 22)
+	  t
+	(error "Must upgrade to Emacs 22 to use bioperl-mode"))
+    (error "Must upgrade to Emacs 22 to use bioperl-mode"))
   ;; set up mode
   (bioperl-skel-elements))
 
