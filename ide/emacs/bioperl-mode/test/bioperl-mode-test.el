@@ -123,7 +123,7 @@
 (defcase bioperl-completion-tests (:bpmode) 'bioperl-set-test-path
   (setq test-complete '("Bio"))
   (test-assert-equal (bioperl-namespace-completion-function "" nil t) test-complete )
-  (setq test-complete '("Bio::"))
+  (setq test-complete '("Bio" "Bio::"))
   (test-assert-equal (bioperl-namespace-completion-function "B" nil t) test-complete )
   (test-assert-equal (bioperl-namespace-completion-function "Bi" nil t) test-complete )
   (setq test-complete '("Bio::DB" "Bio::Nexml" "Bio::SeqIO"))
