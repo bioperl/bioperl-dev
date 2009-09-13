@@ -35,7 +35,6 @@
 ;;  - compile to byte code
 ;;
 ;; issues
-;; - bioperl-view-mode isn't always getting its keymap
 ;; - missing tool in tool-bar??
 ;; - xemacs support?
 ;;
@@ -169,6 +168,10 @@ Structure follows the Bio library tree:
  ( (\"Bio\" \"Seq\" ( \"SeqIO\" \"fasta\" \"msf\" ...) \"PrimarySeqI\" ...  ) )
 Use `bioperl-add-module-names-to-cache' to, well, do it.")
 
+(defvar bioperl-source-file nil
+  "Contains the source file of pod being viewed. Buffer-local.")
+
+(make-variable-buffer-local 'bioperl-source-file)
 ;;
 ;; User-interface functions
 ;;
@@ -284,6 +287,18 @@ N is an index associated with a component of `bioperl-module-path'."
 		    (signal 'quit t))) (car (last mod)))))
   (bioperl-view-pod-section module "APPENDIX" n))
 
+(defun bioperl-view-source ()
+  "Display the file in `bioperl-source-file' in view mode in a new buffer."
+  (interactive)
+  (if (not (file-exists-p bioperl-source-file))
+      nil
+    (let ( (fname bioperl-source-file) )
+      (set-buffer (generate-new-buffer "*BioPerl Src*"))
+      (insert-file fname)
+      (perl-mode)
+      (view-mode)
+      (pop-to-buffer (current-buffer)))))
+
 ;; "uninstall..."
 
 (defun bioperl-mode-unload-hook &optional local
@@ -341,6 +356,7 @@ MODULE is in double-colon format."
 	       nil t t pmfile args)
 	(goto-char (point-min))
 	(bioperl-view-mode)
+	(set (make-local-variable 'bioperl-source-file) pmfile)
 	(pop-to-buffer pod-buf))
       ;; restore old exec-path
       (setq exec-path old-exec-path)
@@ -405,6 +421,7 @@ component of bioperl-module-path."
 	    (while (re-search-forward "^==\\s +\\([a-zA-Z0-9_:()]+\\)\\s +==+" (point-max) t)
 	      (replace-match "  \\1" nil nil))
 	    (bioperl-view-mode)
+	    (set (make-local-variable 'bioperl-source-file) pmfile)
 	    (pop-to-buffer pod-buf)
 	    (setq ret t))
 	(kill-buffer pod-buf)
@@ -588,10 +605,6 @@ if the MODULE-DIR is not available,
     ;; here pick the directory alist
     (setq alist (if (stringp (cdr (elt alists 0)))
 		    (elt alists 1) (elt alists 0)))
-    ;;
-    ;; don't short circuit trying to add-to-cache here;
-    ;; need to add paths not already present.
-    ;;
     (if (and alist (cdr alist))
 	(cond 
 	 ( (not (booleanp retopt))
@@ -684,7 +697,12 @@ Cache alist format:
 		(setq cache-item (if (stringp (cdr (elt alist 0))) 
 				     (elt alist 0) (elt alist 1)))
 		(if (null cache-item)
-		    nil
+		    (if alist
+			nil
+		    ;; create a new list member(s)
+		      (setcdr cache-pos (append (cdr cache-pos) 
+						(assoc-all key mod-alist))))
+		  ;; 
 		  (if (member n (mapcar 'string-to-number (split-string (cdr cache-item) path-separator)))
 		      ;; deja vu
 		      (setq mod-alist-keys nil) ;; fall-through
@@ -766,29 +784,38 @@ Return is a list of the form
   (unless n
     (setq n 0))
   (let (
-	(module-path (elt (split-string bioperl-module-path path-separator) 0))
+	(module-path (split-string bioperl-module-path path-separator))
 	(pth (bioperl-path-from-perl module-dir 1 n))
-	(modules nil)
-	(fnames nil)
+	(modules)
+	(fnames)
+	(choose-dirs (lambda (x) (if (listp (cdr x)) x nil)) )
+	(nmspc-only t)
        )
     (if (and (> n 0) (> n (1- (length module-path))))
 	(error "Path index out of bounds at arg N"))
-    ;; following (elt ... 0) checks if pth is dir or symlink
-    ;; possible bug...
-    ;; try including directory names too, as (list (cons name nil))
-    ;; stubs for descending into those later...
+    ;; following (elt ... 0) checks if pth is dir or symlink:
+    ;;  possible bug...
     (if (and pth (elt (file-attributes pth) 0))
 	(progn
 	  (setq fnames (directory-files pth))
 	  (while fnames 
-	    (let ( (str (pop fnames)))
+ 	    (let ( (str (pop fnames)))
 	      ;; files - conses with path-index cdr
 	      (if (string-match "\\([a-zA-Z0-9_]+\\)\.pm$" str)
-		  (push (cons (match-string 1 str) (number-to-string n))  modules))
+		  (progn
+		    (push (cons (match-string 1 str) 
+				(number-to-string n))  modules)
+		    (setq nmspc-only nil)))
 	      ;; directories - conses with nil cdr
 	      (if (string-match "^\\([a-zA-Z0-9_]+\\)$" str)
 		  (if (not (string-equal (match-string 1 str) "README")) (push (cons (match-string 1 str) nil) modules)))
 	      ))
+;; 	  (if nmspc-only
+;; 	      (let ( (dirs (delete nil (mapcar choose-dirs modules)))
+;; 		     (module-dir-next) )
+;; 		(while dirs
+;; 		  (setq module-dir-next (concat module-dir "::" (car (pop dirs))))
+;; 		  (append modules (bioperl-slurp-module-names module-dir-next n)))))
 	  (if (not modules)
 	      nil
 	    modules))
@@ -1017,7 +1044,7 @@ if t, the reader barfs out whatever was finally entered."
 		     (concat prompt-prefix "Namespace: ")
 		     'bioperl-namespace-completion-function
 		     nil (not no-retry) (or initial-input "Bio::")) )
-	(if (not (string-equal nmspc ""))
+	(if (or (string-equal nmspc "Bio") (not (string-equal nmspc "")))
 	    t
 	  ;; back up
 	  (setq nmspc 
@@ -1202,7 +1229,7 @@ This function searches all paths specified in
 
   ;; handle the boundary
   (if (or (not module-dir) (not (string-match ":" module-dir)))
-      '("Bio::")
+      '(("Bio") ("Bio::"))
     (setq module-dir (progn (string-match "^\\([a-zA-Z0-9_:]+[^:]\\):*$" module-dir)
 			    (match-string 1 module-dir)))
     (let* (
@@ -1210,6 +1237,7 @@ This function searches all paths specified in
 	   ( modules (split-string module-dir "::" t) )
 	   ( complet ) 
 	   )
+
       ;; check once and recalc
       (if (not dirs)
 	  (progn 
@@ -1315,6 +1343,13 @@ So this is not completely general, but is specialized to the structure of `biope
 
 (defun pm-p (x)
   (not (null (string-match "[.]pm\$" x))))
+
+(defun split-string-compat (str &optional sep omit-nulls)
+  "`split-string' for 21"
+  (if omit-nulls
+      (delete nil (mapcar (lambda (x) (if (string-equal x "") nil x)) (split-st\
+ring str sep)))
+    (split-string str sep)))
 
 (defun file-name-squish (fname)
   "Squish long file names with central elipses.

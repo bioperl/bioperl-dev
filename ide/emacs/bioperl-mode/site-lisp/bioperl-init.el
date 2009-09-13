@@ -162,6 +162,21 @@ initializaton."
 	(pth) )
     ;; ask BPMODE_PATH first...
     (setq pth (getenv "BPMODE_PATH"))
+    ;; try the environment
+    (unless pth
+      (let (
+	    ( plib (concat (getenv "PERL5LIB") path-separator (getenv "PATH")))
+	    ( pths )
+	    )
+	(if plib
+	  (progn
+	    (setq pths (split-string plib path-separator))
+	    (while (and (not pth) pths)
+	    ;; unixize
+;;	    (setq pth (replace-regexp-in-string "\\\\" "/" pth))
+	      (setq pth (pop pths))
+	      (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil)))
+	    ))))
     ;; then ask Perl...
     (unless pth 
       ;; safe path
@@ -182,21 +197,6 @@ initializaton."
       ;; file name port issue - unixize
       (setq pth (replace-regexp-in-string "\\\\" "/" pth))
       (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil)))
-    ;; try the environment
-    (unless pth
-      (let (
-	    ( plib (concat (getenv "PERL5LIB") path-separator (getenv "PATH")))
-	    ( pths )
-	    )
-	(if plib
-	  (progn
-	    (setq pths (split-string plib path-separator))
-	    (while (and (not pth) pths)
-	    ;; unixize
-;;	    (setq pth (replace-regexp-in-string "\\\\" "/" pth))
-	      (setq pth (pop pths))
-	      (setq pth (if (file-exists-p (concat pth "/" "Bio")) pth nil)))
-	    ))))
     ;; fall back to pwd
     (unless pth
       (setq pth (nth 1 (split-string (pwd))))
@@ -256,6 +256,7 @@ come."
 		  (define-key map [menu-bar] nil)
 		  (define-key map [menu-bar bp-doc] (list 'menu-item "BP Docs" menu-bar-bioperl-doc-menu))
 		  (define-key map "q" 'View-kill-and-leave)
+		  (define-key map "f" 'bioperl-view-source)
 		  (define-key map "\C-m" 'bioperl-view-pod)
 		  (define-key map "\C-\M-m" 'bioperl-view-pod-method)))
 	    map )
@@ -333,7 +334,7 @@ come."
 (defun pod-find-syntactic-string (bound)
   "String searcher for bioperl-mode font-lock."
   ;; try to infer from symbol context
-  (re-search-forward "\\(?:[$@%]\\|->\\|=>\\).*?\\(['][^']+[']\\|[\"][^\"]+[\"]\\)" bound t))
+  (re-search-forward "\\(?:[$@%(),]\\|->\\|=>\\|print\\).*?\\(['][^']+[']\\|[\"][^\"]+[\"]\\)" bound t))
 
 (defun bioperl-pod-synopsis-region (buffer)
   "Return beginning & end of SYNOPSIS region (excluding the header)."
