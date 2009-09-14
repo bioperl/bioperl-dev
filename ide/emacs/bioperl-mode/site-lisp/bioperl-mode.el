@@ -317,12 +317,12 @@ MODULE is in double-colon format."
 	(error "Module specified by MODULE not found in installation"))
       (save-excursion
 	(set-buffer pod-buf)
+	(pod-mode)
 	(setq header-line-format (concat "POD - BioPerl module " module " @ " 
 					 (file-name-squish
 					  (elt (split-string bioperl-module-path path-separator) n)) ))
 	(insert-file-contents pmfile)
 	(pod-parse-buffer (current-buffer))
-	(pod-mode)
 	(goto-char (point-min))
 	(bioperl-view-mode)
 	(set (make-local-variable 'bioperl-source-file) pmfile)

@@ -234,7 +234,7 @@ come."
   "An easily-quittable View mode deriviation for bioperl-mode."
   :init-value nil
   :lighter "[bio]"
-  :keymap ( let ( (map (cdr (assoc 'view-mode minor-mode-map-alist))) )
+  :keymap ( let ( (map (copy-keymap (cdr (assoc 'view-mode minor-mode-map-alist)))) )
 	    (if map
 		(progn
 		  (define-key map [menu-bar] nil)
