@@ -54,8 +54,7 @@
 ;; POD content is obtained exclusively by accessing the user's installed
 ;; Bioperl modules -- so it's as up-to-date as the user's installation.
 ;;
-;; POD is parsed first by calling out to pod2text; I believe this is a
-;; standard utility with perl distributions.
+;; Pod is parsed with a homebrew parser found in pod.el.
 ;;
 ;; Much of the parsing in this package depends on the standard form of
 ;; Bioperl pod; particularly on the typical division into NAME,
@@ -92,6 +91,7 @@
 (require 'skeleton)
 (require 'bioperl-skel)
 (require 'bioperl-init)
+(require 'pod)
 
 (defconst bioperl-mode-revision "$Id$"
   "The revision string of bioperl-mode.el")
@@ -115,26 +115,10 @@ Nil means use your current `exec-path'."
   :type 'boolean
   :group 'bioperl)
 
-(defcustom bioperl-pod2text-args '("")
-  "A list of pod2text arguments.
-Must be single characters preceded by dashes. Args used with
-pod2text when viewing full pod. Do 'pod2text --help' for
-possibilities."
-  :type 'sexp
-  :group 'bioperl
-  )
-
 (defcustom bioperl-safe-PATH '()
   "Safe exec-path for bioperl-mode."
   :type 'sexp
   :initialize 'bioperl-set-safe-PATH
-  :group 'bioperl)
-
-(defcustom bioperl-system-pod2text nil
-  "Contains the path to the pod2text command.
-On init, set is attempted by `bioperl-find-system-pod2text'."
-  :type 'file
-  :initialize 'bioperl-find-system-pod2text
   :group 'bioperl)
 
 (defcustom bioperl-module-path nil
@@ -317,11 +301,6 @@ If LOCAL is set, remove hook from the buffer-local value of perl-mode-hook."
 (defun bioperl-view-full-pod (module &optional n) 
   "Open the Bioperl POD for the MODULE for viewing in another buffer.
 MODULE is in double-colon format."
-  (unless bioperl-system-pod2text 
-    (unless (bioperl-find-system-pod2text)
-      (error "Can't find pod2text; try setting bioperl-system-pod2text manually")))
-  (unless (bioperl-check-system-pod2text)
-    (error "Unexpected command in bioperl-system-pod2text; aborting..."))
   (unless (and module (stringp module))
     (error "String required at arg MODULE"))
   (unless (or (not n) (numberp n))
@@ -331,35 +310,23 @@ MODULE is in double-colon format."
   (if (not module)
       nil
     (let (
-	  (old-exec-path exec-path)
 	  (pod-buf (generate-new-buffer "*BioPerl POD*"))
 	  (pmfile (bioperl-path-from-perl module nil n))
-	  (args bioperl-pod2text-args)
 	  )
       (unless pmfile
 	(error "Module specified by MODULE not found in installation"))
-      ;; safe path
-      (if bioperl-mode-safe-flag
-	  (setq exec-path bioperl-safe-PATH))
-      ;; untaint pod2text args
-      (setq args (remove 
-		  nil 
-		  (mapcar (lambda (x) (and (string-match "^[-].$" x) x)) 
-			  args)))
       (save-excursion
 	(set-buffer pod-buf)
-	(pod-mode)
 	(setq header-line-format (concat "POD - BioPerl module " module " @ " 
 					 (file-name-squish
 					  (elt (split-string bioperl-module-path path-separator) n)) ))
-	(apply 'call-process bioperl-system-pod2text
-	       nil t t pmfile args)
+	(insert-file-contents pmfile)
+	(pod-parse-buffer (current-buffer))
+	(pod-mode)
 	(goto-char (point-min))
 	(bioperl-view-mode)
 	(set (make-local-variable 'bioperl-source-file) pmfile)
 	(pop-to-buffer pod-buf))
-      ;; restore old exec-path
-      (setq exec-path old-exec-path)
       )
     ;;return val
     t ))
@@ -369,11 +336,6 @@ MODULE is in double-colon format."
 MODULE is in double-colon format. SECTION is a string; one of
 SYNOPSIS, DESCRIPTION, or APPENDIX. N is the index of the desired
 component of bioperl-module-path."
-  (unless bioperl-system-pod2text 
-    (unless (bioperl-find-system-pod2text)
-      (error "Can't find pod2text; try setting bioperl-system-pod2text manually")))
-  (unless (bioperl-check-system-pod2text)
-    (error "Unexpected command in bioperl-system-pod2text; aborting..."))
   (unless (stringp module)
     (error "String required at arg MODULE"))
   (unless (stringp section) 
@@ -386,24 +348,19 @@ component of bioperl-module-path."
     (setq n 0))
   (let (
 	(pod-buf (generate-new-buffer "*BioPerl POD*"))
-	(args '("-a"))
 	(ret nil)
 	(pmfile (bioperl-path-from-perl module nil n))
-	(old-exec-path exec-path)
 	)
     (unless pmfile
       (error "Module specified by MODULE not found in installation"))
-    ;; safe path
-    (if bioperl-mode-safe-flag
-	(setq exec-path bioperl-safe-PATH))
     (save-excursion
       (set-buffer pod-buf)
       (pod-mode)
       (setq header-line-format (concat section " - BioPerl module " module 
 				       " @ " (file-name-squish
 					      (elt (split-string bioperl-module-path path-separator) n)) ))
-      (apply 'call-process bioperl-system-pod2text
-				  nil t t pmfile args)
+      (insert-file-contents pmfile)
+      (pod-parse-buffer (current-buffer) t)
       (goto-char (point-min))
       ;; clip to desired section
       (if (search-forward (concat "== " section) (point-max) t)
@@ -426,8 +383,6 @@ component of bioperl-module-path."
 	    (setq ret t))
 	(kill-buffer pod-buf)
 	)
-	;; restore old exec-path
-	(setq exec-path old-exec-path)
     )
     ret ))
 
@@ -457,11 +412,6 @@ This function, when successful, also sets the cache vars
 `bioperl-method-pod-cache' and `bioperl-cached-module'."
   (unless (stringp module) 
     (error "String required at arg MODULE"))
-  (unless bioperl-system-pod2text
-    (unless (bioperl-find-system-pod2text)
-      (error "pod2text path not set yet; you can set bioperl-system-pod2text manually or call bioperl-find-system-pod2text")))
-  (unless (bioperl-check-system-pod2text)
-    (error "Unexpected command in bioperl-system-pod2text; aborting..."))
   (let (
 	(pmfile (bioperl-path-from-perl module nil n))
 	)
@@ -477,14 +427,9 @@ This function, when successful, also sets the cache vars
 	(data-elt-cdr '())
 	(old-exec-path exec-path)
 	)
-    ;; safe path
-      (if bioperl-mode-safe-flag
-	  (setq exec-path bioperl-safe-PATH))
       (with-temp-buffer
-	(if (not (= 0
-		    (call-process bioperl-system-pod2text
-				  nil t t pmfile "-a")))
-	    (error "pod2text failed"))
+	(insert-file-contents pmfile)
+	(pod-parse-buffer (current-buffer) t)
 	;; clip to desired section
 	(goto-char (point-min))
 	(if (search-forward "= APPENDIX" (point-max) t)
@@ -1275,16 +1220,6 @@ This function searches all paths specified in
   "Clears the variable `bioperl-module-names-cache'. Run if you change `bioperl-module-path'."
   (setq bioperl-module-names-cache nil)
   (setq bioperl-module-names-cache '(("Bio"))))
-
-;;
-;; taint checkers
-;;
-
-(defun bioperl-check-system-pod2text ()
-  "See if `bioperl-system-pod2text' is naughty."
-  (if (and bioperl-system-pod2text (string-match "pod2text\\(\\|\\.bat\\|\\.exe\\)$" bioperl-system-pod2text))
-      t
-    nil))
 
 ;;
 ;; utilities (out of bioperl- namespace)

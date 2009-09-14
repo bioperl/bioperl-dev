@@ -1,9 +1,36 @@
 ;; $Id$
 ;;
-;; emacs functions for simple pod parsing
-;; reduce perl code to its pod2text in a buffer
+
 ;;
+;; Emacs functions for simple Perl pod parsing
+;;  parse result format based on pod2text
+;;
+;; required in bioperl-mode.el
 ;; 
+;; Author: Mark A. Jensen
+;; Email : maj -at- fortinbras -dot- us
+;;
+;; Part of The Documentation Project
+;; http://www.bioperl.org/wiki/The_Documentation_Project
+;;
+;;
+
+;; Copyright (C) 2009 Mark A. Jensen
+
+;; This program is free software; you can redistribute it and/or
+;; modify it under the terms of the GNU General Public License as
+;; published by the Free Software Foundation; either version 3 of
+;; the License, or (at your option) any later version.
+
+;; This program is distributed in the hope that it will be
+;; useful, but WITHOUT ANY WARRANTY; without even the implied
+;; warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+;; PURPOSE.  See the GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public
+;; License along with this program; if not, write to the Free
+;; Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301 USA
 
 (defvar pod-keywords 
   '( "pod" "head1" "head2" "head3" "head4" "over" "item" "back" "begin" "end" "for" "encoding" "cut" )
@@ -13,10 +40,11 @@
   '( "I" "B" "C" "L" "E" "F" "S" "X" "Z" )
   "Perl pod format codes (sans <>)" )
 
-(defun pod-parse-buffer (buf)
+(defun pod-parse-buffer (buf &optional alt-format)
   "Parse the pod in the BUF.
 Removes code and leaves pod. Does some simple formatting a la
-pod2text as setup for pod-mode."
+pod2text as setup for pod-mode. If ALT-FORMAT is true, headers 
+are flanked by '='s as in pod2text -a. "
   (save-excursion
     (set-buffer buf)
     (let (
@@ -76,9 +104,20 @@ pod2text as setup for pod-mode."
 	       (pod-do-format "text" beg (point))
 	       (if (not cur-content)
 		   nil
-		 (insert-char ?  (* 2 (1- head-level)))
-		 (insert cur-content "\n"))
-	       )
+		 (if (not alt-format)
+		     (progn 
+		       (insert-char ?  (* 2 (1- head-level)))
+		       (insert cur-content "\n"))
+		   (cond 
+		    ((= head-level 1)
+		     (insert "==== " cur-content " ====\n"))
+		    ((= head-level 2)
+		     (insert "==   " cur-content "   ==\n"))
+		    ((= head-level 3)
+		     (insert "=    " cur-content "    =\n"))
+		    ((= head-level 4)
+		     (insert "-    " cur-content "    -\n"))))
+		 ))
 	     ( (string-equal cur-state "over") 
 	       (let (
 		     (indent-level cur-content)
@@ -95,7 +134,9 @@ pod2text as setup for pod-mode."
 		   (forward-line 0)
 		   (kill-line nil)
 		   (pod-do-format "text" beg (point))
-		   (insert "    * " (match-string 1) "\n")
+		   (if (not alt-format)
+		       (insert "    * " (match-string 1) "\n")
+		     (insert ":   " (match-string 1) "\n"))
 		   (setq beg (point)))
 		 (re-search-forward "^=back" (point-max))
 		 (forward-line 0)
@@ -179,4 +220,4 @@ text region."
       ;; otherwise, remove (ignore)
       (delete-region beg end)) )))
 
-(provide 'pod.el)
+(provide 'pod)

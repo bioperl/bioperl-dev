@@ -129,28 +129,6 @@
 ;; finders
 ;;
 
-(defun bioperl-find-system-pod2text (&optional symb val)
-  "Find the system's pod2text program and set `bioperl-system-pod2text' to its full path.
-Returns path on success; nil on failure. Doesn't work very
-hard. SYMB and VAL are dummy variables allowing this function to
-be used by `defcustom' to initialize"
-  (let ( (old-exec-path exec-path)
-	 (pth nil))
-    ;; safe path
-    (if (or (not (boundp 'bioperl-mode-safe-flag))
-	    bioperl-mode-safe-flag)
-	(setq exec-path bioperl-safe-PATH))
-    ;; see if pod2text runs...if so do the easy thing
-    (setq bioperl-system-pod2text
-     (if (eq (call-process "pod2text" nil nil t) 0)
-	 "pod2text"
-       nil))
-    ;; restore old exec-path
-    (setq exec-path old-exec-path)
-    )
-  ;; retval here
-  bioperl-system-pod2text
-  )
 
 (defun bioperl-find-module-path (&optional symb val)
   "Find path to Bioperl modules and set `bioperl-module-path'.
@@ -306,9 +284,6 @@ come."
     ;; rudimentary perl syntax highlighting
     ("[%$][{]?\\([a-zA-Z0-9_]+\\)[}]?" 1 'font-lock-variable-name-face)
     ("[^a-zA-Z0-9]@[{]?\\([a-zA-Z0-9_]+\\)[}]?" 1 'font-lock-variable-name-face)
-    ("\\(\\<[a-zA-Z0-9_]+\\>\\)()" 0 font-lock-function-name-face )
-    ("\\(\\<[a-zA-Z0-9_]+\\>\\)[\(]" 1 font-lock-function-name-face )
-    ("\\>->\\(\\<[a-zA-Z0-9_]+\\>\\)" 1 font-lock-function-name-face)
     ("\\>->\\<" . 'pod-deref-symb-face)
     ("\\(?:\\s \\|\\>\\)\\(=>\\)\\(?:\\s \\|\\<\\|[\'\"]\\)" 1 'pod-assoc-symb-face)
     ("\\(?:\\W\\|\\s \\)\\(-[a-zA-Z0-9_]+\\)\\>" 1 'pod-key-value-arg-face)
@@ -322,6 +297,11 @@ come."
     ("^\\s +[a-zA-Z]+\\s *:\\s " . 'pod-method-pod-tag-face)
     ("^[A-Z].*" . 'pod-method-subsec-face)
     ("Bio::\\(?:[a-zA-Z0-9_:]+\\)+" . 'pod-bioperl-identifier-face) 
+    ;; post-header syntax highlights
+    ("\\(\\<[a-zA-Z0-9_]+\\>\\)()" 0 font-lock-function-name-face )
+    ("\\(\\<[a-zA-Z0-9_]+\\>\\)[\(]" 1 font-lock-function-name-face )
+    ("\\>->\\(\\<[a-zA-Z0-9_]+\\>\\)" 1 font-lock-function-name-face)
+
      )
   "Font lock keywords for highlighting Perl pod."
 )
