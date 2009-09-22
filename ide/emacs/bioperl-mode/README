@@ -16,6 +16,8 @@ description and list of features.
 
 == Installation ==
 
+Emacs (XEmacs is below):
+
 Copy the file dist/bioperl-mode.tar into your Emacs root directory,
 often 
 
@@ -38,6 +40,28 @@ In your .emacs file, add the line
 and restart.
 
 Source files are available in site-lisp and etc directories.
+
+XEmacs (Emacs is above):
+
+Copy the file dist/bioperl-mode-xemacs.tar into your XEmacs root directory,
+often 
+
+ /usr/share/xemacs
+
+in Linux or Cygwin.
+
+Untar in situ with
+
+ $ tar -xf bioperl-mode-xemacs.tar
+
+In your .emacs file, add the line
+
+ (require 'bioperl-mode)
+
+and restart.
+
+Source files are available in xemacs-packages/bioperl-mode/lisp and 
+xemacs-packages/bioperl-mode/etc directories.
 
 For more details, see http://www.bioperl.org/wiki/Emacs_bioperl-mode.
 
