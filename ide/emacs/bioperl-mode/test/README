@@ -1,0 +1,6 @@
+To run the regression tests, open 'bioperl-mode-test.el' from this
+directory, and do
+
+ M-x eval-buffer
+
+A report will appear in a new window.
