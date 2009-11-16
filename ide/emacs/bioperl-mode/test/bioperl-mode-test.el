@@ -1,7 +1,10 @@
 ;; $Id$
 ;; test suite (HA!) for bioperl-mode
 ;; uses test.el package by wang liang (included in test dir)
-(require 'bioperl-mode)
+;; (require 'bioperl-mode)
+(load-file "../site-lisp/bioperl-init.el")
+(load-file "../site-lisp/bioperl-skel.el")
+(load-file "../site-lisp/bioperl-mode.el")
 (unless (require 'test)
   (push load-path ".")
   (unless (require 'test)
@@ -25,7 +28,13 @@
   (test-assert-string-equal (bioperl-path-from-perl "Bio::SeqIO")
 			    "./test-path-1/Bio/SeqIO.pm")
   (test-assert-string-equal (bioperl-path-from-perl "Bio::SeqIO" t)
-			    "./test-path-1/Bio/SeqIO")  
+			    "./test-path-1/Bio/SeqIO")
+  ;; generate (nmspc mod) from a path
+  (test-assert-equal (bioperl-perl-from-path "C:\\Perl\\site\\Bio\\DB\\HIV.pm")
+		     '("Bio::DB" "HIV"))
+  (test-assert-equal (bioperl-perl-from-path "/usr/local/lib/perl5/bioperl-live/Bio/DB/HIV.pm")
+					     '("Bio::DB" "HIV"))
+  (test-assert-equal (bioperl-perl-from-path "/usr/local/bin/grep") nil)
   ;; name splits
   ;; module-first
   (test-assert-equal (bioperl-split-name "Bio::SeqIO" nil) '("Bio" "SeqIO"))
