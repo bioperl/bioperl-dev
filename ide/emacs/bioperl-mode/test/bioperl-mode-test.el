@@ -46,6 +46,19 @@
   (test-assert-equal (bioperl-split-name "Bio::Se" nil) '("Bio" "*Se"))
   (test-assert-equal (bioperl-split-name "Bio::Se" t) '("*Bio::Se" nil))
 
+  ;; find parent classes
+  (with-temp-buffer
+    (insert-file-contents "test-path-1/Bio/SeqIO.pm")
+    (setq bioperl-test-var (bioperl-find-class-parents (current-buffer))))
+  (test-assert-equal bioperl-test-var
+		       '("Bio::Root::Root" "Bio::Root::IO" 
+			 "Bio::Factory::SequenceStreamI") )
+  (with-temp-buffer
+    (insert-file-contents "test-path-1/Bio/SeqIO/abi.pm")  
+    (setq bioperl-test-var  (bioperl-find-class-parents (current-buffer))))
+    (test-assert-equal bioperl-test-var
+		       '("Bio::SeqIO" "Bio::SeqIO::staden::read") )
+  
   )
 
 ;;
