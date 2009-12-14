@@ -14,7 +14,7 @@
 
 =head1 NAME
 
-Bio::Tools::Run::StandAloneBlastPlus - Compute with NCBI's blast+ suite
+Bio::Tools::Run::StandAloneBlastPlus - Compute with NCBI's blast+ suite *CURRENTLY NON-FUNCTIONAL*
 
 =head1 SYNOPSIS
 
@@ -88,6 +88,7 @@ our $AUTOLOAD;
 # Object preamble - inherits from Bio::Root::Root
 
 use Bio::Root::Root;
+use Bio::Tools::GuessSeqFormat;
 use File::Temp;
 use IO::String;
 
@@ -95,6 +96,12 @@ use base qw(Bio::Root::Root);
 unless ( eval "require Bio::Tools::Run::BlastPlus" ) {
     Bio::Root::Root->throw("This module requires 'Bio::Tools::Run::BlastPlus'");
 }
+
+my %AVAILABLE_MASKERS = (
+    'windowmasker' => 'nucl',
+    'dustmasker'   => 'nucl',
+    'segmasker'    => 'prot'
+    );
 
 # what's the desire here?
 #
@@ -145,19 +152,75 @@ unless ( eval "require Bio::Tools::Run::BlastPlus" ) {
 sub new {
     my ($class,@args) = @_;
     my $self = $class->SUPER::new(@args);
-    my ($istemp) = $self->_rearrange([qw( TEMPDB
+    my ($db_name, $db_data, $db_dir, $db_make_args,
+	$mask_file, $mask_data, $mask_make_args, $masker, 
+	$create, $overwrite) 
+                 = $self->_rearrange([qw( 
                                           DBNAME
                                           DB_DATA
+                                          DB_DIR
                                           DB_MAKE_ARGS
                                           MASK_FILE 
                                           MASK_DATA
                                           MASK_MAKE_ARGS
                                           MASKER
+                                          CREATE
+                                          OVERWRITE
                                            )], @args);
-
-    $self->is_tempdb(1) if $istemp;
+    # make factory
     $self->{_factory} = Bio::Tools::Run::BlastPlus->new();
-    $self->{_db} = undef;
+
+    # parm taint checks
+    if ($db_name) {
+	$self->throw("DB name not valid") unless $db_name =~ /^[a-z0-9_.+-]+$/i;
+	$self->{_db} = $db_name;
+    }
+
+    if ( $db_dir ) { # or create if not there??
+	$self->throw("DB directory (DB_DIR) not valid") unless (-d $db_dir);
+	$self->{'_db_dir'} = $db_dir;
+    }
+    else {
+	$self->{'_db_dir'} = '.';
+    }
+
+    if ($masker) {
+	$self->throw("Masker '$masker' not available") unless 
+	    grep /^$masker$/, keys %AVAILABLE_MASKERS;
+	$self->{_masker} = $masker;
+    }
+
+    $self->set_db_make_args( $db_make_args) if ( $db_make_args );
+    $self->set_mask_make_args( $mask_make_args) if ($mask_make_args);
+    $self->{'_create'} = $create;
+    $self->{'_overwrite'} = $overwrite;
+    $self->{'_db_data'} = $db_data;
+
+    # check db
+    if ($self->check_db == 0) {
+	$self->throw("DB '".$self->db."' can't be found. To create, set -create => 1.") unless $create;
+    }
+    else {
+	$self->throw('No database or db data specified. '.
+		     'To create a new database, provide '.
+		     '-db_data => [fasta|\@seqs|$seqio_object]')
+	    unless $self->db_data;
+	# no db specified; create temp db
+	$self->{_create} = 1;
+	if ($self->db_dir) {
+	    my $fh = File::Temp->new(TEMPLATE => 'DBXXXXX',
+				     DIR => $self->{_db_dir},
+				     UNLINK => 1);
+	    $self->{_db} = $fh->filename;
+	    $fh->close;
+	}
+	else {
+	    $self->{_db_dir} = File::Temp->newdir('DBDXXXXX');
+	    $self->{_db} = 'DBTEMP';
+	}
+    }
+
+#    $self->{_db} = undef;
 
     return $self;
 }
@@ -173,10 +236,10 @@ sub new {
 
 =cut
 
-sub db {
-    my $self = shift;
-    return $self->{'db'};
-}
+sub db { shift->{_db} }
+sub db_dir { shift->{_db_dir} }
+sub db_data { shift->{_db_data} }
+sub db_type { shift->{_db_type} }
 
 =head2 factory()
 
@@ -190,11 +253,8 @@ sub db {
 
 =cut
 
-sub factory {
-    my $self = shift;
-    return $self->{'factory'};
-}
-
+sub factory { shift->{_factory} }
+sub masker { shift->{_masker} }
 
 =head1 DB methods
 
@@ -209,11 +269,43 @@ sub factory {
 
 =cut
 
+# should also provide facility for creating subdatabases from 
+# existing databases (i.e., another format for $data: the name of an
+# existing blastdb...)
 sub make_db {
     my $self = shift;
     my @args = @_;
-    # check if db_name already points to a existing db
+    return 1 if $self->check_db; # already there
+    $self->throw('No database or db data specified. '.
+		 'To create a new database, provide '.
+		 '-db_data => [fasta|\@seqs|$seqio_object]') 
+	unless $self->db_data;
     # db_data can be: fasta file, array of seqs, Bio::SeqIO object
+    my $data = $self->db_data
+    $data = $self->_fastize($data);
+    my $testio = Bio::SeqIO->new(-file=>$data, -format=>'fasta');
+    $self->{_db_type} = ($testio->next_seq->alphabet =~ /.na/) ? 'nucl' : 'prot';
+    $testio->close;
+
+    $self->factory->command('makeblastdb');
+    my ($v,$d,$name) = File::Spec->splitpath($data);
+    $name =~ s/\.fas$//;
+    # <#######[
+    # deal with creating masks here, 
+    # and provide correct parameters to the 
+    # makeblastdb ...
+    
+    # accomodate $self->db_make_args here -- allow them
+    # to override defaults, or allow only those args
+    # that are not specified here?
+
+    $self->factory->reset_parameters(
+	-in => $data,
+	-dbtype => $self->db_type,
+	-out => $name,
+	-title => $name);
+    $self->factory->_run or $self->throw("makeblastdb failed : $!");
+    return 1;
 }
 
 =head2 make_mask()
@@ -226,8 +318,39 @@ sub make_db {
 
 =cut
 
+# mask program usage (based on blast+ manual)
+# 
+# program        dbtype        opn
+# windowmasker   nucl          mask overrep data, low-complexity (optional)
+# dustmasker     nucl          mask low-complexity
+# segmasker      prot  
+
+#needs some thought
+# want to be able to create mask and db in one go (say on object construction)
+# also want to be able to create a mask from given data as a separate
+# task using the factory.
+# so this method should be independent, and also called by make_db
+# if masking is specified.
+# question then is arguments: do this: 
+# must specify mask data (a seq collection),
+# allow specification of mask program, mask pgm args,
+# but if either of these not present, default to the object attribute
+
+
 sub make_mask {
     my $self = shift;
+    my @args = @_;
+    my ($data, $make_args, $masker) = $self->_rearrange([qw(DATA,
+                                                            MAKE_ARGS,
+                                                            MASKER)], @args);
+    $self->throw("make_mask requires -data argument") unless $data;
+    $masker ||= $self->masker;
+    $self->throw("no masker specified and no masker default set in object") 
+	unless $masker;
+    $make_args ||= $self->mask_make_args;
+    # now, need to provide reasonable default masker arg settings, 
+    # and override these with $make_args as necessary
+
 }
 
 =head2 db_info()
@@ -256,10 +379,10 @@ sub db_info {
     $self->{_db_info_text} = $self->factory->stdout;
     # parse info into attributes
     my $infh = IO::String->new($self->{_db_info_text});
-    my %attrs;
+    my %attr;
     while (<$infh>) {
 	/Database: (.*)/ && do {
-	    $attrs{db_info_name} = $1;
+	    $attr{db_info_name} = $1;
 	    next;
 	};
 	/([0-9,]+) sequences; ([0-9,]+) total/ && do {
@@ -289,25 +412,165 @@ sub db_info {
 	    }
 	    next;
 	};
-	return $self->{_db_info} = \%attrs;
+    }
+    return $self->{_db_info} = \%attr;
 }
 
-=head2 is_tempdb()
+=head2 set_db_make_args()
 
- Title   : is_tempdb
+ Title   : set_db_make_args
  Usage   : 
- Function: predicate indicating whether the attached db is
-           temporary
- Returns : boolean
- Args    : [option] boolean to set/clear
+ Function: set the DB make arguments attribute 
+           with checking
+ Returns : true on success
+ Args    : arrayref or hashref of named arguments
 
 =cut
 
-sub is_tempdb {
+sub set_db_make_args {
     my $self = shift;
-    return $self->{_is_tempdb} = shift if @_;
-    return $self->{_is_tempdb};
+    my $args = shift;
+    $self->throw("Arrayref or hashref required at DB_MAKE_ARGS") unless 
+	ref($args) =~ /^ARRAY|HASH$/;
+    if (ref($args) eq 'HASH') {
+	my @a = %$args;
+	$args = \@a;
+    }
+    $self->throw("Named args required for DB_MAKE_ARGS") unless !(@$args % 2);
+    $self->{'_db_make_args'} = $args;
+    return 1;
 }
+
+sub db_make_args { shift->{_db_make_args} }
+
+=head2 set_mask_make_args()
+
+ Title   : set_mask_make_args
+ Usage   : 
+ Function: set the masker make arguments attribute
+           with checking
+ Returns : true on success
+ Args    : arrayref or hasref of named arguments
+
+=cut
+
+sub set_mask_make_args {
+    my $self = shift;
+    my $args = shift;
+    $self->throw("Arrayref or hashref required at MASK_MAKE_ARGS") unless 
+	ref($args) =~ /^ARRAY|HASH$/;
+    if (ref($args) eq 'HASH') {
+	my @a = %$args;
+	$args = \@a;
+    }
+    $self->throw("Named args required at MASK_MAKE_ARGS") unless !(@$args % 2);
+    $self->{'_mask_make_args'} = $args;
+    return 1;
+}
+
+sub mask_make_args { shift->{_mask_make_args} }
+
+=head2 check_db()
+
+ Title   : check_db
+ Usage   : 
+ Function: determine if database with registered name and dir
+           exists
+ Returns : 1 if db present, 0 if not present, undef if name/dir not
+           set
+ Args    : none
+
+=cut
+
+sub check_db {
+    my $self = shift;
+    if ( $self->{db} && $self->{_db_dir} ) {
+	my $ckdb = File::Spec->catfile($self->{_db_dir}, $self->{db});
+	$self->factory->command('blastdbcmd');
+	$self->factory->set_parameters( -db => $ckdb,
+					-info => 1 );
+	$self->_run();
+	return 0 if ($self->factory->stderr =~ /No alias or index file found/);
+	return 1;
+    }
+    return;
+}
+
+=head1 Internals
+
+=head2 _fastize()
+
+ Title   : _fastize
+ Usage   : 
+ Function: convert a sequence collection to a temporary
+           fasta file
+ Returns : fasta filename (scalar string)
+ Args    : sequence collection 
+
+=cut
+
+sub fastize {
+    my $self = shift;
+    my $data = shift;
+    for ($data) {
+	!ref && do {
+	    # suppose a fasta file name
+	    $self->throw('Sequence file not found') unless -e $data;
+	    my $guesser = Bio::Tools::GuessSeqFormat->new(-file => $data);
+	    $self->throw('Sequence file not in FASTA format') unless
+		$guesser->guess eq 'fasta';
+	    last;
+	};
+	(ref eq 'ARRAY') && (ref $$data[0]) &&
+	    ($$data[0]->isa('Bio::Seq') || $$data[0]->isa('Bio::PrimarySeq'))
+	    && do {
+		my $fh = File::Temp->new(TEMPLATE => 'DBDXXXXX', SUFFIX => '.fas');
+		my $fname = $fh->filename;
+		$fh->close;
+		my $fasio = Bio::SeqIO->new(-file=>">$fname", -format=>"fasta")
+		   or $self->throw("Can't create temp fasta file");
+		$fasio->write_seq($_) for @$data;
+		$fasio->close;
+		$data = $fname;
+		last;
+	};
+	ref && do { # some kind of object
+	    my $fmt = ref($data) =~ /.*::(.*)/;
+	    if ($fmt eq 'fasta') {
+		$data = $data->file; # use the fasta file directly
+	    }
+	    else {
+		# convert
+		my $fh = File::Temp->new(TEMPLATE => 'DBDXXXXX', SUFFIX => '.fas');
+		my $fname = $fh->filename;
+		$fh->close;
+		my $fasio = Bio::SeqIO->new(-file=>">$fname", -format=>"fasta") 
+		    or $self->throw("Can't create temp fasta file");
+		if ($data->isa('Bio::AlignIO')) {
+		    my $aln = $data->next_aln;
+		    $fasio->write_seq($_) for $aln->each_seq;
+		}
+		elsif ($data->isa('Bio::SeqIO')) {
+		    while (<$data>) {
+			$fasio->write_seq($_);
+		    }
+		}
+		elsif ($data->isa('Bio::Align::AlignI')) {
+		    $fasio->write_seq($_) for $data->each_seq;
+		}
+		else {
+		    $self->throw("Can't handle sequence container object ".
+				 "of type '".ref($data)."'");
+		}
+		$fasio->close;
+		$data = $fname;
+	    }
+	    last;
+	};
+    }
+    return $data;
+}
+    
 
 =head2 AUTOLOAD
 
