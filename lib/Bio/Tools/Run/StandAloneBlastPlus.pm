@@ -210,7 +210,7 @@ sub new {
     if ($self->check_db == 0) {
 	$self->throw("DB '".$self->db."' can't be found. To create, set -create => 1.") unless $create;
     }
-    else {
+    if (!$self->db) {
 	$self->throw('No database or db data specified. '.
 		     'To create a new database, provide '.
 		     '-db_data => [fasta|\@seqs|$seqio_object]')
@@ -309,13 +309,25 @@ sub make_db {
     # accomodate $self->db_make_args here -- allow them
     # to override defaults, or allow only those args
     # that are not specified here?
+    my $usr_db_args ||= $self->db_make_args;
+    %usr_args = @$usr_db_args if $usr_db_args;
 
-    $self->{_factory} = $bp_class->new(
-	-command => 'makeblastdb',
+    my %db_args = (
 	-in => $data,
 	-dbtype => $self->db_type,
 	-out => $self->db,
 	-title => $self->db
+	);
+    # usr arg override
+    if (%usr_args) {
+	$db_args{$_} = $usr_args{$_} for keys %usr_args;
+    }
+
+    # do masking if requested
+    
+
+    $self->{_factory} = $bp_class->new(
+	-command => 'makeblastdb',
 	);
     
     $self->factory->_run or $self->throw("makeblastdb failed : $!");
@@ -354,11 +366,13 @@ sub make_db {
 sub make_mask {
     my $self = shift;
     my @args = @_;
-    my ($data, $make_args, $masker) = $self->_rearrange([qw(DATA
+    my ($data, $mask_db, $make_args, $masker) = $self->_rearrange([qw(
+                                                            DATA
+                                                            MASK_DB
                                                             MAKE_ARGS
                                                             MASKER)], @args);
-    my ($infmt);
     my (%mask_args,%usr_args,$db_type);
+    my $infmt = 'fasta';
     $self->throw("make_mask requires -data argument") unless $data;
     $masker ||= $self->masker;
     $self->throw("no masker specified and no masker default set in object") 
@@ -368,34 +382,35 @@ sub make_mask {
     unless (grep /^$masker$/, keys %AVAILABLE_MASKERS) {
 	$self->throw("Masker '$masker' not available");
     }
-    if (!ref($data)) {
-	if ($self->check_db($data)) {
-	    $infmt = 'blastdb';
-	    my $attr = $self->db_info($data);
-	    unless ($attr->{_db_type} eq $AVAILABLE_MASKERS{$masker}) {
-		$self->throw("Masker '$masker' is incompatible with sequence type '".$attr->{_db_type}."'");
-	    }
+    if ($self->check_db($data)) {
+	unless ($masker eq 'segmasker') {
+	    $self->throw("Masker '$masker' can't use a blastdb as primary input");
+	}
+	unless ($self->db_info($data)->{_db_type} eq 
+		$AVAILABLE_MASKERS{$masker}) {
+	    $self->throw("Masker '$masker' is incompatible with input db sequence type");
+	}
+	$infmt = 'blastdb';
+    }
+    else {
+	$data = $self->_fastize($data);
+	my $sio = Bio::SeqIO->new(-file=>$data);
+	my $s = $sio->next_seq;
+	my $type;
+	if ($s->alphabet =~ /.na/) {
+	    $type = 'nucl';
+	}
+	elsif ($s->alphabet =~ /protein/) {
+	    $type = 'prot';
 	}
 	else {
-	    $data = $self->_fastize($data);
-	    $infmt = 'fasta';
-	    my $sio = Bio::SeqIO->new(-file=>$data);
-	    my $s = $sio->next_seq;
-	    my $type;
-	    if ($s->alphabet =~ /.na/) {
-		$type = 'nucl';
-	    }
-	    elsif ($s->alphabet =~ /protein/) {
-		$type = 'prot';
-	    }
-	    else {
-		$type = 'UNK';
-	    }
-	    unless ($type eq $AVAILABLE_MASKERS{$masker}) {
-		$self->throw("Masker '$masker' is incompatible with sequence type '$type'");
-	    }
+	    $type = 'UNK';
+	}
+	unless ($type eq $AVAILABLE_MASKERS{$masker}) {
+	    $self->throw("Masker '$masker' is incompatible with sequence type '$type'");
 	}
     }
+    
     # check that sequence type and masker program match:
     
     # now, need to provide reasonable default masker arg settings, 
@@ -408,7 +423,6 @@ sub make_mask {
 
     %mask_args = (
 	-in => $data,
-	-infmt => $infmt,
 	-parse_seqids => 1,
 	-outfmt => 'maskinfo_asn1_bin',
 	);
@@ -426,6 +440,12 @@ sub make_mask {
 	    last;
 	};
 	m/windowmasker/ && do {
+	    # check mask_db if present
+	    if ($mask_db) {
+		unless ($self->check_db($mask_db)) {
+		    $self->throw("Mask database '$mask_db' is not present or valid");
+		}
+	    }
 	    my $cth = File::Temp->new(TEMPLATE=>'MCTXXXXX',
 				      DIR => $self->db_dir);
 	    my $ct_file = $cth->filename;
@@ -438,12 +458,24 @@ sub make_mask {
 	    delete $mask_args{'-mk_counts'};
 	    $mask_args{'-ustat'} = $ct_file;
 	    $mask_args{'-out'} = $mask_outfile;
+	    if ($mask_db) {
+		$mask_args{'-in'} = $mask_db;
+		$mask_args{'-infmt'} = 'blastdb';
+	    }
 	    $self->factory->set_parameters(%mask_args);
 	    $self->factory->_run;
 	    last;
 	};
+	m/segmasker/ && do {
+	    $mask_args{'-infmt'} = $infmt;
+	    $mask_args{'-out'} = $mask_outfile;
+	    $self->{_factory} = $bp_class->new(-command => $masker,
+					       %mask_args);
+	    $self->factory->_run;
+	    last;
+	};
 	do {
-	    $self->throw("Don't recognize masker program '$masker'");
+	    $self->throw("Masker program '$masker' not recognized");
 	};
     }
     return $mask_outfile;
