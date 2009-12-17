@@ -87,8 +87,11 @@ our $AUTOLOAD;
 
 # Object preamble - inherits from Bio::Root::Root
 
+use lib '../../..';
 use Bio::Root::Root;
+use Bio::SeqIO;
 use Bio::Tools::GuessSeqFormat;
+use Bio::Tools::Run::StandAloneBlastPlus::BlastMethods;
 use File::Temp;
 use IO::String;
 
@@ -102,6 +105,8 @@ my %AVAILABLE_MASKERS = (
     'dustmasker'   => 'nucl',
     'segmasker'    => 'prot'
     );
+
+my $bp_class = 'Bio::Tools::Run::BlastPlus';
 
 # what's the desire here?
 #
@@ -154,9 +159,9 @@ sub new {
     my $self = $class->SUPER::new(@args);
     my ($db_name, $db_data, $db_dir, $db_make_args,
 	$mask_file, $mask_data, $mask_make_args, $masker, 
-	$create, $overwrite) 
+	$create, $overwrite, $program_dir) 
                  = $self->_rearrange([qw( 
-                                          DBNAME
+                                          DB_NAME
                                           DB_DATA
                                           DB_DIR
                                           DB_MAKE_ARGS
@@ -166,9 +171,8 @@ sub new {
                                           MASKER
                                           CREATE
                                           OVERWRITE
+                                          PROG_DIR
                                            )], @args);
-    # make factory
-    $self->{_factory} = Bio::Tools::Run::BlastPlus->new();
 
     # parm taint checks
     if ($db_name) {
@@ -188,6 +192,12 @@ sub new {
 	$self->throw("Masker '$masker' not available") unless 
 	    grep /^$masker$/, keys %AVAILABLE_MASKERS;
 	$self->{_masker} = $masker;
+    }
+    
+    if ($program_dir) {
+	$self->throw("Can't find program directory '$program_dir'") unless
+	    -d $program_dir;
+	$self->program_dir($program_dir);
     }
 
     $self->set_db_make_args( $db_make_args) if ( $db_make_args );
@@ -209,7 +219,7 @@ sub new {
 	$self->{_create} = 1;
 	if ($self->db_dir) {
 	    my $fh = File::Temp->new(TEMPLATE => 'DBXXXXX',
-				     DIR => $self->{_db_dir},
+				     DIR => $self->db_dir,
 				     UNLINK => 1);
 	    $self->{_db} = $fh->filename;
 	    $fh->close;
@@ -219,8 +229,6 @@ sub new {
 	    $self->{_db} = 'DBTEMP';
 	}
     }
-
-#    $self->{_db} = undef;
 
     return $self;
 }
@@ -237,6 +245,7 @@ sub new {
 =cut
 
 sub db { shift->{_db} }
+sub db_name { shift->{_db} }
 sub db_dir { shift->{_db_dir} }
 sub db_data { shift->{_db_data} }
 sub db_type { shift->{_db_type} }
@@ -255,6 +264,8 @@ sub db_type { shift->{_db_type} }
 
 sub factory { shift->{_factory} }
 sub masker { shift->{_masker} }
+sub create { shift->{_create} }
+sub overwrite { shift->{_overwrite} }
 
 =head1 DB methods
 
@@ -281,15 +292,15 @@ sub make_db {
 		 '-db_data => [fasta|\@seqs|$seqio_object]') 
 	unless $self->db_data;
     # db_data can be: fasta file, array of seqs, Bio::SeqIO object
-    my $data = $self->db_data
+    my $data = $self->db_data;
     $data = $self->_fastize($data);
     my $testio = Bio::SeqIO->new(-file=>$data, -format=>'fasta');
     $self->{_db_type} = ($testio->next_seq->alphabet =~ /.na/) ? 'nucl' : 'prot';
     $testio->close;
 
-    $self->factory->command('makeblastdb');
     my ($v,$d,$name) = File::Spec->splitpath($data);
     $name =~ s/\.fas$//;
+    $self->{_db} ||= $name;
     # <#######[
     # deal with creating masks here, 
     # and provide correct parameters to the 
@@ -299,11 +310,14 @@ sub make_db {
     # to override defaults, or allow only those args
     # that are not specified here?
 
-    $self->factory->reset_parameters(
+    $self->{_factory} = $bp_class->new(
+	-command => 'makeblastdb',
 	-in => $data,
 	-dbtype => $self->db_type,
-	-out => $name,
-	-title => $name);
+	-out => $self->db,
+	-title => $self->db
+	);
+    
     $self->factory->_run or $self->throw("makeblastdb failed : $!");
     return 1;
 }
@@ -340,45 +354,137 @@ sub make_db {
 sub make_mask {
     my $self = shift;
     my @args = @_;
-    my ($data, $make_args, $masker) = $self->_rearrange([qw(DATA,
-                                                            MAKE_ARGS,
+    my ($data, $make_args, $masker) = $self->_rearrange([qw(DATA
+                                                            MAKE_ARGS
                                                             MASKER)], @args);
+    my ($infmt);
+    my (%mask_args,%usr_args,$db_type);
     $self->throw("make_mask requires -data argument") unless $data;
     $masker ||= $self->masker;
     $self->throw("no masker specified and no masker default set in object") 
 	unless $masker;
-    $make_args ||= $self->mask_make_args;
+    my $usr_make_args ||= $self->mask_make_args;
+    %usr_args = @$usr_make_args if $usr_make_args;
+    unless (grep /^$masker$/, keys %AVAILABLE_MASKERS) {
+	$self->throw("Masker '$masker' not available");
+    }
+    if (!ref($data)) {
+	if ($self->check_db($data)) {
+	    $infmt = 'blastdb';
+	    my $attr = $self->db_info($data);
+	    unless ($attr->{_db_type} eq $AVAILABLE_MASKERS{$masker}) {
+		$self->throw("Masker '$masker' is incompatible with sequence type '".$attr->{_db_type}."'");
+	    }
+	}
+	else {
+	    $data = $self->_fastize($data);
+	    $infmt = 'fasta';
+	    my $sio = Bio::SeqIO->new(-file=>$data);
+	    my $s = $sio->next_seq;
+	    my $type;
+	    if ($s->alphabet =~ /.na/) {
+		$type = 'nucl';
+	    }
+	    elsif ($s->alphabet =~ /protein/) {
+		$type = 'prot';
+	    }
+	    else {
+		$type = 'UNK';
+	    }
+	    unless ($type eq $AVAILABLE_MASKERS{$masker}) {
+		$self->throw("Masker '$masker' is incompatible with sequence type '$type'");
+	    }
+	}
+    }
+    # check that sequence type and masker program match:
+    
     # now, need to provide reasonable default masker arg settings, 
-    # and override these with $make_args as necessary
+    # and override these with $usr_make_args as necessary and appropriate
+    my $mh = File::Temp->new(TEMPLATE=>'MSKXXXXX',
+			     UNLINK => 0,
+			     DIR => $self->db_dir);
+    my $mask_outfile = $mh->filename;
+    $mh->close;
 
+    %mask_args = (
+	-in => $data,
+	-infmt => $infmt,
+	-parse_seqids => 1,
+	-outfmt => 'maskinfo_asn1_bin',
+	);
+    # usr arg override
+    if (%usr_args) {
+	$mask_args{$_} = $usr_args{$_} for keys %usr_args;
+    }
+    # masker-specific pipelines
+    for ($masker) {
+	m/dustmasker/ && do {
+	    $mask_args{'-out'} = $mask_outfile;
+	    $self->{_factory} = $bp_class->new(-command => $masker,
+					       %mask_args);
+	    $self->factory->_run;
+	    last;
+	};
+	m/windowmasker/ && do {
+	    my $cth = File::Temp->new(TEMPLATE=>'MCTXXXXX',
+				      DIR => $self->db_dir);
+	    my $ct_file = $cth->filename;
+	    $cth->close;
+	    $mask_args{'-out'} = $ct_file;
+	    $mask_args{'-mk_counts'} = 'true';
+	    $self->{_factory} = $bp_class->new(-command => $masker,
+					       %mask_args);
+	    $self->factory->_run;
+	    delete $mask_args{'-mk_counts'};
+	    $mask_args{'-ustat'} = $ct_file;
+	    $mask_args{'-out'} = $mask_outfile;
+	    $self->factory->set_parameters(%mask_args);
+	    $self->factory->_run;
+	    last;
+	};
+	do {
+	    $self->throw("Don't recognize masker program '$masker'");
+	};
+    }
+    return $mask_outfile;
 }
 
 =head2 db_info()
 
  Title   : db_info
  Usage   : 
- Function: get info for currently attached database
+ Function: get info for database 
            (via blastdbcmd -info); add factory attributes
  Returns : hash of database attributes
- Args    : none
+ Args    : [optional] db name (scalar string) (default: currently attached db)
 
 =cut
 
 sub db_info {
     my $self = shift;
-    my @args = @_;
-    unless ($self->db) {
-	$self->warn("db_info: database not attached yet");
+    my $db = shift;
+    $db ||= $self->db;
+    unless ($db) {
+	$self->warn("db_info: db not specified and no db attached");
 	return;
     }
-    $self->factory->command('blastdbcmd');
-    unless ($self->reset_parameters(-info => 1, -db => $self->db )) {
-	$self->warn("db_info: blastdbcmd failed");
+    if ($db eq $self->db and $self->{_db_info}) {
+	return $self->{_db_info}; # memoized
+    }
+    my $db_info_text;
+    $self->{_factory} = $bp_class->new( -command => 'blastdbcmd',
+					-info => 1,
+					-db => $db );
+    $self->factory->no_throw_on_crash(1);
+    $self->factory->_run();
+    $self->factory->no_throw_on_crash(0);
+    if ($self->factory->stderr =~ /No alias or index file found/) {
+	$self->warn("db_info: Couldn't find database ".$self->db."; make with make_db()");
 	return;
     }
-    $self->{_db_info_text} = $self->factory->stdout;
+    $db_info_text = $self->factory->stdout;
     # parse info into attributes
-    my $infh = IO::String->new($self->{_db_info_text});
+    my $infh = IO::String->new($db_info_text);
     my %attr;
     while (<$infh>) {
 	/Database: (.*)/ && do {
@@ -413,7 +519,22 @@ sub db_info {
 	    next;
 	};
     }
-    return $self->{_db_info} = \%attr;
+    # get db type
+    if ( -e $db.'.psq' ) {
+	$attr{_db_type} = 'prot';
+    }
+    elsif (-e $db.'.nsq') {
+	$attr{_db_type} = 'nucl';
+    }
+    else {
+	$attr{_db_type} = 'UNK'; # bork
+    }
+    if ($db eq $self->db) {
+	$self->{_db_type} = $attr{_db_type};
+	$self->{_db_info_text} = $db_info_text;
+	$self->{_db_info} = \%attr;
+    }
+    return \%attr;
 }
 
 =head2 set_db_make_args()
@@ -478,18 +599,31 @@ sub mask_make_args { shift->{_mask_make_args} }
            exists
  Returns : 1 if db present, 0 if not present, undef if name/dir not
            set
- Args    : none
+ Args    : [optional] db name (default is 'registered' name in $self->db)
+           [optional] db directory (default is 'registered' dir in 
+                                    $self->db_dir)
 
 =cut
 
 sub check_db {
     my $self = shift;
-    if ( $self->{db} && $self->{_db_dir} ) {
-	my $ckdb = File::Spec->catfile($self->{_db_dir}, $self->{db});
-	$self->factory->command('blastdbcmd');
-	$self->factory->set_parameters( -db => $ckdb,
-					-info => 1 );
-	$self->_run();
+    my ($db) = @_;
+    my $db_dir;
+    if ($db) {
+	my ($v,$d,$f) = File::Spec->splitpath($db);
+	$db = $f;
+	$db_dir = $d;
+    }
+    $db ||= $self->db;
+    $db_dir ||= $self->db_dir;
+    if ( $db && $db_dir ) {
+	my $ckdb = File::Spec->catfile($db_dir, $db);
+	$self->{_factory} = $bp_class->new( -command => 'blastdbcmd',
+					    -info => 1,
+					    -db => $ckdb );
+	$self->factory->no_throw_on_crash(1);
+	$self->factory->_run();
+	$self->factory->no_throw_on_crash(0);
 	return 0 if ($self->factory->stderr =~ /No alias or index file found/);
 	return 1;
     }
@@ -509,7 +643,7 @@ sub check_db {
 
 =cut
 
-sub fastize {
+sub _fastize {
     my $self = shift;
     my $data = shift;
     for ($data) {
@@ -570,7 +704,7 @@ sub fastize {
     }
     return $data;
 }
-    
+
 
 =head2 AUTOLOAD
 
@@ -584,21 +718,17 @@ sub AUTOLOAD {
     my $self = shift;
     my @args = @_;
     my $method = $AUTOLOAD;
-    $method = s/.*:://;
-    my $ret;
-    eval {
-	if ($self->factory) {
-	    $ret = $self->factory->$method(@args);
-	}
-	else {
-	    die "BlastPlus factory not initialized";
-	}
-    };
-    if ($@) {
-	$self->throw("Unrecognized method '$method'") if $@ =~ /Can't locate/;
-	$self->throw($@);
+    $method =~ s/.*:://;
+    my @ret;
+    if ($self->factory and $self->factory->can($method)) { # factory method
+	return $self->factory->$method(@args);
     }
-    return $ret
+    if ($self->db_info and grep /^$method$/, keys %{$self->db_info}) {
+	return $self->db_info->{$method};
+    }
+    # else, fail
+    $self->throw("Can't locate method '$method' in class ".ref($self));
+
 }
 
 

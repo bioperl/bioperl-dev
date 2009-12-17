@@ -1,3 +1,4 @@
+#$Id$
 package Bio::Tools::Run::BlastPlus::Config;
 use strict;
 use warnings;
@@ -36,6 +37,7 @@ our $use_dash = 'single';
 our $join = ' ';
 
 our @program_commands = qw(
+  run
   blastn
   blastx
   tblastx
@@ -56,6 +58,7 @@ our @program_commands = qw(
 
 # full command => prefix
 our %command_prefixes = (
+  run    => 'run',
   blastn => 'bln',
   blastx => 'blx',
   tblastx => 'tbx',
@@ -391,6 +394,7 @@ wms|ustat
 wms|in
 wms|out
 wms|checkdup
+wms|mk_counts
 wms|window
 wms|t_extend
 wms|t_thres
@@ -401,7 +405,6 @@ wms|set_t_low
 wms|infmt
 wms|outfmt
 wms|sformat
-wms|mk_counts
 wms|convert
 wms|fa_list
 wms|mem

@@ -1,6 +1,6 @@
 # $Id$
 #
-# BioPerl module for Bio::Tools::Run::BlastPlus
+# BioPerl module for Bio::Tools::Run::StandAloneBlastPlus::BlastMethods
 #
 # Please direct questions and support issues to <bioperl-l@bioperl.org>
 #
@@ -14,7 +14,7 @@
 
 =head1 NAME
 
-Bio::Tools::Run::BlastPlus - A wrapper for NCBI's blast+ suite
+Bio::Tools::Run::StandAloneBlastPlus::BlastMethods - Provides BLAST methods to StandAloneBlastPlus
 
 =head1 SYNOPSIS
 
@@ -22,7 +22,7 @@ Give standard usage here
 
 =head1 DESCRIPTION
 
-Blast+ is NCBI's successor to the C<blastall> family of programs. 
+This module provides the BLAST methods (blastn, blastp, psiblast, etc.) to the L<Bio::Tools::Run::StandAloneBlastPlus> object.
 
 =head1 FEEDBACK
 
@@ -74,54 +74,9 @@ Internal methods are usually preceded with a _
 # Let the code begin...
 
 
-package Bio::Tools::Run::BlastPlus;
+# note: providing methods directly to the namespace...
+package Bio::Tools::Run::StandAloneBlastPlus;
 use strict;
 use warnings;
-
-use lib '../../..';
-use lib '../../../../../live';
-use Bio::Root::Root;
-use Bio::Tools::Run::BlastPlus::Config;
-use Bio::Tools::Run::WrapperBase;
-use Bio::Tools::Run::WrapperBase::CommandExts;
-
-use base qw(Bio::Tools::Run::WrapperBase Bio::Root::Root);
-
-=head2 new
-
- Title   : new
- Usage   : my $obj = new Bio::Tools::Run::BlastPlus();
- Function: Builds a new Bio::Tools::Run::BlastPlus object
- Returns : an instance of Bio::Tools::Run::BlastPlus
- Args    :
-
-=cut
-
-sub new {
-    my ($class,@args) = @_;
-    my $self = $class->SUPER::new(@args);
-    return $self;
-}
-
-
-# making this work: 
-# this is truly a suite of programs: no "front-end" command-line application.
-# so need to emulate a front-end application in the wrapper
-# what is, e.g., $program_name? Also, need to make sure that the 
-# right executables are found and run.
-# could do this through program_dir
-#
-# could have a pseudo-program "*blast", which provides a meaningful name, 
-# but * indicates that a hash of executables must be maintained, and that
-# commands are really programs, and the correct executable must be looked up 
-# and run.
-#
-# so if  $program_name =~ /^\*/, @program_commands are real programs, and 
-# we need to find their executables and store in a hash.
-
-# problem: that WrapperBase really set up to handle only one executable at a time
-# so we can (1)override the WrapperBase methods, or (2) add our own.
-
-
 
 1;
