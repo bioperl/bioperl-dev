@@ -106,6 +106,12 @@ my %AVAILABLE_MASKERS = (
     'segmasker'    => 'prot'
     );
 
+my %MASKER_ENCODING = (
+    'windowmasker' => 'maskinfo_asn1_bin',
+    'dustmasker'   => 'maskinfo_asn1_text',
+    'segmasker'    => 'maskinfo_asn1_text'
+    );
+    
 my $bp_class = 'Bio::Tools::Run::BlastPlus';
 
 # what's the desire here?
@@ -205,6 +211,10 @@ sub new {
     $self->{'_create'} = $create;
     $self->{'_overwrite'} = $overwrite;
     $self->{'_db_data'} = $db_data;
+    
+    $self->{'_mask_file'} = $mask_file;
+    $self->{'_mask_data'} = $mask_data;
+
 
     # check db
     if ($self->check_db == 0) {
@@ -249,6 +259,9 @@ sub db_name { shift->{_db} }
 sub db_dir { shift->{_db_dir} }
 sub db_data { shift->{_db_data} }
 sub db_type { shift->{_db_type} }
+sub masker { shift->{_masker} }
+sub mask_file { shift->{_mask_file} }
+sub mask_data { shift->{_mask_data} }
 
 =head2 factory()
 
@@ -310,13 +323,14 @@ sub make_db {
     # to override defaults, or allow only those args
     # that are not specified here?
     my $usr_db_args ||= $self->db_make_args;
-    %usr_args = @$usr_db_args if $usr_db_args;
+    my %usr_args = @$usr_db_args if $usr_db_args;
 
     my %db_args = (
 	-in => $data,
 	-dbtype => $self->db_type,
 	-out => $self->db,
-	-title => $self->db
+	-title => $self->db,
+	-parse_seqids => 1 # necessary for masking
 	);
     # usr arg override
     if (%usr_args) {
@@ -324,14 +338,23 @@ sub make_db {
     }
 
     # do masking if requested
-    
+    # if the (masker and mask_data) OR mask_file attributes of this
+    # object are set, assume that masking is desired
+    # 
+    if ($self->mask_file) { # the actual masking data is provided
+	$db_args{'-mask_data'} = $self->mask_file;
+    }
+    elsif ($self->masker && $self->mask_data) { # build the mask
+	$db_args{'-mask_data'} = $self->make_mask(-data => $self->mask_data);
+	$self->{_mask_data} = $db_args{'-mask_data'};
+    }
 
     $self->{_factory} = $bp_class->new(
 	-command => 'makeblastdb',
+	%db_args
 	);
-    
-    $self->factory->_run or $self->throw("makeblastdb failed : $!");
-    return 1;
+    $self->factory->no_throw_on_crash($self->no_throw_on_crash);    
+    return $self->factory->_run;
 }
 
 =head2 make_mask()
@@ -424,7 +447,7 @@ sub make_mask {
     %mask_args = (
 	-in => $data,
 	-parse_seqids => 1,
-	-outfmt => 'maskinfo_asn1_bin',
+	-outfmt => $MASKER_ENCODING{$masker}
 	);
     # usr arg override
     if (%usr_args) {
@@ -436,6 +459,7 @@ sub make_mask {
 	    $mask_args{'-out'} = $mask_outfile;
 	    $self->{_factory} = $bp_class->new(-command => $masker,
 					       %mask_args);
+	    $self->factory->no_throw_on_crash($self->no_throw_on_crash);
 	    $self->factory->_run;
 	    last;
 	};
@@ -454,6 +478,7 @@ sub make_mask {
 	    $mask_args{'-mk_counts'} = 'true';
 	    $self->{_factory} = $bp_class->new(-command => $masker,
 					       %mask_args);
+	    $self->factory->no_throw_on_crash($self->no_throw_on_crash);
 	    $self->factory->_run;
 	    delete $mask_args{'-mk_counts'};
 	    $mask_args{'-ustat'} = $ct_file;
@@ -462,7 +487,8 @@ sub make_mask {
 		$mask_args{'-in'} = $mask_db;
 		$mask_args{'-infmt'} = 'blastdb';
 	    }
-	    $self->factory->set_parameters(%mask_args);
+	    $self->factory->reset_parameters(%mask_args);
+	    $self->factory->no_throw_on_crash($self->no_throw_on_crash);
 	    $self->factory->_run;
 	    last;
 	};
@@ -471,6 +497,7 @@ sub make_mask {
 	    $mask_args{'-out'} = $mask_outfile;
 	    $self->{_factory} = $bp_class->new(-command => $masker,
 					       %mask_args);
+	    $self->factory->no_throw_on_crash($self->no_throw_on_crash);
 	    $self->factory->_run;
 	    last;
 	};
@@ -661,6 +688,26 @@ sub check_db {
     }
     return;
 }
+
+=head2 no_throw_on_crash()
+
+ Title   : no_throw_on_crash
+ Usage   : $fac->no_throw_on_crash($newval)
+ Function: set to prevent an exeception throw on a failed 
+           blast program execution
+ Example : 
+ Returns : value of no_throw_on_crash (boolean)
+ Args    : on set, new value (boolean)
+
+=cut
+
+sub no_throw_on_crash {
+    my $self = shift;
+    
+    return $self->{'no_throw_on_crash'} = shift if @_;
+    return $self->{'no_throw_on_crash'};
+}
+
 
 =head1 Internals
 
