@@ -43,7 +43,7 @@ The basic mantra is to (1) create a BlastPlus factory using the
 C<new()> constructor, and (2) perform BLAST analyses by calling the
 desired BLAST program by name off the factory object. The blast
 database itself and any masking data are attached to the factory
-object (step 1). Query sequeences and any parameters associated with
+object (step 1). Query sequences and any parameters associated with
 particular programs are provided to the blast method call (step 2),
 and are run against the attached database.
 
@@ -82,8 +82,8 @@ The directory can be specified along with the basename, or separately with C<DB_
 
 To create a BLAST database de novo, see L</Creating a BLAST database>.
 
-If you wish to apply pre-existing mask data (i.e., the final output
-from one of the blast+ masker programs), to the database before
+If you wish to apply pre-existing mask data (i.e., the final ASN1
+output from one of the blast+ masker programs), to the database before
 querying, specify it with C<MASK_FILE>:
 
  $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
@@ -92,9 +92,135 @@ querying, specify it with C<MASK_FILE>:
 
 =head2 Creating a BLAST database
 
+There are several options for creating the database de novo using
+attached data, both before and after factory construction. If a
+temporary database (one that can be deleted by the C<cleanup()>
+method) is desired, leave out the C<-db_name> parameter. If
+C<-db_name> is specified, the database will be preserved with the
+basename specified.
+
+Use C<-create => 1> to create a new database (otherwise the factory
+will look for an existing database). Use C<-overwrite => 1> to create
+and overwrite an existing database.
+
+Note that the database is not created immediately on factory construction. It will be created if necessary on the first use of a factory BLAST method, or you can force database creation by executing
+
+ $fac->make_db();
+
+
+=over
+
+=item * Specify data during construction
+
+With a FASTA file:
+
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_name => 'mydb',
+   -db_data => 'myseqs.fas',
+   -create => 1
+ );
+
+With another BioPerl object collection:
+
+ $alnio = Bio::AlignIO->new( -file => 'alignment.msf' );
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_name => 'mydb',
+   -db_data => $alnio,
+   -create => 1
+ );
+ @seqs = $alnio->next_aln->each_seq;
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_name => 'mydb',
+   -db_data => \@seqs,
+   -create => 1
+ );
+
+Other collections (e.g., L<Bio::SeqIO>) are valid. If a certain type
+does not work, please submit an enhancement request.
+
+To create temporary databases, leave out the C<-db_name>, e.g.
+
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_data => 'myseqs.fas',
+   -create => 1
+ );
+
+To get the tempfile basename, do:
+
+ $dbname = $fac->db;
+
+
+=item * Specify data post-construction
+
+Use the explict attribute setters:
+
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -create => 1
+ );
+
+ $fac->set_db_data('myseqs.fas');
+ $fac->make_db;
+
+=back
+
 =head2 Creating and using mask data
 
+The blast+ mask utilities C<windowmasker>, C<segmasker>, and
+C<dustmasker> are available. Masking can be rolled into database
+creation, or can be executed later. If your mask data is already
+created and in ASN1 format, set the C<-mask_file> attribute on
+construction (see L</Factory constuction/initialization>).
+
+To create a mask from raw data or an existing database and apply the mask upon database creation, construct the factory like so:
+
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_name => 'my_masked_db',
+   -db_data => 'myseqs.fas',
+   -masker => 'dustmasker',
+   -mask_data => 'maskseqs.fas',
+   -create => 1
+ );
+
+The masked database will be created during C<make_db>. 
+
+The C<-mask_data> parameter can be a FASTA filename or any BioPerl
+sequence object collection. If the datatype ('nucl' or 'prot') of the
+mask data is not compatible with the selected masker, an exception
+will be thrown with a message to that effect.
+
+To create a mask ASN1 file that can be used in the C<-mask_file>
+parameter separately from the attached database, use the
+C<make_mask()> method directly:
+
+ $mask_file = $fac->make_mask(-data => 'maskseqs.fas',
+                              -masker => 'dustmasker');
+ # segmasker can use a blastdb as input
+ $mask_file = $fac->make_mask(-mask_db => 'mydb',
+                              -masker => 'segmasker')
+
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_name => 'my_masked_db',
+   -db_data => 'myseqs.fas',
+   -mask_file => $mask_file
+   -create => 1
+ );   
+
 =head2 Getting database information
+
+To get a hash containing useful metadata on an existing database (obtained by running C<blastdbcmd -info>, use
+C<db_info()>:
+ 
+ # get info on the attached database..
+ $info = $fac->db_info;
+ # get info on another database
+ $info = $fac->db_info('~/home/blastdbs/another');
+
+To get a particular info element for the attached database, just call the
+element name off the factory:
+
+ $num_seqs = $fac->db_num_sequences;
+ # info on all the masks applied to the db, if any:
+ @masking_info = @{ $fac->db_filter_algorithms };
 
 =head1 FEEDBACK
 
@@ -264,11 +390,13 @@ sub new {
     if ($program_dir) {
 	$self->throw("Can't find program directory '$program_dir'") unless
 	    -d $program_dir;
-	$self->program_dir($program_dir);
+	$self->{_program_dir} = $program_dir;
     }
     elsif ($ENV{BLASTPLUSDIR}) {
-	$self->program_dir($ENV{BLASTPLUSDIR});
+	$self->{_program_dir} = $ENV{BLASTPLUSDIR};
     }
+    $Bio::Tools::Run::BlastPlus::program_dir = $self->{_program_dir} || 
+	$Bio::Tools::Run::BlastPlus::program_dir;	
 	
 
     $self->set_db_make_args( $db_make_args) if ( $db_make_args );
@@ -322,12 +450,18 @@ sub new {
 
 sub db { shift->{_db} }
 sub db_name { shift->{_db} }
+sub set_db_name { shift->{_db} = shift }
 sub db_dir { shift->{_db_dir} }
+sub set_db_dir { shift->{_db_dir} = shift }
 sub db_data { shift->{_db_data} }
+sub set_db_data { shift->{_db_data} = shift }
 sub db_type { shift->{_db_type} }
 sub masker { shift->{_masker} }
+sub set_masker { shift->{_masker} = shift }
 sub mask_file { shift->{_mask_file} }
+sub set_mask_file { shift->{_mask_file} = shift }
 sub mask_data { shift->{_mask_data} }
+sub set_mask_data { shift->{_mask_data} = shift }
 
 =head2 factory()
 

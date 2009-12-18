@@ -79,7 +79,6 @@ use strict;
 use warnings;
 
 use lib '../../..';
-use lib '../../../../../live';
 use Bio::Root::Root;
 use Bio::Tools::Run::BlastPlus::Config;
 use Bio::Tools::Run::WrapperBase;
@@ -99,6 +98,7 @@ use base qw(Bio::Tools::Run::WrapperBase Bio::Root::Root);
 
 sub new {
     my ($class,@args) = @_;
+    $program_dir ||= $ENV{BLASTPLUSDIR};
     my $self = $class->SUPER::new(@args);
     return $self;
 }
