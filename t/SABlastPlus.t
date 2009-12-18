@@ -7,11 +7,10 @@ use warnings;
 our $home;
 BEGIN {
     use Bio::Root::Test;
-#    use lib '../../live';
-    $home = '../lib'; # set to '.' for Build use,
+    $home = '.'; # set to '.' for Build use,
                      # '../lib' for debugging from .t file
     unshift @INC, $home;
-    test_begin(-tests => 100,
+    test_begin(-tests => 43,
 	       -requires_modules => [qw( 
                                       Bio::Tools::Run::BlastPlus
                                       )]);
@@ -24,13 +23,13 @@ use Bio::SeqIO;
 use Bio::AlignIO;
 
 ## for testing; remove following line for production....
-$ENV{BLASTPLUSDIR} = "C:\\Program\ Files\\NCBI\\blast-2.2.22+\\bin";
+#$ENV{BLASTPLUSDIR} = "C:\\Program\ Files\\NCBI\\blast-2.2.22+\\bin";
 
 ok my $bpfac = Bio::Tools::Run::BlastPlus->new(-command => 'makeblastdb'), 
     "BlastPlus factory";
 
 SKIP : {
-    test_skip( -tests => 1,
+    test_skip( -tests => 39,
 	       -requires_env => 'BLASTPLUSDIR',
 	       -requires_executable => $bpfac);
     diag('DB and mask make tests');
@@ -52,7 +51,7 @@ SKIP : {
     like $fac->db, qr/DB.{5}/, "temp db";
     is ($fac->db_type, 'nucl', "right type");
     $fac->cleanup;
-if (0) {    
+
     ok $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
 	-db_name => 'test', 
 	-db_data => test_input_file('test-spa.fas'),
@@ -126,11 +125,10 @@ if (0) {
 	);
     $fac->no_throw_on_crash(1);
     ok $fac->make_db, "mask built and db made on construction (dustmasker)";
-    $fac->cleanup;
     $fac->_register_temp_for_cleanup('test');
     $fac->cleanup;
     # tests with Bio:: objects as input
-}
+
     ok my $sio = Bio::SeqIO->new(-file => test_input_file('test-spa.fas'));
     ok my $aio = Bio::AlignIO->new(-file => test_input_file('test-spa-p.fas'));
 
@@ -148,7 +146,7 @@ if (0) {
 	);
     ok $fac->make_db, "make db from Bio::AlignIO";
     $fac->cleanup;
-    $DB::single=1;
+
     $aio = Bio::AlignIO->new(-file=>test_input_file('test-aln.msf'));
     my @seqs = $aio->next_aln->each_seq;
     ok $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
@@ -163,7 +161,20 @@ if (0) {
 
     # exception tests here someday.
 
+    # blast method tests
+    $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+	-db_data => 'data/test-spa.fas',
+	-create => 1);
+
+    ok my $result = $fac->run( -method => 'blastn', -query => 'data/test-query.fas'), "do a blastn";
+    is $result->num_hits, 500, "default limit";
+    ok $result = $fac->blastn( -query => 'data/test-query.fas', 
+			       -method_args => [ -num_alignments => 1000 ] ), "return more alignments (arg spec)";
+    is $result->num_hits, 764, "got more hits";
+    $fac->cleanup;
+    
+    
 } # SKIP to here
 
-sub test_input_file { "data/".shift }
+# sub test_input_file { "data/".shift }
 1;
