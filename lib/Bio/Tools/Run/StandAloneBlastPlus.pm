@@ -297,6 +297,7 @@ sub new {
 				     DIR => $self->db_dir,
 				     UNLINK => 1);
 	    $self->{_db} = $fh->filename;
+	    $self->_register_temp_for_cleanup($self->db);
 	    $fh->close;
 	}
 	else {
@@ -510,6 +511,7 @@ sub make_mask {
 			     DIR => $self->db_dir);
     my $mask_outfile = $mh->filename;
     $mh->close;
+    $self->_register_temp_for_cleanup($mask_outfile);
 
     %mask_args = (
 	-in => $data,
@@ -806,9 +808,10 @@ sub _fastize {
 	(ref eq 'ARRAY') && (ref $$data[0]) &&
 	    ($$data[0]->isa('Bio::Seq') || $$data[0]->isa('Bio::PrimarySeq'))
 	    && do {
-		my $fh = File::Temp->new(TEMPLATE => 'DBDXXXXX', SUFFIX => '.fas');
+		my $fh = File::Temp->new(TEMPLATE => 'DBDXXXXX', UNLINK => 0, SUFFIX => '.fas');
 		my $fname = $fh->filename;
 		$fh->close;
+		$self->_register_temp_for_cleanup($fname);
 		my $fasio = Bio::SeqIO->new(-file=>">$fname", -format=>"fasta")
 		   or $self->throw("Can't create temp fasta file");
 		$fasio->write_seq($_) for @$data;
@@ -823,9 +826,10 @@ sub _fastize {
 	    }
 	    else {
 		# convert
-		my $fh = File::Temp->new(TEMPLATE => 'DBDXXXXX', SUFFIX => '.fas');
+		my $fh = File::Temp->new(TEMPLATE => 'DBDXXXXX', UNLINK => 0, SUFFIX => '.fas');
 		my $fname = $fh->filename;
 		$fh->close;
+		$self->_register_temp_for_cleanup($fname);
 		my $fasio = Bio::SeqIO->new(-file=>">$fname", -format=>"fasta") 
 		    or $self->throw("Can't create temp fasta file");
 		if ($data->isa('Bio::AlignIO')) {
@@ -853,6 +857,65 @@ sub _fastize {
     return $data;
 }
 
+
+
+=head2 _register_temp_for_cleanup()
+
+ Title   : _register_temp_for_cleanup
+ Usage   : 
+ Function: register a file for cleanup with 
+           cleanup() method
+ Returns : true on success
+ Args    : a file name or a blastdb basename
+           (scalar string)
+
+=cut
+
+sub _register_temp_for_cleanup {
+    my $self = shift;
+    my @files = @_;
+
+    for (@files) {
+	my ($v, $d, $n) = File::Spec->splitpath($_);
+	$_ = File::Spec->catfile($self->db_dir, $n) unless length($d);
+	push @{$self->{_cleanup_list}}, $_;
+    }
+    return 1;
+}
+
+=head2 cleanup()
+
+ Title   : cleanup
+ Usage   : 
+ Function: unlink files registered for cleanup
+ Returns : true on success
+ Args    : 
+
+=cut
+
+sub cleanup {
+    my $self = shift;
+    return unless $self->{_cleanup_list};
+    for (@{$self->{_cleanup_list}}) {
+	m/\./ && do {
+	    unlink $_;
+	    next;
+	};
+	do { # catch all index files
+	    if ( -e $_.".psq" ) {
+		unlink glob($_.".p*");
+	    }
+	    elsif ( -e $_.".nsq" ) {
+		unlink glob($_.".n*");
+	    }
+	    else {
+		unlink $_;
+	    }
+	    next;
+	};
+    }
+    return 1;
+}
 
 =head2 AUTOLOAD
 
