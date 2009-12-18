@@ -293,6 +293,28 @@ Similarly, the current parameters for the C<BlastPlus> factory are
 
  @parameters = $fac->get_parameters
 
+=head2 Cleaning up temp files
+
+Temporary analysis files produced under a single factory instances can
+be unlinked by running
+
+ $fac->cleanup;
+
+Tempfiles are generally not removed unless this method is explicitly
+called. C<cleanup()> only unlinks "registered" files and
+databases. All temporary files are automatically registered; in
+particular, "anonymous" databases (such as
+
+ $fac->Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_data => 'myseqs.fas', 
+   -create => 1
+ );
+
+without a C<-db_name> specification) are registered for cleanup. Any
+file or database can be registered with an internal method:
+
+ $fac->_register_temp_for_cleanup('testdb');
+
 =head2 Other Goodies
 
 =over
@@ -1177,6 +1199,9 @@ If $AUTOLOAD isn't pointing to a WrapperBase method, then AUTOLOAD attempts to r
 
 works by looking in the $fac->db_info() hash.
 
+Finally, if $AUTOLOAD is pointing to a blast query method, AUTOLOAD
+runs C<run> with the C<-method> parameter appropriately set.
+
 =cut 
 
 sub AUTOLOAD {
@@ -1190,6 +1215,9 @@ sub AUTOLOAD {
     }
     if ($self->db_info and grep /^$method$/, keys %{$self->db_info}) {
 	return $self->db_info->{$method};
+    }
+    if (grep /^$method$/, @Bio::Tools::Run::StandAloneBlastPlus::BlastMethods) {
+	return $self->run( -method => $method, @args );
     }
     # else, fail
     $self->throw("Can't locate method '$method' in class ".ref($self));

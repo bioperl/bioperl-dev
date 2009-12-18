@@ -73,10 +73,92 @@ Internal methods are usually preceded with a _
 
 # Let the code begin...
 
-
 # note: providing methods directly to the namespace...
 package Bio::Tools::Run::StandAloneBlastPlus;
 use strict;
 use warnings;
+
+use Bio::SearchIO;
+use lib '../../../..';
+use Bio::Tools::Run::BlastPlus;
+use File::Temp;
+
+our @BlastMethods = qw( blastp blastn blastx tblastn tblastx 
+                       psiblast rpsblast rpstblastn );
+
+sub run {
+    my $self = shift;
+    my @args = @_;
+    my ($method, $query, $outfile, $method_args) = $self->_rearrange( [qw( 
+                                         METHOD
+                                         QUERY
+                                         OUTFILE
+                                         METHOD_ARGS
+                                         )], @args);
+    my $ret;
+    
+    unless ($method) {
+	$self->throw("Blast run: method not specified, use -method");
+    }
+    unless ($query) {
+	$self->throw("Blast run: query data required, use -query");
+    }
+    unless ($outfile) { # create a tempfile name
+	my $fh = File::Temp->new(TEMPLATE => 'BLOXXXXX',
+				 UNLINK => 0);
+	$outfile = $fh->filename;
+	$fh->close;
+	$self->_register_temp_for_cleanup($outfile);
+    }
+    my %usr_args;
+    if ($method_args) {
+	$self->throw("Blast run: method arguments must be name => value pairs") unless !(@$method_args % 2);
+	%usr_args = @$method_args;
+    }
+    # make db if necessary
+    $self->make_db unless $self->check_db;
+
+    $self->{_factory} = Bio::Tools::Run::BlastPlus->new( -command => $method );
+    if (%usr_args) {
+	my @avail_parms = $self->factory->available_parameters('all');
+	while ( my( $key, $value ) = each %usr_args ) {
+	    $key =~ s/^-//;
+	    unless (grep /^$key$/, @avail_parms) {
+		$self->throw("Blast run: parameter '$key' is not available for method '$method'");
+	    }
+	}
+    }
+
+    my %blast_args;
+    $blast_args{-db} = $self->db;
+    $blast_args{-query} = $self->_fastize($query);
+    $blast_args{-out} = $outfile;
+    # user arg override
+    if (%usr_args) {
+	$blast_args{$_} = $usr_args{$_} for keys %usr_args;
+    }
+
+    $self->factory->set_parameters( %blast_args );
+    $self->factory->no_throw_on_crash( $self->no_throw_on_crash );
+    my $status = $self->_run;
+
+    return $status unless $status;
+    # if here, success 
+    for ($method) {
+	m/^[t]?blast[npx]/ && do {
+	    $ret = Bio::SearchIO->new(-file => $outfile, 
+				      -format => 'blast');
+	    $self->{_blastout} = $outfile;
+	    $ret = $ret->next_result;
+	    last;
+	};
+	do {
+	    1; # huh?
+	};
+    }
+    
+    return $ret;
+}
+
 
 1;
