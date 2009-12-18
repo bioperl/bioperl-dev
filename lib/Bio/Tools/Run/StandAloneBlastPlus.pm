@@ -14,14 +14,61 @@
 
 =head1 NAME
 
-Bio::Tools::Run::StandAloneBlastPlus - Compute with NCBI's blast+
-suite *CURRENTLY NON-FUNCTIONAL*
+Bio::Tools::Run::StandAloneBlastPlus - Compute with NCBI's blast+ suite *pre-ALPHA*
 
 =head1 SYNOPSIS
 
 B<NOTE>: This module is related to the
 L<Bio::Tools::Run::StandAloneBlast> system in name (and inspiration)
 only. You must use this module directly.
+
+ # existing blastdb:
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_name => 'mydb'
+ );
+ 
+ # create blastdb from fasta file and attach
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_name => 'mydb',
+   -db_data => 'myseqs.fas',
+   -create => 1
+ );
+ 
+ # create blastdb from BioPerl sequence collection objects
+ $alnio = Bio::AlignIO->new( -file => 'alignment.msf' );
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_name => 'mydb',
+   -db_data => $alnio,
+   -create => 1
+ );
+
+ @seqs = $alnio->next_aln->each_seq;
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_name => 'mydb',
+   -db_data => \@seqs,
+   -create => 1
+ );
+
+ # create database with masks
+
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+  -db_name => 'my_masked_db',
+  -db_data => 'myseqs.fas',
+  -masker => 'dustmasker',
+  -mask_data => 'maskseqs.fas',
+  -create => 1
+ );
+
+ # create a mask datafile separately
+ $mask_file = $fac->make_mask(
+   -data => 'maskseqs.fas',
+   -masker => 'dustmasker'
+ );
+
+ # query database for metadata
+ $info_hash = $fac->db_info;
+ $num_seq = $fac->db_num_sequences;
+ @mask_metadata = @{ $fac->db_filter_algorithms };
 
 =head1 DESCRIPTION
 
@@ -358,7 +405,7 @@ my %AVAILABLE_MASKERS = (
     );
 
 my %MASKER_ENCODING = (
-    'windowmasker' => 'maskinfo_asn1_bin',
+    'windowmasker' => 'maskinfo_asn1_text',
     'dustmasker'   => 'maskinfo_asn1_text',
     'segmasker'    => 'maskinfo_asn1_text'
     );
@@ -1017,7 +1064,7 @@ sub _fastize {
 		last;
 	};
 	ref && do { # some kind of object
-	    my $fmt = ref($data) =~ /.*::(.*)/;
+	    my ($fmt) = ref($data) =~ /.*::(.*)/;
 	    if ($fmt eq 'fasta') {
 		$data = $data->file; # use the fasta file directly
 	    }
@@ -1034,7 +1081,7 @@ sub _fastize {
 		    $fasio->write_seq($_) for $aln->each_seq;
 		}
 		elsif ($data->isa('Bio::SeqIO')) {
-		    while (<$data>) {
+		    while (local $_ = $data->next_seq) {
 			$fasio->write_seq($_);
 		    }
 		}
