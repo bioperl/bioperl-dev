@@ -24,12 +24,77 @@ only. You must use this module directly.
 
 =head1 DESCRIPTION
 
-This module allows the user to perform BLAST functions using the
+This module along with L<Bio::Tools::Run::StandAloneBlastPlus::BlastMethods>
+ allows the user to perform BLAST functions using the
 external program suite C<blast+> (available at
 L<ftp://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/>), using
 BioPerl objects and L<Bio::SearchIO> facilities. This wrapper can
 prepare BLAST databases as well as run BLAST searches. It can also be
 used to run C<blast+> programs independently.
+
+This module encapsulates object construction and production of
+databases and masks. Blast analysis methods (C<blastp, psiblast>,
+etc>) are contained in
+L<Bio::Tools::Run::StandAloneBlastPlus::BlastMethods>.
+
+=head1 USAGE
+
+The basic mantra is to (1) create a BlastPlus factory using the
+C<new()> constructor, and (2) perform BLAST analyses by calling the
+desired BLAST program by name off the factory object. The blast
+database itself and any masking data are attached to the factory
+object (step 1). Query sequeences and any parameters associated with
+particular programs are provided to the blast method call (step 2),
+and are run against the attached database.
+
+=head2 Factory construction/initialization
+
+The factory needs to be told where the blast+ programs live. The
+C<BLASTPLUSDIR> environment variable will be checked for the default
+executable directory.  The program directory can be set for individual
+factory instances with the C<PROG_DIR> parameter. All the blast+
+programs must be accessible from that directory (i.e., as executable
+files or symlinks).
+
+Either the database or BLAST subject data must be specified at object
+construction. Databases can be pre-existing formatted BLAST dbs, or
+can be built directly from fasta sequence files or BioPerl
+sequence object collections of several kinds. The key constructor
+parameters are C<DB_NAME>, C<DB_DATA>, C<DB_DIR>.
+
+To specify a pre-existing BLAST database, use C<DB_NAME> alone:
+
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+     -DB_NAME => 'mydb'
+ );
+
+The directory can be specified along with the basename, or separately with C<DB_DIR>:
+ 
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+     -DB_NAME => '~/home/blast/mydb'
+ );
+
+ #same as
+
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+     -DB_NAME => 'mydb', -DB_DIR => '~/home/blast'
+ );
+
+To create a BLAST database de novo, see L</Creating a BLAST database>.
+
+If you wish to apply pre-existing mask data (i.e., the final output
+from one of the blast+ masker programs), to the database before
+querying, specify it with C<MASK_FILE>:
+
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+     -DB_NAME => 'mydb', -MASK_FILE => 'mymaskdata.asn'
+ );
+
+=head2 Creating a BLAST database
+
+=head2 Creating and using mask data
+
+=head2 Getting database information
 
 =head1 FEEDBACK
 
@@ -65,11 +130,7 @@ the web:
 
 Email maj -at- fortinbras -dot- us
 
-Describe contact details here
-
 =head1 CONTRIBUTORS
-
-Additional contributors names and emails here
 
 =head1 APPENDIX
 
@@ -205,6 +266,10 @@ sub new {
 	    -d $program_dir;
 	$self->program_dir($program_dir);
     }
+    elsif ($ENV{BLASTPLUSDIR}) {
+	$self->program_dir($ENV{BLASTPLUSDIR});
+    }
+	
 
     $self->set_db_make_args( $db_make_args) if ( $db_make_args );
     $self->set_mask_make_args( $mask_make_args) if ($mask_make_args);
@@ -346,6 +411,8 @@ sub make_db {
     }
     elsif ($self->masker && $self->mask_data) { # build the mask
 	$db_args{'-mask_data'} = $self->make_mask(-data => $self->mask_data);
+	$self->throw("Masker error: message is '".$self->stderr."'") unless
+	    $db_args{'-mask_data'};
 	$self->{_mask_data} = $db_args{'-mask_data'};
     }
 
@@ -454,13 +521,14 @@ sub make_mask {
 	$mask_args{$_} = $usr_args{$_} for keys %usr_args;
     }
     # masker-specific pipelines
+    my $status;
     for ($masker) {
 	m/dustmasker/ && do {
 	    $mask_args{'-out'} = $mask_outfile;
 	    $self->{_factory} = $bp_class->new(-command => $masker,
 					       %mask_args);
 	    $self->factory->no_throw_on_crash($self->no_throw_on_crash);
-	    $self->factory->_run;
+	    $status = $self->factory->_run;
 	    last;
 	};
 	m/windowmasker/ && do {
@@ -479,7 +547,8 @@ sub make_mask {
 	    $self->{_factory} = $bp_class->new(-command => $masker,
 					       %mask_args);
 	    $self->factory->no_throw_on_crash($self->no_throw_on_crash);
-	    $self->factory->_run;
+	    $status = $self->factory->_run;
+	    last unless $status;
 	    delete $mask_args{'-mk_counts'};
 	    $mask_args{'-ustat'} = $ct_file;
 	    $mask_args{'-out'} = $mask_outfile;
@@ -489,7 +558,7 @@ sub make_mask {
 	    }
 	    $self->factory->reset_parameters(%mask_args);
 	    $self->factory->no_throw_on_crash($self->no_throw_on_crash);
-	    $self->factory->_run;
+	    $status = $self->factory->_run;
 	    last;
 	};
 	m/segmasker/ && do {
@@ -498,14 +567,14 @@ sub make_mask {
 	    $self->{_factory} = $bp_class->new(-command => $masker,
 					       %mask_args);
 	    $self->factory->no_throw_on_crash($self->no_throw_on_crash);
-	    $self->factory->_run;
+	    $status = $self->factory->_run;
 	    last;
 	};
 	do {
 	    $self->throw("Masker program '$masker' not recognized");
 	};
     }
-    return $mask_outfile;
+    return $status ? $mask_outfile : $status;
 }
 
 =head2 db_info()
@@ -789,7 +858,19 @@ sub _fastize {
 
 In this module, C<AUTOLOAD()> delegates L<Bio::Tools::Run::WrapperBase> and
 L<Bio::Tools::Run::WrapperBase::CommandExts> methods (including those
-of L<Bio::ParamterBaseI>) to the C<factory()> attribute.
+of L<Bio::ParamterBaseI>) to the C<factory()> attribute:
+
+ $fac->stderr
+
+gives you
+
+ $fac->factory->stderr
+
+If $AUTOLOAD isn't pointing to a WrapperBase method, then AUTOLOAD attempts to return a C<db_info> attribute: e.g.
+
+ $fac->db_num_sequences
+
+works by looking in the $fac->db_info() hash.
 
 =cut 
 
