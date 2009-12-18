@@ -14,7 +14,8 @@
 
 =head1 NAME
 
-Bio::Tools::Run::StandAloneBlastPlus - Compute with NCBI's blast+ suite *CURRENTLY NON-FUNCTIONAL*
+Bio::Tools::Run::StandAloneBlastPlus - Compute with NCBI's blast+
+suite *CURRENTLY NON-FUNCTIONAL*
 
 =head1 SYNOPSIS
 
@@ -24,9 +25,10 @@ only. You must use this module directly.
 
 =head1 DESCRIPTION
 
-This module along with L<Bio::Tools::Run::StandAloneBlastPlus::BlastMethods>
- allows the user to perform BLAST functions using the
-external program suite C<blast+> (available at
+This module along with
+L<Bio::Tools::Run::StandAloneBlastPlus::BlastMethods> allows the user
+to perform BLAST functions using the external program suite C<blast+>
+(available at
 L<ftp://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/>), using
 BioPerl objects and L<Bio::SearchIO> facilities. This wrapper can
 prepare BLAST databases as well as run BLAST searches. It can also be
@@ -58,9 +60,9 @@ files or symlinks).
 
 Either the database or BLAST subject data must be specified at object
 construction. Databases can be pre-existing formatted BLAST dbs, or
-can be built directly from fasta sequence files or BioPerl
-sequence object collections of several kinds. The key constructor
-parameters are C<DB_NAME>, C<DB_DATA>, C<DB_DIR>.
+can be built directly from fasta sequence files or BioPerl sequence
+object collections of several kinds. The key constructor parameters
+are C<DB_NAME>, C<DB_DATA>, C<DB_DIR>.
 
 To specify a pre-existing BLAST database, use C<DB_NAME> alone:
 
@@ -68,7 +70,8 @@ To specify a pre-existing BLAST database, use C<DB_NAME> alone:
      -DB_NAME => 'mydb'
  );
 
-The directory can be specified along with the basename, or separately with C<DB_DIR>:
+The directory can be specified along with the basename, or separately
+with C<DB_DIR>:
  
  $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
      -DB_NAME => '~/home/blast/mydb'
@@ -103,10 +106,11 @@ Use C<-create => 1> to create a new database (otherwise the factory
 will look for an existing database). Use C<-overwrite => 1> to create
 and overwrite an existing database.
 
-Note that the database is not created immediately on factory construction. It will be created if necessary on the first use of a factory BLAST method, or you can force database creation by executing
+Note that the database is not created immediately on factory
+construction. It will be created if necessary on the first use of a
+factory BLAST method, or you can force database creation by executing
 
  $fac->make_db();
-
 
 =over
 
@@ -149,7 +153,6 @@ To get the tempfile basename, do:
 
  $dbname = $fac->db;
 
-
 =item * Specify data post-construction
 
 Use the explict attribute setters:
@@ -171,7 +174,8 @@ creation, or can be executed later. If your mask data is already
 created and in ASN1 format, set the C<-mask_file> attribute on
 construction (see L</Factory constuction/initialization>).
 
-To create a mask from raw data or an existing database and apply the mask upon database creation, construct the factory like so:
+To create a mask from raw data or an existing database and apply the
+mask upon database creation, construct the factory like so:
 
  $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
    -db_name => 'my_masked_db',
@@ -207,20 +211,80 @@ C<make_mask()> method directly:
 
 =head2 Getting database information
 
-To get a hash containing useful metadata on an existing database (obtained by running C<blastdbcmd -info>, use
-C<db_info()>:
+To get a hash containing useful metadata on an existing database
+(obtained by running C<blastdbcmd -info>, use C<db_info()>:
  
  # get info on the attached database..
  $info = $fac->db_info;
  # get info on another database
  $info = $fac->db_info('~/home/blastdbs/another');
 
-To get a particular info element for the attached database, just call the
-element name off the factory:
+To get a particular info element for the attached database, just call
+the element name off the factory:
 
  $num_seqs = $fac->db_num_sequences;
  # info on all the masks applied to the db, if any:
  @masking_info = @{ $fac->db_filter_algorithms };
+
+=head2 Accessing the L<Bio::Tools::Run::BlastPlus> factory
+
+The blast+ programs are actually executed by a
+L<Bio::Tools::Run::BlastPlus> wrapper instance. This instance is
+available for peeking and poking in the L<StandAloneBlastPlus>
+C<factory()> attribute. For convenience, C<BlastPlus> methods can be
+run from the C<StandAloneBlastPlus> object, and are delegated to the
+C<factory()> attribute. For example, to get the blast+ program to be
+executed, examine either
+
+ $fac->factory->command
+
+or 
+
+ $fac->command
+
+Similarly, the current parameters for the C<BlastPlus> factory are
+
+ @parameters = $fac->get_parameters
+
+=head2 Other Goodies
+
+=over
+
+=item
+
+You can check whether a given basename points to a properly formatted BLAST database by doing 
+
+ $is_good = $fac->check_db('putative_db');
+
+=item
+
+User parameters can be passed to the underlying blast+ programs (if
+you know what you're doing) with C<db_make_args> and C<mask_make_args>:
+
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+   -db_name => 'customdb',
+   -db_data => 'myseqs.fas', 
+   -db_make_args => [ '-taxid_map' => 'seq_to_taxa.txt' ],
+   -masker => 'windowmasker',
+   -mask_data => 'myseqs.fas',
+   -mask_make_args => [ '-dust' => 'T' ],
+   -create => 1
+ );
+
+=item
+
+You can prevent exceptions from being thrown by failed blast+ program
+executions by setting C<no_throw_on_crash>. Examine the error with
+C<stderr()>:
+
+ $fac->no_throw_on_crash(1);
+ $fac->make_db;
+ if ($fac->stderr =~ /Error:/) {
+    #handle error
+    ...
+ }
+
+=back
 
 =head1 FEEDBACK
 
@@ -586,7 +650,6 @@ sub make_db {
 # must specify mask data (a seq collection),
 # allow specification of mask program, mask pgm args,
 # but if either of these not present, default to the object attribute
-
 
 sub make_mask {
     my $self = shift;
@@ -990,8 +1053,6 @@ sub _fastize {
     }
     return $data;
 }
-
-
 
 =head2 _register_temp_for_cleanup()
 
