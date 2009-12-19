@@ -14,7 +14,7 @@
 
 =head1 NAME
 
-Bio::Tools::Run::StandAloneBlastPlus - Compute with NCBI's blast+ suite *pre-ALPHA*
+Bio::Tools::Run::StandAloneBlastPlus - Compute with NCBI's blast+ suite *ALPHA*
 
 =head1 SYNOPSIS
 
@@ -69,6 +69,11 @@ only. You must use this module directly.
  $info_hash = $fac->db_info;
  $num_seq = $fac->db_num_sequences;
  @mask_metadata = @{ $fac->db_filter_algorithms };
+
+ # perform blast methods
+ $result = $fac->tblastn( -query => $seqio );
+ # see Bio::Tools::Run::StandAloneBlastPlus::BlastMethods 
+ # for many more details
 
 =head1 DESCRIPTION
 
@@ -355,6 +360,11 @@ C<stderr()>:
  }
 
 =back
+
+=head1 SEE ALSO
+
+L<Bio::Tools::Run::StandAloneBlastPlus::BlastMethods>,
+L<Bio::Tools::Run::BlastPlus>
 
 =head1 FEEDBACK
 
