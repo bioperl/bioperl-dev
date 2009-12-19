@@ -321,7 +321,8 @@ file or database can be registered with an internal method:
 
 =item
 
-You can check whether a given basename points to a properly formatted BLAST database by doing 
+You can check whether a given basename points to a properly formatted
+BLAST database by doing
 
  $is_good = $fac->check_db('putative_db');
 
@@ -1110,6 +1111,9 @@ sub _fastize {
 		elsif ($data->isa('Bio::Align::AlignI')) {
 		    $fasio->write_seq($_) for $data->each_seq;
 		}
+		elsif ($data->isa('Bio::Seq') || $data->isa('Bio::PrimarySeq')) {
+		    $fasio->write_seq($data);
+		}
 		else {
 		    $self->throw("Can't handle sequence container object ".
 				 "of type '".ref($data)."'");
@@ -1210,14 +1214,14 @@ sub AUTOLOAD {
     my $method = $AUTOLOAD;
     $method =~ s/.*:://;
     my @ret;
+    if (grep /^$method$/, @Bio::Tools::Run::StandAloneBlastPlus::BlastMethods) {
+	return $self->run( -method => $method, @args );
+    }
     if ($self->factory and $self->factory->can($method)) { # factory method
 	return $self->factory->$method(@args);
     }
     if ($self->db_info and grep /^$method$/, keys %{$self->db_info}) {
 	return $self->db_info->{$method};
-    }
-    if (grep /^$method$/, @Bio::Tools::Run::StandAloneBlastPlus::BlastMethods) {
-	return $self->run( -method => $method, @args );
     }
     # else, fail
     $self->throw("Can't locate method '$method' in class ".ref($self));
