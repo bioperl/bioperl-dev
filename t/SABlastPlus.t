@@ -9,8 +9,9 @@ BEGIN {
     use Bio::Root::Test;
     $home = '.'; # set to '.' for Build use,
                      # '../lib' for debugging from .t file
+#    $home = '../lib';
     unshift @INC, $home;
-    test_begin(-tests => 43,
+    test_begin(-tests => 57,
 	       -requires_modules => [qw( 
                                       Bio::Tools::Run::BlastPlus
                                       )]);
@@ -29,17 +30,10 @@ ok my $bpfac = Bio::Tools::Run::BlastPlus->new(-command => 'makeblastdb'),
     "BlastPlus factory";
 
 SKIP : {
-    test_skip( -tests => 39,
+    test_skip( -tests => 53,
 	       -requires_env => 'BLASTPLUSDIR',
 	       -requires_executable => $bpfac);
     diag('DB and mask make tests');
-# to test:
-# make a db - from fasta file, array of seq, seqio, alnio objects
-# make a db with mask data
-# make temp db, make sticky db
-# check tempfile cleanup
-# db attribute/info tests
-# check correct db type
 # exceptions/warnings
 
 # testing using fasta files as input...
@@ -162,15 +156,55 @@ SKIP : {
     # exception tests here someday.
 
     # blast method tests
+    diag("run BLAST methods");
+
     $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
 	-db_data => 'data/test-spa.fas',
 	-create => 1);
 
-    ok my $result = $fac->run( -method => 'blastn', -query => 'data/test-query.fas'), "do a blastn";
-    is $result->num_hits, 500, "default limit";
+    ok my $result = $fac->run( -method => 'blastn', -query => 'data/test-query.fas'), "run blastn";
+    is $result->num_hits, 500, "default hit limit";
     ok $result = $fac->blastn( -query => 'data/test-query.fas', 
 			       -method_args => [ -num_alignments => 1000 ] ), "return more alignments (arg spec)";
     is $result->num_hits, 764, "got more hits";
+    $fac->cleanup;
+    my $ntseq = Bio::Seq->new( -seq => 'GACGATCCTTCGGTGAGCAAAGAAATTTTAGCAGAAGCTAAAAAGCTAAACGATGCTCAAGCACCAAAAG', -id => 'SA009');
+    my $aaseq = $ntseq->translate;
+
+    ok $result = $fac->blastn( -query => $ntseq  ), "run blastn with Bio::Seq query";
+    $fac->no_throw_on_crash(1);
+    ok $result = $fac->tblastn( -query => $aaseq ), "run tblastn";
+    is $result->num_hits, 471, "tblastn hits";
+    ok $result = $fac->tblastx( -query => $ntseq ), "run tblastx";
+    is $result->num_hits, 500, "tblastx hits";
+    $fac->cleanup;
+
+    ok $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+	-db_data => 'data/test-spa-p.fas',
+	-create => 1);
+    ok $result = $fac->blastp( -query => $aaseq ), "run blastp";
+    is $result->num_hits, 485, "blastp hits";
+    $fac->cleanup;
+
+    $sio = Bio::SeqIO->new(-file=>test_input_file('test-spa.fas'));    
+    $sio->next_seq;
+    my $seq1 = $sio->next_seq;
+    my $seq2 = $sio->next_seq;
+
+    ok $result = $fac->bl2seq( -method => 'blastn',
+			       -query => $seq1,
+			       -subject => $seq2 ), "bl2seq (blastn)";
+    is $result->num_hits, 1, "got hit";
+    ok $result = $fac->bl2seq( -method => 'blastx',
+			       -query => $seq1,
+			       -subject => $seq2 ), "bl2seq (blastx)";
+    is $result->num_hits, 1, "got hit";
+    $seq1 = $seq1->translate;
+    $seq2 = $seq2->translate;
+    ok $result = $fac->bl2seq( -method => 'blastp',
+			       -query => $seq1, 
+			       -subject => $seq2 ), "bl2seq (blastp)";
+    is $result->num_hits, 1, "got hit";
     $fac->cleanup;
     
     
