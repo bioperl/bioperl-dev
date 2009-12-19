@@ -18,7 +18,22 @@ Bio::Tools::Run::StandAloneBlastPlus::BlastMethods - Provides BLAST methods to S
 
 =head1 SYNOPSIS
 
-Give standard usage here
+ # create a factory:
+ $fac = Bio::Tools::Run::StandAloneBlastPlus->new(
+    -db_name => 'testdb'
+ );
+ # get your results
+ $result = $fac->blastn( -query => 'query_seqs.fas',
+                         -outfile => 'query.bls',
+                         -method_args => [ '-num_alignments' => 10 ,
+
+ $result = $fac->tblastx( -query => $an_alignment_object,
+                          -outfile => 'query.bls',
+                          -outformat => 7 );
+ # do a bl2seq
+ $fac->bl2seq( -method => 'blastp',
+               -query => $seq_object_1,
+               -subject => $seq_object_2 );
 
 =head1 DESCRIPTION
 
@@ -31,7 +46,7 @@ This POD describes the use of BLAST methods against a
 L<Bio::Tools::Run::StandAloneBlastPlus> factory object. The object
 itself has extensive facilities for creating, formatting, and masking
 BLAST databases; please refer to
-L<Bio::Tools::Run::StandAloneBlastPlus> POD for these details
+L<Bio::Tools::Run::StandAloneBlastPlus> POD for these details.
 
 Given a C<StandAloneBlastPlus> factory, such as
 
@@ -47,17 +62,54 @@ example, C<testdb>). C<-query> is a required argument:
 
 Here, C<$result> is a L<Bio::Search::Result::BlastResult> object.
 
-The blast output file can be named explicitly:
+Other details:
+
+=over
+
+=item * The blast output file can be named explicitly:
 
  $result = $fac->blastn( -query => 'query_seqs.fas',
                          -outfile => 'query.bls' );
 
+=item * The output format can be specified:
 
+ $result = $fac->blastn( -query => 'query_seqs.fas',
+                         -outfile => 'query.bls',
+                         -outformat => 7 ); #tabular
 
- 
+=item * Additional arguments to the method can be specified:
+
+ $result = $fac->blastn( -query => 'query_seqs.fas',
+                         -outfile => 'query.bls',
+                         -method_args => [ '-num_alignments' => 10 ,
+                                           '-evalue' => 100 ]);
+
+=item * To get the name of the blast output file, do 
+
+ $file = $fac->blast_out;
+
+=item * To clean up the temp files (you must do this explicitly):
+
+ $fac->cleanup;
+
+=back
+
+=head2 bl2seq()
+
+Running C<bl2seq> is similar, but both C<-query> and C<-subject> are
+required, and the attached database is ignored. The blast method must
+be specified explicitly with the C<-method> parameter:
+
+ $fac->bl2seq( -method => 'blastp',
+               -query => $seq_object_1,
+               -subject => $seq_object_2 );
+
+Other parameters ( C<-method_args>, C<-outfile>, and C<-outformat> ) are valid. 
+
 =head2 Return values
 
-
+The return value is always a L<Bio::Search::Result::BlastResult>
+object on success, undef on failure.
 
 =head1 SEE ALSO
 
@@ -292,6 +344,28 @@ sub bl2seq {
 	);
 
 }
+
+=head2 blast_out()
+
+ Title   : blast_out
+ Usage   : $file = $fac->blast_out
+ Function: get the filename of the blast report file
+ Returns : scalar string
+ Args    : none
+
+=cut
+
+sub blast_output { shift->{_blastout} }
+
+# =head2 _demodernize()
+
+#  Title   : _demodernize
+#  Usage   : 
+#  Function: Ha! Wouldn't you like to know!
+#  Returns : 
+#  Args    : 
+
+# =cut
 
 sub _demodernize {
     my $file = shift;
