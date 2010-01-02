@@ -170,19 +170,22 @@ sub request_parameters {
 	$self->_cache("request_params_$operation");
 
     my $bookmarks = $self->_operation_bookmarks($operation);
-    # the EUtilities schemata are fairly simple; each element corr. to 
-    # an input field name are defined as a simple xs:string; the 
-    # request types are a xs:seq of these xs:strings
-    # this parsing will assume this structure, and so it could 
-    # break if the request schemata become more complicated...
 
-    my @request_params = map 
-    { 
-	my $r = $_->att('ref');
-	$r =~ s/.*?://;
-	$r 
-    } ($$bookmarks{i_msg_elt}->descendants('xs:sequence'))[0]->descendants('xs:element');
-    return $self->_cache("request_params_$operation", \@request_params);
+#     my @request_params = map 
+#     { 
+# 	my $r = $_->att('ref');
+# 	$r =~ s/.*?://;
+# 	$r 
+#     } ($$bookmarks{i_msg_elt}->descendants('xs:sequence'))[0]->descendants('xs:element');
+
+    my $ret = [];
+    my $imsg_elt = $bookmarks->{'i_msg_elt'};
+    my $opn_schema = $bookmarks->{'schema'};
+    
+    # do a quick recursion:
+    _get_types($ret, $imsg_elt, $opn_schema);
+    return $self->_cache("request_params_$operation", $ret);
+
     1;
 }
 
@@ -524,8 +527,9 @@ sub _parsed {
 }
 
 sub _get_types {
-    my ($res, $elt, $sch) = @_;
+    my ($res, $elt, $sch, $visited) = @_;
     my $is_choice;
+    $visited ||= [];
     # assuming max 1 xs:sequence or xs:choice per element
     my $seq = ($elt->descendants('xs:sequence'))[0];
     $is_choice = '|' unless $seq;
@@ -544,11 +548,16 @@ sub _get_types {
 	    do { # custom type
 		# find the type def in schema
 		$type =~ s/.*?://; # strip tns
+		if (grep /^$type$/, @$visited) { # check for circularity
+		    push @$res, { $_->att('name').$is_choice => "$type(reused)"};
+		    last;
+		}
+		push @$visited, $type;
 		my $new_elt = $sch->first_child("xs:complexType[\@name='$type']");
 		if (defined $new_elt) {
 		    my $new_res = [];
-		    push @$res, { $_->att('name').$is_choice, $new_res };
-		    _get_types($new_res, $new_elt, $sch);
+		    push @$res, { $_->att('name').$is_choice => $new_res };
+		    _get_types($new_res, $new_elt, $sch, $visited);
 		}
 		else { # a 'ref', make sure it's defined
 		    $new_elt = $sch->first_child("xs:element[\@name='$type']");
