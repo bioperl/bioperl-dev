@@ -131,8 +131,6 @@ sub new {
 
 =head1 Getters
 
-
-
 =head2 request_parameters()
 
  Title   : request_parameters
@@ -171,21 +169,66 @@ sub request_parameters {
     return $self->_cache("request_params_$operation") if
 	$self->_cache("request_params_$operation");
 
+    my $bookmarks = $self->_operation_bookmarks($operation);
+    # the EUtilities schemata are fairly simple; each element corr. to 
+    # an input field name are defined as a simple xs:string; the 
+    # request types are a xs:seq of these xs:strings
+    # this parsing will assume this structure, and so it could 
+    # break if the request schemata become more complicated...
+
+    my @request_params = map 
+    { 
+	my $r = $_->att('ref');
+	$r =~ s/.*?://;
+	$r 
+    } ($$bookmarks{i_msg_elt}->descendants('xs:sequence'))[0]->descendants('xs:element');
+    return $self->_cache("request_params_$operation", \@request_params);
+    1;
+}
+
+=head2 _operation_bookmarks()
+
+ Title   : _operation_bookmarks
+ Usage   : 
+ Function: find useful WSDL elements associated with the specified
+           operation; return a hashref of the form
+           { $key => $XML_Twig_Elt_obj, }
+ Returns : hashref with keys:
+            portType namespace schema
+            i_msg_type i_msg_elt
+            o_msg_type o_msg_elt
+ Args    : operation name (scalar string)
+
+=cut
+
+sub _operation_bookmarks {
+    my $self = shift;
+    my $operation = shift;
+    # check cache   
+    return $self->_cache("bookmarks_$operation") if 
+	$self->_cache("bookmarks_$operation");
+    # do work
+    my %bookmarks;
     my $pT_opn = $self->_portType_elt->first_child( 
 	qq/ operation[\@name="$operation"] /
 	);
     my $imsg_type = $pT_opn->first_child('input')->att('message');
+    my $omsg_type = $pT_opn->first_child('output')->att('message');
 
     # now lookup the schema element name from among the message elts
-    my $imsg_elt;
+    my ($imsg_elt, $omsg_elt);
     foreach ( @{$self->_message_elts} ) {
 	my $msg_name = $_->att('name');
 	if ( $imsg_type =~ qr/$msg_name/ ) {
 	    $imsg_elt = $_->first_child('part[@name="request"]')->att('element');
-	    last;
 	}
+	if ( $omsg_type =~ qr/$msg_name/) {
+	    $omsg_elt = $_->first_child('part[@name="result"]')->att('element');
+	}
+	last if ($imsg_elt && $omsg_elt);
     }
     $self->throw("Can't find request schema element corresponding to '$operation'") unless $imsg_elt;
+    $self->throw("Can't find result schema element corresponding to '$operation'") unless $omsg_elt;
 
     # $imsg_elt has a namespace prefix, to lead us to the correct schema
     # as defined in the wsdl <types> element. Get that schema
@@ -198,21 +241,16 @@ sub request_parameters {
     $imsg_elt =~ s/.*?://;
     $imsg_elt = $opn_schema->first_child("xs:element[\@name='$imsg_elt']");
     $self->throw("Can't find request element definition in schema corresponding to '$operation'") unless defined $imsg_elt;
-        
-    # the EUtilities schemata are fairly simple; each element corr. to 
-    # an input field name are defined as a simple xs:string; the 
-    # request types are a xs:seq of these xs:strings
-    # this parsing will assume this structure, and so it could 
-    # break if the request schemata become more complicated...
+    $omsg_elt =~ s/.*?://;
+    $omsg_elt = $opn_schema->first_child("xs:element[\@name='$omsg_elt']");
+    $self->throw("Can't find result element definition in schema corresponding to '$operation'") unless defined $omsg_elt;
 
-    my @request_params = map 
-    { 
-	my $r = $_->att('ref');
-	$r =~ s/.*?://;
-	$r 
-    } ($imsg_elt->descendants('xs:sequence'))[0]->descendants('xs:element');
-    return $self->_cache("request_params_$operation", \@request_params);
-    1;
+    @bookmarks{qw(portType i_msg_type o_msg_type 
+                  namespace schema i_msg_elt o_msg_elt ) } = 
+	($pT_opn, $imsg_type, $omsg_type, $opn_ns, $opn_schema,
+	 $imsg_elt, $omsg_elt);
+    return $self->_cache("bookmarks_$operation", \%bookmarks);
+    
 }
 
 =head2 operations()
