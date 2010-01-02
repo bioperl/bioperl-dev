@@ -19,10 +19,51 @@ Bio::Tools::Run::ESoap::WSDL - WSDL parsing for Entrez SOAP EUtilities
 =head1 SYNOPSIS
 
 Used by L<Bio::Tools::Run::ESoap>
+ 
+ # url
+ $wsdl = Bio::Tools::Run::ESoap::WSDL->new(
+    -url => "http://www.ncbi.nlm.nih.gov/entrez/eutils/soap/v2.0/eutils.wsdl"
+  );
+ # local copy
+ $wsdl = Bio::Tools::Run::ESoap::WSDL->new(
+    -wsdl => "local/eutils.wsdl"
+  );
+
+  %opns = %{ $wsdl->operations };
+  
 
 =head1 DESCRIPTION
 
-Describe the object here
+This module is a lightweight parser and container for WSDL XML files
+associated with the NCBI EUtilities SOAP server. XML facilities are
+based on L<XML::Twig>.
+
+The following accessors provide names and structures useful for
+creating SOAP messages using L<SOAP::Lite> (e.g.):
+
+ service()    : the URL of the SOAP service
+ operations() : hashref of the form {.., $operation_name => $soapAction, ...}
+ request_parameters($operation) : 
+    request field names and namelists as an array of hashes
+ result_parameters($operation)  : 
+    result field names and namelists as an array of hashes
+
+The following accessors provide L<XML::Twig::Elt> objects pointing at
+key locations in the WSDL:
+
+ root            : the root of the WSDL docment
+ _types_elt      : the <types> element
+ _portType_elt   : the <portType> element
+ _binding_elt    : the <binding> element
+ _service_elt    : the <service> element
+ _message_elts   : an array of all top-level <message> elements
+ _operation_elts : an array of all <operation> elements contained in <binding>
+ 
+Parsing occurs lazily (on first read, not on construction); all
+information is cached. To clear the cache and force re-parsing, run
+
+ $wsdl->clear_cache;
+
 
 =head1 FEEDBACK
 
@@ -188,8 +229,6 @@ sub request_parameters {
 
     1;
 }
-
-
 
 =head2 result_parameters()
 
@@ -507,7 +546,6 @@ sub _cache {
 
 sub clear_cache { shift->_cache() }
 
-
 =head2 _parsed()
 
  Title   : _parsed
@@ -525,6 +563,17 @@ sub _parsed {
     return $self->{'_parsed'} = shift if @_;
     return $self->{'_parsed'};
 }
+
+# =head2 _get_types()
+
+#  Title   : _get_types
+#  Usage   : very internal
+#  Function: recursively parse through custom types
+#  Returns : 
+#  Args    : arrayref, XML::Twig::Elt, XML::Twig::Elt
+#            (return array, type element, schema root)
+
+# =cut
 
 sub _get_types {
     my ($res, $elt, $sch, $visited) = @_;
