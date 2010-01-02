@@ -186,6 +186,66 @@ sub request_parameters {
     1;
 }
 
+
+
+=head2 result_parameters()
+
+ Title   : result_parameters
+ Usage   : $result_hash = $wsdl->result_parameters
+ Function: retrieve a hash structure describing the 
+           result of running the specified operation
+           according to the WSDL
+ Returns : 
+ Args    : operation (scalar string)
+
+=cut
+
+sub result_parameters {
+    my $self = shift;
+    my ($operation) = @_;
+    my $is_action;
+    $self->throw("Operation name must be specified") unless defined $operation;
+    my $opn_hash = $self->operations;
+    unless ( grep /^$operation$/, keys %$opn_hash ) {
+	$is_action = grep /^$operation$/, values %$opn_hash;
+	$self->throw("Operation name '$operation' is not recognized")
+	    unless ($is_action);
+    }
+    
+    #check the cache here....
+    return $self->_cache("result_params_$operation") if
+	$self->_cache("result_params_$operation");
+
+    # find the input message type in the portType elt
+    if ($is_action) { 
+	my @a = grep {$$opn_hash{$_} eq $operation} keys %$opn_hash;
+	# note this takes the first match
+	$operation = $a[0];
+	$self->throw("Whaaa??") unless defined $operation;
+    }
+    #check the cache once more after translation....
+    return $self->_cache("result_params_$operation") if
+	$self->_cache("result_params_$operation");
+
+    # do work
+    my $bookmarks = $self->_operation_bookmarks($operation);
+
+    # eutilities results seem to be a mixture of xs:string element
+    # and complex types which are just xs:seqs of xs:string elements
+    # 
+    # cast these as a hash of hashes...
+
+    my $ret = [];
+    my $omsg_elt = $bookmarks->{'o_msg_elt'};
+    my $opn_schema = $bookmarks->{'schema'};
+    
+    # do a quick recursion:
+    _get_types($ret, $omsg_elt, $opn_schema);
+    return $self->_cache("result_params_$operation", $ret);
+}
+
+sub response_parameters { shift->result_parameters( @_ ) }
+
 =head2 _operation_bookmarks()
 
  Title   : _operation_bookmarks
@@ -463,5 +523,36 @@ sub _parsed {
     return $self->{'_parsed'};
 }
 
+sub _get_types {
+    my ($res, $elt, $sch) = @_;
+    # assuming max 1 xs:seq per element
+    my $seq = ($elt->descendants('xs:sequence'))[0];
+    return 1 unless $seq;
+    foreach ( $seq->descendants('xs:element') ) {
+	for my $type ($_->att('type')) {
+	    !defined($type) && do {
+		Bio::Root::Root->throw("type attribute not defined; cannot proceed");
+		last;
+	    };
+	    $type eq 'xs:string' && do {
+		push @$res, { $_->att('name') => 1 };
+		last;
+	    };
+	    do { # custom type
+		my $new_res = [];
+		push @$res, { $_->att('name'), $new_res };
+		# find the type def in schema
+		$type =~ s/.*?://; # strip tns
+		my $new_elt = $sch->first_child("xs:complexType[\@name='$type']");
+		Bio::Root::Root->throw("type not defined in schema; connot proceed") unless defined $new_elt;
+		_get_types($new_res, $new_elt, $sch);
+		last;
+	    }
+	}
+    }
+    return 1;
+}
+	
+	
 
 1;
