@@ -525,27 +525,36 @@ sub _parsed {
 
 sub _get_types {
     my ($res, $elt, $sch) = @_;
-    # assuming max 1 xs:seq per element
+    my $is_choice;
+    # assuming max 1 xs:sequence or xs:choice per element
     my $seq = ($elt->descendants('xs:sequence'))[0];
+    $is_choice = '|' unless $seq;
+    $seq ||= ($elt->descendants('xs:choice'))[0];
     return 1 unless $seq;
     foreach ( $seq->descendants('xs:element') ) {
-	for my $type ($_->att('type')) {
+	for my $type ($_->att('type') || $_->att('ref')) {
 	    !defined($type) && do {
-		Bio::Root::Root->throw("type attribute not defined; cannot proceed");
+		Bio::Root::Root->throw("neither type nor ref attributes defined; cannot proceed");
 		last;
 	    };
 	    $type eq 'xs:string' && do {
-		push @$res, { $_->att('name') => 1 };
+		push @$res, { $_->att('name').$is_choice => 1};
 		last;
 	    };
 	    do { # custom type
-		my $new_res = [];
-		push @$res, { $_->att('name'), $new_res };
 		# find the type def in schema
 		$type =~ s/.*?://; # strip tns
 		my $new_elt = $sch->first_child("xs:complexType[\@name='$type']");
-		Bio::Root::Root->throw("type not defined in schema; connot proceed") unless defined $new_elt;
-		_get_types($new_res, $new_elt, $sch);
+		if (defined $new_elt) {
+		    my $new_res = [];
+		    push @$res, { $_->att('name').$is_choice, $new_res };
+		    _get_types($new_res, $new_elt, $sch);
+		}
+		else { # a 'ref', make sure it's defined
+		    $new_elt = $sch->first_child("xs:element[\@name='$type']");
+		    Bio::Root::Root->throw("type not defined in schema; connot proceed") unless defined $new_elt;
+		    push @$res, { $new_elt->att('name').$is_choice => 1 };
+		}
 		last;
 	    }
 	}
