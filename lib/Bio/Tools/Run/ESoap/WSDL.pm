@@ -133,6 +133,88 @@ sub new {
 
 
 
+=head2 request_parameters()
+
+ Title   : request_parameters
+ Usage   : @params = $wsdl->request_parameters($operation_name)
+ Function: get array of request (input) fields required by 
+           specified operation, according to the WSDL
+ Returns : array of scalar strings
+ Args    : scalar string (operation or action name)
+
+=cut
+
+sub request_parameters {
+    my $self = shift;
+    my ($operation) = @_;
+    my $is_action;
+    $self->throw("Operation name must be specified") unless defined $operation;
+    my $opn_hash = $self->operations;
+    unless ( grep /^$operation$/, keys %$opn_hash ) {
+	$is_action = grep /^$operation$/, values %$opn_hash;
+	$self->throw("Operation name '$operation' is not recognized")
+	    unless ($is_action);
+    }
+    
+    #check the cache here....
+    return $self->_cache("request_params_$operation") if
+	$self->_cache("request_params_$operation");
+
+    # find the input message type in the portType elt
+    if ($is_action) { 
+	my @a = grep {$$opn_hash{$_} eq $operation} keys %$opn_hash;
+	# note this takes the first match
+	$operation = $a[0];
+	$self->throw("Whaaa??") unless defined $operation;
+    }
+    #check the cache once more after translation....
+    return $self->_cache("request_params_$operation") if
+	$self->_cache("request_params_$operation");
+
+    my $pT_opn = $self->_portType_elt->first_child( 
+	qq/ operation[\@name="$operation"] /
+	);
+    my $imsg_type = $pT_opn->first_child('input')->att('message');
+
+    # now lookup the schema element name from among the message elts
+    my $imsg_elt;
+    foreach ( @{$self->_message_elts} ) {
+	my $msg_name = $_->att('name');
+	if ( $imsg_type =~ qr/$msg_name/ ) {
+	    $imsg_elt = $_->first_child('part[@name="request"]')->att('element');
+	    last;
+	}
+    }
+    $self->throw("Can't find request schema element corresponding to '$operation'") unless $imsg_elt;
+
+    # $imsg_elt has a namespace prefix, to lead us to the correct schema
+    # as defined in the wsdl <types> element. Get that schema
+    $imsg_elt =~ /(.*?):/;
+    my $opn_ns = $self->root->namespace($1);
+    my $opn_schema = $self->_types_elt->first_child("xs:schema[\@targetNamespace='$opn_ns']");
+    $self->throw("Can't find types schema corresponding to '$operation'") unless defined $opn_schema;
+
+    # find the definition of $imsg_elt in $opn_schema
+    $imsg_elt =~ s/.*?://;
+    $imsg_elt = $opn_schema->first_child("xs:element[\@name='$imsg_elt']");
+    $self->throw("Can't find request element definition in schema corresponding to '$operation'") unless defined $imsg_elt;
+        
+    # the EUtilities schemata are fairly simple; each element corr. to 
+    # an input field name are defined as a simple xs:string; the 
+    # request types are a xs:seq of these xs:strings
+    # this parsing will assume this structure, and so it could 
+    # break if the request schemata become more complicated...
+
+    my @request_params = map 
+    { 
+	my $r = $_->att('ref');
+	$r =~ s/.*?://;
+	$r 
+    } ($imsg_elt->descendants('xs:sequence'))[0]->descendants('xs:element');
+    return $self->_cache("request_params_$operation", \@request_params);
+    1;
+}
+
 =head2 operations()
 
  Title   : operations
@@ -148,7 +230,7 @@ sub operations {
     my $self = shift;
     return $self->_cache('operations') if $self->_cache('operations');
     my %opns;
-    foreach ($self->_parse->_operation_elts) {
+    foreach (@{$self->_parse->_operation_elts}) {
 	$opns{$_->att('name')} = 
 	    ($_->descendants('soap:operation'))[0]->att('soapAction');
     }
@@ -322,6 +404,7 @@ sub _cache {
     return $self->{'_cache'}->{$name};
 }
 
+sub clear_cache { shift->_cache() }
 
 
 =head2 _parsed()
