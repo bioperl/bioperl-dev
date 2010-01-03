@@ -98,6 +98,7 @@ sub new {
     $url = $NCBI_BASEURL.$WSDL{$url};
     $self->_wsdl(Bio::Tools::Run::ESoap::WSDL->new(-url => $url));
     $self->_operation($util);
+    $self->_init_parameters;
     
     return $self;
 }
@@ -124,6 +125,7 @@ sub _wsdl {
 =head2 _operation()
 
  Title   : _operation
+ Alias   : util
  Usage   : 
  Function: check and convert the requested operation based on the wsdl
  Returns : 
@@ -141,7 +143,7 @@ sub _operation {
 	return $self->{'_operation'} = $util;
     }
     elsif ( grep /^$util$/, values %$opn ) {
-	@a = grep { $$opn_hash{$_} eq $util } keys %$opn;
+	my @a = grep { $$opn{$_} eq $util } keys %$opn;
 	return $self->{'_operation'} = $a[0];
     }
     else {
@@ -149,22 +151,95 @@ sub _operation {
     }
 }
 
+sub util { shift->_operation(@_) }
+
 =head2 Bio::ParameterBaseI compliance
 
 =cut 
 
 sub available_parameters {
     my $self = shift;
+    my @args = @_;
+    return @{$self->_init_parameters};
 }
 
 sub set_parameters {
     my $self = shift;
+    my @args = @_;
+    $self->throw("set_parameters requires named args") if @args % 2;
+    my %args = @args;
+    $self->_set_from_args(\%args, -methods=>$self->_init_parameters);
+    $self->parameters_changed(1);
+    return;
 }
 
 sub get_parameters {
     my $self = shift;
+    my @ret;
+    foreach (@{$self->_init_parameters}) {
+	push @ret, ($_, $self->$_());
+    }
+    return @ret;
 }
 
 sub reset_parameters {
     my $self = shift;
+    my @args = @_;
+    $self->throw("reset_parameters requires named args") if @args % 2;
+    my %args = @args;
+    my %reset;
+    @reset{@{$self->_init_parameters}} = (undef) x @{$self->_init_parameters};
+    $reset{$_} = $args{$_} for keys %args;
+    $self->_set_from_args( \%reset, -methods => $self->_init_parameters );
+    return;
 }
+
+=head2 parameters_changed()
+
+ Title   : parameters_changed
+ Usage   : $obj->parameters_changed($newval)
+ Function: flag to indicate, well, you know
+ Example : 
+ Returns : value of parameters_changed (a scalar)
+ Args    : on set, new value (a scalar or undef, optional)
+
+=cut
+
+sub parameters_changed {
+    my $self = shift;
+    return $self->{'parameters_changed'} = shift if @_;
+    return $self->{'parameters_changed'};
+}
+
+=head2 _init_parameters()
+
+ Title   : _init_parameters
+ Usage   : $fac->_init_parameters
+ Function: identify the available input parameters
+           using the wsdl object
+ Returns : arrayref of parameter names (scalar strings)
+ Args    : none
+
+=cut
+
+sub _init_parameters {
+    my $self = shift;
+    return $self->{_params} if $self->{_params};
+    $self->throw("WSDL not yet initialized") unless $self->_wsdl;
+    my $phash = {};
+    $$phash{$_} = undef for map { keys %$_ } @{$self->_wsdl->request_parameters($self->util)};
+    my $params =$self->{_params} = [sort keys %$phash];
+    # create parm accessors
+    $self->_set_from_args( $phash, 
+			   -methods => $params,
+			   -create => 1,
+			   -code => 
+			   'my $self = shift; 
+                            $self->parameters_changed(0);
+                            return $self->{\'_\'.$method} = shift if @_;
+                            return $self->{\'_\'.$method};' );
+    $self->parameters_changed(1);
+    return $self->{_params};
+}
+
+1;
