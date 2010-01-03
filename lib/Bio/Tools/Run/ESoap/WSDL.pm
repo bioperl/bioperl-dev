@@ -381,7 +381,7 @@ sub _operation_bookmarks {
     }
     $self->throw("Can't find request schema element corresponding to '$operation'") unless $imsg_elt;
     $self->throw("Can't find result schema element corresponding to '$operation'") unless $omsg_elt;
-    $DB::single=1;
+
     # $imsg_elt has a namespace prefix, to lead us to the correct schema
     # as defined in the wsdl <types> element. Get that schema
     $imsg_elt =~ /(.*?):/;

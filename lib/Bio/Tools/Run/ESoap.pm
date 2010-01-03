@@ -75,6 +75,7 @@ use warnings;
 use lib '../../..'; # remove later
 use Bio::Root::Root;
 use Bio::Tools::Run::ESoap::WSDL;
+use SOAP::Lite;
 
 use base qw(Bio::Root::Root Bio::ParameterBaseI);
 
@@ -99,6 +100,7 @@ sub new {
     $self->_wsdl(Bio::Tools::Run::ESoap::WSDL->new(-url => $url));
     $self->_operation($util);
     $self->_init_parameters;
+    $self->_client( SOAP::Lite->new( proxy => $self->_wsdl->service ) );
     
     return $self;
 }
@@ -120,6 +122,23 @@ sub _wsdl {
     
     return $self->{'_wsdl'} = shift if @_;
     return $self->{'_wsdl'};
+}
+
+=head2 _client()
+
+ Title   : _client
+ Usage   : $obj->_client($newval)
+ Function: holds a SOAP::Lite object
+ Example : 
+ Returns : value of _client (a SOAP::Lite object)
+ Args    : on set, new value (a SOAP::Lite object or undef, optional)
+
+=cut
+
+sub _client {
+    my $self = shift;
+    return $self->{'_client'} = shift if @_;
+    return $self->{'_client'};
 }
 
 =head2 _operation()
@@ -153,6 +172,50 @@ sub _operation {
 
 sub util { shift->_operation(@_) }
 
+=head2 action()
+
+ Title   : action
+ Usage   : 
+ Function: return the soapAction associated with the factory's utility
+ Returns : scalar string
+ Args    : none
+
+=cut
+
+sub action {
+    my $self = shift;
+    return $self->{_action} if $self->{_action};
+    return $self->{_action} = ${$self->_wsdl->operations}{$self->util};
+}
+
+=head2 _run()
+
+ Title   : _run
+ Usage   : $som = $self->_run(@optional_setting_args)
+ Function: Call the SOAP service with the factory-associated utility
+           and parameters
+ Returns : SOAP::SOM (SOAP Message) object
+ Args    : named parameters appropriate for the utility
+ Note    : no fault checking here
+
+=cut
+
+sub _run {
+    my $self = shift;
+    my @args = @_;
+    $self->throw("SOAP::Lite client not initialized") unless 
+	$self->_client;
+    $self->throw("run requires named args") if @args % 2;
+    $self->set_parameters(@args) if scalar @args;
+    my %args = $self->get_parameters;
+    my @soap_data = map { defined $args{$_} ? SOAP::Data->name($_)->value($args{$_}) : () } keys %args;
+    $self->_client->on_action( sub { $self->action } );
+    my $som = $self->_client->call( $self->util, 
+				    @soap_data );
+    
+    return $som;
+}
+
 =head2 Bio::ParameterBaseI compliance
 
 =cut 
@@ -167,6 +230,7 @@ sub set_parameters {
     my $self = shift;
     my @args = @_;
     $self->throw("set_parameters requires named args") if @args % 2;
+    ($_%2 ? 1 : $args[$_] =~ s/^-//) for (0..$#args);
     my %args = @args;
     $self->_set_from_args(\%args, -methods=>$self->_init_parameters);
     $self->parameters_changed(1);
@@ -177,6 +241,7 @@ sub get_parameters {
     my $self = shift;
     my @ret;
     foreach (@{$self->_init_parameters}) {
+	next unless defined $self->$_();
 	push @ret, ($_, $self->$_());
     }
     return @ret;
@@ -186,6 +251,7 @@ sub reset_parameters {
     my $self = shift;
     my @args = @_;
     $self->throw("reset_parameters requires named args") if @args % 2;
+    ($_%2 ? 1 : $args[$_] =~ s/^-//) for (0..$#args);
     my %args = @args;
     my %reset;
     @reset{@{$self->_init_parameters}} = (undef) x @{$self->_init_parameters};
