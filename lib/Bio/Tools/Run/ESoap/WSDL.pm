@@ -152,7 +152,7 @@ our %WSDL = (
  Args    : named args:
            -URL => $url_of_desired_wsdl -OR-
            -WSDL => $filename_of_local_wsdl_copy
-           ( -URL will take precedence if both specified )
+           ( -WSDL will take precedence if both specified )
 
 =cut
 
@@ -442,7 +442,10 @@ sub _parse {
     return $self if $self->_parsed; # already done
     $self->throw("Neither URL nor WSDL set in object") unless $self->url || $self->wsdl;
     eval {
-	if ($self->url) {
+	if ($self->wsdl) {
+	    $self->_twig->parsefile($self->wsdl);
+	}
+	else {
 	    eval {
 		my $tfh = File::Temp->new(-UNLINK=>1);
 		Bio::WebAgent->new()->get($self->url, ':content_file' => $tfh->filename);
@@ -451,9 +454,6 @@ sub _parse {
 		$self->wsdl($tfh);
 	    };
 	    $self->throw("URL parse failed : $@") if $@;
-	}
-	else {
-	    $self->_twig->parsefile($self->wsdl);
 	}
     };
 #    $self->throw("Parser issue : $@") if $@;
