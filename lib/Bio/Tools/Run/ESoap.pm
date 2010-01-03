@@ -14,7 +14,7 @@
 
 =head1 NAME
 
-Bio::Tools::Run::ESoap - Client for the Entrez EUtilities SOAP server>
+Bio::Tools::Run::ESoap - Client for the NCBI Entrez EUtilities SOAP server
 
 =head1 SYNOPSIS
 
@@ -58,12 +58,6 @@ the web:
 
 Email maj -at- fortinbras -dot- us
 
-Describe contact details here
-
-=head1 CONTRIBUTORS
-
-Additional contributors names and emails here
-
 =head1 APPENDIX
 
 The rest of the documentation details each of the object methods.
@@ -76,11 +70,11 @@ Internal methods are usually preceded with a _
 
 package Bio::Tools::Run::ESoap;
 use strict;
+use warnings;
 
-# Object preamble - inherits from Bio::Root::Root
-
+use lib '../../..'; # remove later
 use Bio::Root::Root;
-
+use Bio::Tools::Run::ESoap::WSDL;
 
 use base qw(Bio::Root::Root );
 
@@ -88,7 +82,7 @@ use base qw(Bio::Root::Root );
 
  Title   : new
  Usage   : my $obj = new Bio::Tools::Run::ESoap();
- Function: Builds a new Bio::Tools::Run::ESoap object
+ Function: Builds a new Bio::Tools::Run::ESoap factory
  Returns : an instance of Bio::Tools::Run::ESoap
  Args    :
 

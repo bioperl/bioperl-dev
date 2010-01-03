@@ -36,7 +36,7 @@ Used by L<Bio::Tools::Run::ESoap>
 
 This module is a lightweight parser and container for WSDL XML files
 associated with the NCBI EUtilities SOAP server. XML facilities are
-based on L<XML::Twig>.
+provided by L<XML::Twig>.
 
 The following accessors provide names and structures useful for
 creating SOAP messages using L<SOAP::Lite> (e.g.):
@@ -64,6 +64,15 @@ information is cached. To clear the cache and force re-parsing, run
 
  $wsdl->clear_cache;
 
+The globals C<$NCBI_BASEURL>, C<$NCBI_ADAPTOR>, and C<%WSDL> are exported.
+
+ $NCBI_ADAPTOR : the soap service cgi
+ 
+To construct a URL for a WSDL:
+
+ $wsdl_eutils = $NCBI_BASEURL.$WSDL{'eutils'}
+ $wsdl_efetch_omim = $NCBI_BASEURL.$WSDL{'f_omim'}
+ # etc.
 
 =head1 FEEDBACK
 
@@ -99,12 +108,6 @@ the web:
 
 Email maj -at- fortinbras -dot- us
 
-Describe contact details here
-
-=head1 CONTRIBUTORS
-
-Additional contributors names and emails here
-
 =head1 APPENDIX
 
 The rest of the documentation details each of the object methods.
@@ -112,19 +115,32 @@ Internal methods are usually preceded with a _
 
 =cut
 
-# Let the code begin...
-
-
 package Bio::Tools::Run::ESoap::WSDL;
 use strict;
-
-# Object preamble - inherits from Bio::Root::Root
 
 use Bio::Root::Root;
 use XML::Twig;
 use LWP::Simple;
 
-use base qw(Bio::Root::Root );
+use base qw(Bio::Root::Root Exporter);
+
+our @EXPORT = qw( $NCBI_BASEURL $NCBI_ADAPTOR %WSDL );
+
+our $NCBI_BASEURL = "http://www.ncbi.nlm.nih.gov/entrez/eutils/soap/v2.0/";
+our $NCBI_ADAPTOR = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/soap/v2.0/soap_adapter_2_0.cgi";
+
+our %WSDL = (
+    'eutils' => 'eutils.wsdl',
+    'f_pubmed' => 'efetch_pubmed.wsdl',
+    'f_pmc' => 'efetch_pmc.wsdl',
+    'f_nlmc' => 'efetch_nlmc.wsdl',
+    'f_journals' => 'efetch_journals.wsdl',
+    'f_omim' => 'efetch_omim.wsdl',
+    'f_taxon' => 'efetch_taxon.wsdl',
+    'f_snp' => 'efetch_snp.wsdl',
+    'f_gene' => 'efetch_gene.wsdl',
+    'f_seq' => 'efetch_seq.wsdl'
+    );
 
 =head2 new
 
@@ -288,6 +304,46 @@ sub result_parameters {
 
 sub response_parameters { shift->result_parameters( @_ ) }
 
+=head2 operations()
+
+ Title   : operations
+ Usage   : @opns = $wsdl->operations;
+ Function: get a hashref with elts ( $operation_name => $soapAction )
+           for all operations defined by this WSDL 
+ Returns : array of scalar strings
+ Args    : none
+
+=cut
+
+sub operations {
+    my $self = shift;
+    return $self->_cache('operations') if $self->_cache('operations');
+    my %opns;
+    foreach (@{$self->_parse->_operation_elts}) {
+	$opns{$_->att('name')} = 
+	    ($_->descendants('soap:operation'))[0]->att('soapAction');
+    }
+    return $self->_cache('operations', \%opns);
+}
+
+=head2 service()
+
+ Title   : service
+ Usage   : $wsdl->service
+ Function: gets the SOAP service url associated with this WSDL
+ Returns : scalar string
+ Args    : none
+
+=cut
+
+sub service {
+    my $self = shift;
+    return $self->_cache('service') || 
+	$self->_cache('service', ($self->_parse->_service_elt->descendants('soap:address'))[0]->att('location'));
+}
+
+=head1 Internals
+
 =head2 _operation_bookmarks()
 
  Title   : _operation_bookmarks
@@ -353,44 +409,6 @@ sub _operation_bookmarks {
 	 $imsg_elt, $omsg_elt);
     return $self->_cache("bookmarks_$operation", \%bookmarks);
     
-}
-
-=head2 operations()
-
- Title   : operations
- Usage   : @opns = $wsdl->operations;
- Function: get a hashref with elts ( $operation_name => $soapAction )
-           for all operations defined by this WSDL 
- Returns : array of scalar strings
- Args    : none
-
-=cut
-
-sub operations {
-    my $self = shift;
-    return $self->_cache('operations') if $self->_cache('operations');
-    my %opns;
-    foreach (@{$self->_parse->_operation_elts}) {
-	$opns{$_->att('name')} = 
-	    ($_->descendants('soap:operation'))[0]->att('soapAction');
-    }
-    return $self->_cache('operations', \%opns);
-}
-
-=head2 service()
-
- Title   : service
- Usage   : $wsdl->service
- Function: gets the SOAP service url associated with this WSDL
- Returns : scalar string
- Args    : none
-
-=cut
-
-sub service {
-    my $self = shift;
-    return $self->_cache('service') || 
-	$self->_cache('service', ($self->_parse->_service_elt->descendants('soap:address'))[0]->att('location'));
 }
 
 =head2 _parse()
