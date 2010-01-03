@@ -76,7 +76,7 @@ use lib '../../..'; # remove later
 use Bio::Root::Root;
 use Bio::Tools::Run::ESoap::WSDL;
 
-use base qw(Bio::Root::Root );
+use base qw(Bio::Root::Root Bio::ParameterBaseI);
 
 =head2 new
 
@@ -90,9 +90,81 @@ use base qw(Bio::Root::Root );
 
 sub new {
     my ($class,@args) = @_;
-    
     my $self = $class->SUPER::new(@args);
+    my ($util, $fetch_db, $wsdl) = $self->_rearrange( [qw( UTIL FETCH_DB WSDL_FILE )], @args );
+    $self->throw("Argument -util must be specified") unless $util;
+    $fetch_db ||= 'seq';
+    my $url = ($util =~ /fetch/ ? 'f_'.$fetch_db : 'eutils');
+    $url = $NCBI_BASEURL.$WSDL{$url};
+    $self->_wsdl(Bio::Tools::Run::ESoap::WSDL->new(-url => $url));
+    $self->_operation($util);
+    
     return $self;
 }
 
-1;
+=head2 _wsdl()
+
+ Title   : _wsdl
+ Usage   : $obj->_wsdl($newval)
+ Function: Bio::Tools::Run::ESoap::WSDL object associated with 
+           this factory
+ Example : 
+ Returns : value of _wsdl (object)
+ Args    : on set, new value (object or undef, optional)
+
+=cut
+
+sub _wsdl {
+    my $self = shift;
+    
+    return $self->{'_wsdl'} = shift if @_;
+    return $self->{'_wsdl'};
+}
+
+=head2 _operation()
+
+ Title   : _operation
+ Usage   : 
+ Function: check and convert the requested operation based on the wsdl
+ Returns : 
+ Args    : operation (scalar string)
+
+=cut
+
+sub _operation {
+    my $self = shift;
+    my $util = shift;
+    return $self->{'_operation'} unless $util;
+    $self->throw("WSDL not yet initialized") unless $self->_wsdl;
+    my $opn = $self->_wsdl->operations;
+    if ( grep /^$util$/, keys %$opn ) {
+	return $self->{'_operation'} = $util;
+    }
+    elsif ( grep /^$util$/, values %$opn ) {
+	@a = grep { $$opn_hash{$_} eq $util } keys %$opn;
+	return $self->{'_operation'} = $a[0];
+    }
+    else {
+	$self->throw("Utility '$util' is not recognized");
+    }
+}
+
+=head2 Bio::ParameterBaseI compliance
+
+=cut 
+
+sub available_parameters {
+    my $self = shift;
+}
+
+sub set_parameters {
+    my $self = shift;
+}
+
+sub get_parameters {
+    my $self = shift;
+}
+
+sub reset_parameters {
+    my $self = shift;
+}

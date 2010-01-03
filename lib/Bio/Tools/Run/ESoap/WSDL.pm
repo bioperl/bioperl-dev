@@ -228,13 +228,6 @@ sub request_parameters {
 
     my $bookmarks = $self->_operation_bookmarks($operation);
 
-#     my @request_params = map 
-#     { 
-# 	my $r = $_->att('ref');
-# 	$r =~ s/.*?://;
-# 	$r 
-#     } ($$bookmarks{i_msg_elt}->descendants('xs:sequence'))[0]->descendants('xs:element');
-
     my $ret = [];
     my $imsg_elt = $bookmarks->{'i_msg_elt'};
     my $opn_schema = $bookmarks->{'schema'};
