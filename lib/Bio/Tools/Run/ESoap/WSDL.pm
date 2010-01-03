@@ -120,7 +120,8 @@ use strict;
 
 use Bio::Root::Root;
 use XML::Twig;
-use LWP::Simple;
+use Bio::WebAgent;
+use File::Temp;
 
 use base qw(Bio::Root::Root Exporter);
 
@@ -443,7 +444,11 @@ sub _parse {
     eval {
 	if ($self->url) {
 	    eval {
-		$self->_twig->parse(LWP::Simple::get($self->url));
+		my $tfh = File::Temp->new(-UNLINK=>1);
+		Bio::WebAgent->new()->get($self->url, ':content_file' => $tfh->filename);
+		$tfh->close;
+		$self->_twig->parsefile($tfh->filename);
+		$self->wsdl($tfh);
 	    };
 	    $self->throw("URL parse failed : $@") if $@;
 	}
@@ -513,7 +518,7 @@ sub wsdl {
     my $self = shift;
     my $file = shift;
     if (defined $file) {
-	$self->throw("File not found") unless -e $file;
+	$self->throw("File not found") unless (-e $file) || (ref $file eq 'File::Temp');
 	return $self->{'wsdl'} = $file;
     }
     return $self->{'wsdl'};
@@ -655,6 +660,10 @@ sub _get_types {
     return 1;
 }
 	
-	
-
+sub DESTROY {
+    my $self = shift;
+    if (ref($self->wsdl) eq 'File::Temp') {
+	unlink $self->wsdl->filename;
+    }
+}
 1;

@@ -188,6 +188,26 @@ sub action {
     return $self->{_action} = ${$self->_wsdl->operations}{$self->util};
 }
 
+
+
+=head2 wsdl_file()
+
+ Title   : wsdl_file
+ Usage   : 
+ Function: get filename of the local WSDL XML copy
+ Returns : filename (scalar string)
+ Args    : none
+
+=cut
+
+sub wsdl_file { 
+    my $self = shift;
+    if (ref ($self->_wsdl->wsdl) eq 'File::Temp') {
+	return $self->_wsdl->wsdl->filename;
+    }
+    return $self->_wsdl->wsdl;
+}
+
 =head2 _run()
 
  Title   : _run
