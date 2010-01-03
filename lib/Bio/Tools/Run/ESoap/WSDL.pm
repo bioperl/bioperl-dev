@@ -349,6 +349,7 @@ sub service {
             i_msg_type i_msg_elt
             o_msg_type o_msg_elt
  Args    : operation name (scalar string)
+ Note    : will import schema if necessary
 
 =cut
 
@@ -371,22 +372,41 @@ sub _operation_bookmarks {
     foreach ( @{$self->_message_elts} ) {
 	my $msg_name = $_->att('name');
 	if ( $imsg_type =~ qr/$msg_name/ ) {
-	    $imsg_elt = $_->first_child('part[@name="request"]')->att('element');
+	    $imsg_elt = $_->first_child('part[@element=~/[Rr]equest/]')->att('element');
 	}
 	if ( $omsg_type =~ qr/$msg_name/) {
-	    $omsg_elt = $_->first_child('part[@name="result"]')->att('element');
+	    $omsg_elt = $_->first_child('part[@element=~/[Rr]esult/]')->att('element');
 	}
 	last if ($imsg_elt && $omsg_elt);
     }
     $self->throw("Can't find request schema element corresponding to '$operation'") unless $imsg_elt;
     $self->throw("Can't find result schema element corresponding to '$operation'") unless $omsg_elt;
-
+    $DB::single=1;
     # $imsg_elt has a namespace prefix, to lead us to the correct schema
     # as defined in the wsdl <types> element. Get that schema
     $imsg_elt =~ /(.*?):/;
     my $opn_ns = $self->root->namespace($1);
     my $opn_schema = $self->_types_elt->first_child("xs:schema[\@targetNamespace='$opn_ns']");
+    $opn_schema ||= $self->_types_elt->first_child("xs:schema"); # only one
     $self->throw("Can't find types schema corresponding to '$operation'") unless defined $opn_schema;
+
+    # need to import the schema? do it here.
+    if ( my $import_elt = $opn_schema->first_child("xs:import") ) {
+	my $import_url = $NCBI_BASEURL.$import_elt->att('schemaLocation');
+	my $imported = XML::Twig->new();
+	# better error checking here?
+	eval {
+	    $imported->parse(LWP::Simple::get($import_url));
+	};
+	$self->throw("Schema import failed (tried url '$import_url') : $@") if $@;
+	# cut-n-paste
+	my $imported_schema = $imported->root;
+	$opn_schema->cut;
+	$imported_schema->cut;
+	$imported_schema->paste( first_child => $opn_schema->former_parent );
+	$opn_schema = $imported_schema;
+    }
+	
 
     # find the definition of $imsg_elt in $opn_schema
     $imsg_elt =~ s/.*?://;
@@ -422,7 +442,10 @@ sub _parse {
     $self->throw("Neither URL nor WSDL set in object") unless $self->url || $self->wsdl;
     eval {
 	if ($self->url) {
-	    $self->_twig->parse(LWP::Simple::get($self->url));
+	    eval {
+		$self->_twig->parse(LWP::Simple::get($self->url));
+	    };
+	    $self->throw("URL parse failed : $@") if $@;
 	}
 	else {
 	    $self->_twig->parsefile($self->wsdl);
