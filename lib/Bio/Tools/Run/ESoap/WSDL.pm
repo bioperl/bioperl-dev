@@ -488,9 +488,10 @@ sub url {
 
 sub wsdl {
     my $self = shift;
-    if (@_) {
-	$self->throw("File not found") unless -e $_[0];
-	return $self->{'wsdl'} = shift;
+    my $file = shift;
+    if (defined $file) {
+	$self->throw("File not found") unless -e $file;
+	return $self->{'wsdl'} = $file;
     }
     return $self->{'wsdl'};
 }
