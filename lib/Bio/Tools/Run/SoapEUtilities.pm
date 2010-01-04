@@ -101,6 +101,54 @@ sub new {
     return $self;
 }
 
+=head2 run()
+
+ Title   : run
+ Usage   : $fac->$eutility->run(@args)
+ Function: Execute the EUtility
+ Returns : true on success, false on fault or error
+           (reason in errstr(), for more detail check the SOAP message
+            in last_result() )
+ Args    : named params appropriate to utility
+           -autofetch => boolean ( run efetch appropriate to util )
+
+=cut
+
+sub run {
+    my $self = shift;
+    my @args = @_;
+    $self->throw("run method requires named arguments") if @args % 2;
+    $self->throw("call run method like '\$fac->\$eutility->run(\@args)") unless
+	$self->_caller_util;
+    my %args = @args;
+    my $autofetch ||= $args{'-autofetch'} || $args{'-AUTOFETCH'};
+    delete $args{'-autofetch'};
+    delete $args{'-AUTOFETCH'};
+    my $util = $self->_caller_util;
+    $self->set_parameters(%args) if %args;
+    
+    my $som = $self->{'_response_message'} = $self->_soap_facs($util)->_run;
+    # check response status
+    if ($som->fault) {
+	$self->{'errstr'} = $som->faultstring;
+	return 0;
+    }
+    # elsif non-fault error
+    if (my $err = $som->valueof("//ErrorList")) {
+	while ( my ($key, $val) = each %$err ) {
+	    $self->{'errstr'} .= join( " : ", $key, $val )."\n";
+	};
+	$self->{'errstr'} =~ s/\n$//;
+	return 0;
+    }
+    # success, parse it out
+    if ($autofetch) {
+	# do an efetch with the same db and a returned list of ids...
+    }
+    
+    
+}
+
 =head2 Bio::ParameterBaseI compliance
 
 =head2 set_parameters()
@@ -272,6 +320,32 @@ sub _caller_util {
     return $self->{'_caller_util'};
 }
 
+=head2 response_message()
 
+ Title   : response_message
+ Aliases : last_response, last_result
+ Usage   : $som = $fac->response_message
+ Function: get the last response message
+ Returns : a SOAP::SOM object
+ Args    : none
+
+=cut
+
+sub response_message { shift->{'_response_message'} }
+sub last_response { shift->{'_response_message'} }
+sub last_result { shift->{'_response_message'} }
+
+=head2 errstr()
+
+ Title   : errstr
+ Usage   : $fac->errstr
+ Function: get the last error, if any
+ Example : 
+ Returns : value of errstr (a scalar)
+ Args    : none
+
+=cut
+
+sub errstr { shift->{'errstr'} }
 
 1;
