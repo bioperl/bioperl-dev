@@ -18,11 +18,34 @@ Bio::Tools::Run::ESoap - Client for the NCBI Entrez EUtilities SOAP server
 
 =head1 SYNOPSIS
 
-Give standard usage here
+ $fac = Bio::Tools::Run::ESoap->new( -util => 'esearch' );
+ $som = $fac->run( -db => 'prot', -term => 'HIV and gp120' );
+ $fac->set_parameters( -term => 'HIV2 and gp160' );
+ $som = $fac->run;
 
+ # more later.
+ 
 =head1 DESCRIPTION
 
-Describe the object here
+C<ESoap> provides a basic SOAP interface to the NCBI Entrez Utilities
+Web Service
+(L<http://eutils.ncbi.nlm.nih.gov/entrez/eutils/soap/v2.0/DOC/esoap_help.html>).
+L<SOAP::Lite> handles the SOAP calls. Higher level access, pipelines,
+BioPerl object I/O and such are provided by
+L<Bio::Tools::Run::SoapEUtilities>.
+
+C<ESoap> complies with L<Bio::ParameterBaseI>. It depends explicitly
+on NCBI web service description language files to inform the
+C<available_parameters()> method. WSDLs are parsed by a relative
+lightweight, Entrez-specific module L<Bio::Tools::Run::ESoap::WSDL>.
+
+The C<run()> method returns L<SOAP::SOM> (SOAP Message) objects. No
+fault checking or other parsing is performed in this module.
+
+=head1 SEE ALSO
+
+L<Bio::DB::EUtilities>, L<Bio::Tools::Run::SoapEUtilities>,
+L<Bio::Tools::Run::ESoap::WSDL>
 
 =head1 FEEDBACK
 
@@ -66,7 +89,6 @@ Internal methods are usually preceded with a _
 =cut
 
 # Let the code begin...
-
 
 package Bio::Tools::Run::ESoap;
 use strict;
@@ -208,7 +230,7 @@ sub wsdl_file {
     return $self->_wsdl->wsdl;
 }
 
-=head2 _run()
+=head2 run()
 
  Title   : _run
  Usage   : $som = $self->_run(@optional_setting_args)
@@ -220,7 +242,7 @@ sub wsdl_file {
 
 =cut
 
-sub _run {
+sub run {
     my $self = shift;
     my @args = @_;
     $self->throw("SOAP::Lite client not initialized") unless 
@@ -235,6 +257,10 @@ sub _run {
     
     return $som;
 }
+
+sub _result_elt_name { my $s=shift; (keys %{$s->_wsdl->response_parameters($s->util)})[0] };
+sub _response_elt_name { shift->_result_elt_name }
+sub _request_elt_name { my $s=shift; (keys %{$s->_wsdl->request_parameters($s->util)})[0] };
 
 =head2 Bio::ParameterBaseI compliance
 
@@ -313,7 +339,8 @@ sub _init_parameters {
     return $self->{_params} if $self->{_params};
     $self->throw("WSDL not yet initialized") unless $self->_wsdl;
     my $phash = {};
-    $$phash{$_} = undef for map { keys %$_ } @{$self->_wsdl->request_parameters($self->util)};
+    my $val = (values %{$self->_wsdl->request_parameters($self->util)})[0];
+    $$phash{$_} = undef for map { keys %$_ } @{$val};
     my $params =$self->{_params} = [sort keys %$phash];
     # create parm accessors
     $self->_set_from_args( $phash, 

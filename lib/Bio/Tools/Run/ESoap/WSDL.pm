@@ -195,7 +195,7 @@ sub new {
  Usage   : @params = $wsdl->request_parameters($operation_name)
  Function: get array of request (input) fields required by 
            specified operation, according to the WSDL
- Returns : array of scalar strings
+ Returns : hash of arrays of hashes...
  Args    : scalar string (operation or action name)
 
 =cut
@@ -229,12 +229,12 @@ sub request_parameters {
 
     my $bookmarks = $self->_operation_bookmarks($operation);
 
-    my $ret = [];
     my $imsg_elt = $bookmarks->{'i_msg_elt'};
     my $opn_schema = $bookmarks->{'schema'};
+    my $ret = { $imsg_elt->att('name') => [] };
     
     # do a quick recursion:
-    _get_types($ret, $imsg_elt, $opn_schema);
+    _get_types((values %$ret)[0], $imsg_elt, $opn_schema);
     return $self->_cache("request_params_$operation", $ret);
 
     1;
@@ -247,7 +247,7 @@ sub request_parameters {
  Function: retrieve a hash structure describing the 
            result of running the specified operation
            according to the WSDL
- Returns : 
+ Returns : hash of arrays of hashes...
  Args    : operation (scalar string)
 
 =cut
@@ -287,12 +287,12 @@ sub result_parameters {
     # 
     # cast these as a hash of hashes...
 
-    my $ret = [];
     my $omsg_elt = $bookmarks->{'o_msg_elt'};
     my $opn_schema = $bookmarks->{'schema'};
+    my $ret = { $omsg_elt->att('name') => [] };
     
     # do a quick recursion:
-    _get_types($ret, $omsg_elt, $opn_schema);
+    _get_types((values %$ret)[0], $omsg_elt, $opn_schema);
     return $self->_cache("result_params_$operation", $ret);
 }
 
