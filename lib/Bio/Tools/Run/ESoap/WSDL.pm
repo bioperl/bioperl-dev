@@ -397,7 +397,7 @@ sub _operation_bookmarks {
 	my $imported = XML::Twig->new();
 	# better error checking here?
 	eval {
-	    $imported->parse(LWP::Simple::get($import_url));
+	    $imported->parse(Bio::WebAgent->new()->get($import_url)->content);
 	};
 	$self->throw("Schema import failed (tried url '$import_url') : $@") if $@;
 	# cut-n-paste
