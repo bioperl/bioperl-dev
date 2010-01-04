@@ -118,11 +118,12 @@ sub _load_adaptor {
     my ($self, $type) = @_;
     return unless $type;
     my $module = "Bio::Tools::Run::ESoap::FetchAdaptor::".$type;
+    my $ok;
     eval {
 	$ok = $self->_load_module($module);
     };
     for ($@) {
-	// && do {
+	/^$/ && do {
 	    return $ok;
 	};
 	/Can't locate/ && do {
