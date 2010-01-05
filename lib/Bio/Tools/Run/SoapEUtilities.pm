@@ -78,6 +78,7 @@ use lib '../../..'; # remove later
 use Bio::Root::Root;
 use Bio::Tools::Run::ESoap;
 use Bio::Tools::Run::ESoap::FetchAdaptor;
+use Bio::Tools::Run::SoapEUtilities::Result;
 
 use base qw(Bio::Root::Root Bio::ParameterBaseI );
 
@@ -111,6 +112,7 @@ sub new {
             in last_result() )
  Args    : named params appropriate to utility
            -autofetch => boolean ( run efetch appropriate to util )
+           -raw_xml => boolean ( return raw xml result; no processing )
 
 =cut
 
@@ -120,14 +122,22 @@ sub run {
     $self->throw("run method requires named arguments") if @args % 2;
     $self->throw("call run method like '\$fac->\$eutility->run(\@args)") unless
 	$self->_caller_util;
+    my ($autofetch, $raw_xml) = $self->_rearrange( [qw( AUTOFETCH RAW_XML )],
+						   @args );
     my %args = @args;
-    my $autofetch ||= $args{'-autofetch'} || $args{'-AUTOFETCH'};
     delete $args{'-autofetch'};
     delete $args{'-AUTOFETCH'};
+    delete  $args{'-raw_xml'};
+    delete  $args{'-RAW_XML'};
     my $util = $self->_caller_util;
     $self->set_parameters(%args) if %args;
-    
-    my $som = $self->{'_response_message'} = $self->_soap_facs($util)->_run;
+    $self->_soap_facs($util)->_client->outputxml($raw_xml);
+    my $som = $self->{'_response_message'} = $self->_soap_facs($util)->run;
+    # raw xml only...
+    if ($raw_xml) {
+	return $som; 
+    }
+    # SOAP::SOM parsing...
     # check response status
     if ($som->fault) {
 	$self->{'errstr'} = $som->faultstring;
@@ -145,8 +155,10 @@ sub run {
     if ($autofetch) {
 	# do an efetch with the same db and a returned list of ids...
     }
-    
-    
+    else {
+	return Bio::Tools::Run::SoapEUtilities::Result->new($self);
+	1;
+    }
 }
 
 =head2 Bio::ParameterBaseI compliance
@@ -246,7 +258,7 @@ sub AUTOLOAD {
     my @args = @_;
     $util =~ s/.*:://;
     unless ( $util =~ /^e/ ) {
-	$self->throw("Can't locate method '$util' in module __PACKAGE__");
+	$self->throw("Can't locate method '$util' in module ".__PACKAGE__);
     }
     # create an ESoap factory for this utility
     my $fac = $self->_soap_facs($util); # check cache
@@ -277,7 +289,6 @@ sub AUTOLOAD {
                   # set up in the background.
     1;
 }
-
 
 =head2 _soap_facs()
 
@@ -349,3 +360,4 @@ sub last_result { shift->{'_response_message'} }
 sub errstr { shift->{'errstr'} }
 
 1;
+
