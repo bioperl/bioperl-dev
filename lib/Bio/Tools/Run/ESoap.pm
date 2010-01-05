@@ -278,6 +278,12 @@ sub set_parameters {
     $self->throw("set_parameters requires named args") if @args % 2;
     ($_%2 ? 1 : $args[$_] =~ s/^-//) for (0..$#args);
     my %args = @args;
+
+    # special translations :
+    if ( defined $args{'usehistory'} ) {
+	$args{'usehistory'} = ($args{'usehistory'} ? 'y' : undef);
+    }
+
     $self->_set_from_args(\%args, -methods=>$self->_init_parameters);
     $self->parameters_changed(1);
     return;

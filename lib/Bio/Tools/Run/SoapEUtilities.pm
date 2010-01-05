@@ -151,6 +151,9 @@ sub run {
 	$self->{'errstr'} =~ s/\n$//;
 	return 0;
     }
+    # attach some key properties to the factory
+    $self->{'_WebEnv'} = $som->valueof("//WebEnv");
+
     # success, parse it out
     if ($autofetch) {
 	# do an efetch with the same db and a returned list of ids...
@@ -161,7 +164,79 @@ sub run {
     }
 }
 
+=head2 Useful Accessors
+
+
+=head2 response_message()
+
+ Title   : response_message
+ Aliases : last_response, last_result
+ Usage   : $som = $fac->response_message
+ Function: get the last response message
+ Returns : a SOAP::SOM object
+ Args    : none
+
+=cut
+
+sub response_message { shift->{'_response_message'} }
+sub last_response { shift->{'_response_message'} }
+sub last_result { shift->{'_response_message'} }
+
+
+
+=head2 webenv()
+
+ Title   : webenv
+ Usage   : 
+ Function: contains WebEnv key referencing the session
+           (set after run() )
+ Returns : scalar
+ Args    : none
+
+=cut
+
+sub webenv { shift->{'_WebEnv'} }
+
+=head2 errstr()
+
+ Title   : errstr
+ Usage   : $fac->errstr
+ Function: get the last error, if any
+ Example : 
+ Returns : value of errstr (a scalar)
+ Args    : none
+
+=cut
+
+sub errstr { shift->{'errstr'} }
+
+
+
 =head2 Bio::ParameterBaseI compliance
+
+
+=head2 available_parameters()
+
+ Title   : available_parameters
+ Usage   : 
+ Function: get available request parameters for calling
+           utility
+ Returns : 
+ Args    : -util => $desired_utility [optional, default is
+           caller utility]
+
+=cut
+
+sub available_parameters {
+    my $self = shift;
+    my @args = @_;
+    my %args = @args;
+    my $util = $args{'-util'} || $args{'-UTIL'} || $self->_caller_util;
+    return unless $self->_soap_facs($util);
+    delete $args{'-util'};
+    delete $args{'-UTIL'};
+    $self->_soap_facs($util)->available_parameters(%args);
+}
 
 =head2 set_parameters()
 
@@ -200,7 +275,7 @@ sub set_parameters {
 sub get_parameters {
     my $self = shift;
     my $util = shift;
-    $util ||= $self->_caller_util;
+    my $util = $args{'-util'} || $args{'-UTIL'} || $self->_caller_util;
     return unless $self->_soap_facs($util);
     return $self->_soap_facs($util)->get_parameters;
 }
@@ -241,8 +316,7 @@ sub reset_parameters {
 
 sub parameters_changed {
     my $self = shift;
-    my $util = shift;
-    $util ||= $self->_caller_util;
+    my $util = $args{'-util'} || $args{'-UTIL'} || $self->_caller_util;
     return unless $self->_soap_facs($util);
     return $self->_soap_facs($util)->parameters_changed;
 }
@@ -330,34 +404,5 @@ sub _caller_util {
     return $self->{'_caller_util'} = shift if @_;
     return $self->{'_caller_util'};
 }
-
-=head2 response_message()
-
- Title   : response_message
- Aliases : last_response, last_result
- Usage   : $som = $fac->response_message
- Function: get the last response message
- Returns : a SOAP::SOM object
- Args    : none
-
-=cut
-
-sub response_message { shift->{'_response_message'} }
-sub last_response { shift->{'_response_message'} }
-sub last_result { shift->{'_response_message'} }
-
-=head2 errstr()
-
- Title   : errstr
- Usage   : $fac->errstr
- Function: get the last error, if any
- Example : 
- Returns : value of errstr (a scalar)
- Args    : none
-
-=cut
-
-sub errstr { shift->{'errstr'} }
-
 1;
 

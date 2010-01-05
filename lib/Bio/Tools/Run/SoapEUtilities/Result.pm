@@ -21,7 +21,7 @@ Bio::Tools::Run::SoapEUtilities::Result - Accessor object for SoapEUtilities res
  $fac = Bio::Tools::Run::SoapEUtilities->new();
  $result = $fac->esearch( -db => 'gene', -term => 'hedgehog')->run;
  $count = $result->count; # case important; $result->Count could be arrayref
- @ids = $result->Ids;
+ @ids = $result->ids;
 
 =head1 DESCRIPTION
 
@@ -87,7 +87,7 @@ sub new {
     my $self = $class->SUPER::new(@_);
     my $eutil_obj = shift;
     my $alias_hash = shift;
-    $alias_hash ||= { 'Ids' => 'IdList_Id' };
+    $alias_hash ||= { 'ids' => 'IdList_Id' };
     $self->throw("Result constructor requires Bio::Tools::Run::SoapEUtilities ".
 		 "argument") 
 	unless ($eutil_obj and 
@@ -97,11 +97,14 @@ sub new {
     return unless ( $som and ref($som) eq 'SOAP::SOM' );
     $self->{'_result_type'} = $eutil_obj->_soap_facs($eutil_obj->_caller_util)->_result_elt_name;
     $self->{'_accessors'} = [];
+    $self->{'_WebEnv'} = $som->valueof("//WebEnv");
+    $self->{'_QueryKey'} = $som->valueof("//QueryKey");
     my @methods = keys %{$som->method};
     my %methods;
     foreach my $m (@methods) {
 	_traverse_methods($m, '', $som, \%methods, $self->{'_accessors'});
     }
+    # convenience aliases...
     if ($alias_hash && ref($alias_hash) eq 'HASH') {
 	for (keys %$alias_hash) {
 	    if ($methods{ $$alias_hash{$_} }) { # avoid undef'd accessors
@@ -110,7 +113,7 @@ sub new {
 	    }
 	}
     }
-    # specials
+    # specials...
     if ($methods{Count}) {
 	push @{$self->{'_accessors'}}, 'count';
 	for (ref $methods{Count}) {
@@ -170,6 +173,32 @@ sub som { shift->{'_som'} }
 
 sub accessors { shift->{'_accessors'} }
 
+=head2 webenv()
+
+ Title   : webenv
+ Usage   : 
+ Function: contains WebEnv key referencing this
+           result's session
+ Returns : scalar
+ Args    : none
+
+=cut
+
+sub webenv { shift->{'_WebEnv'} }
+
+=head2 query_key()()
+
+ Title   : query_key()
+ Usage   : 
+ Function: contains the web query key assigned
+           to this result
+ Returns : scalar
+ Args    : 
+
+=cut
+
+sub query_key { shift->{'_QueryKey'} }
+
 sub _traverse_methods {
     my ($m, $key, $som, $hash, $acc) = @_;
     my $val = $som->valueof("//$m");
@@ -201,13 +230,14 @@ sub _traverse_methods {
 
 sub AUTOLOAD {
     my $self = shift;
-    return unless @{$self->{'_accessors'}};
     $DB::single=1;
     my $accessor = $AUTOLOAD;
     $accessor =~ s/.*:://;
     my @list = grep /^${accessor}_/, @{$self->{'_accessors'}};
-    $self->throw("Can't locate method '$accessor' in module ".__PACKAGE__) 
-	unless @list;
+    unless (@list) {
+	$self->debug("Accessor '$accessor' not present in this result");
+	return;
+    }
     my %ret;
     foreach (@list) {
 	$ret{$_} = $self->$_;
