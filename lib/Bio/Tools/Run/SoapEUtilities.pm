@@ -97,7 +97,8 @@ our $AUTOLOAD;
 sub new {
     my ($class,@args) = @_;
     my $self = $class->SUPER::new(@args);
-
+    my ($db) = $self->_rearrange( [qw( DB )], @args );
+    $self->{db} = $db;
 
     return $self;
 }
@@ -122,13 +123,15 @@ sub run {
     $self->throw("run method requires named arguments") if @args % 2;
     $self->throw("call run method like '\$fac->\$eutility->run(\@args)") unless
 	$self->_caller_util;
-    my ($autofetch, $raw_xml) = $self->_rearrange( [qw( AUTOFETCH RAW_XML )],
+    my ($autofetch, $raw_xml) = $self->_rearrange( [qw( AUTOFETCH RAW_XML)],
 						   @args );
     my %args = @args;
     delete $args{'-autofetch'};
     delete $args{'-AUTOFETCH'};
     delete  $args{'-raw_xml'};
     delete  $args{'-RAW_XML'};
+    # add tool argument for NCBI records
+    $args{tool} = "SoapEUtilities(BioPerl)";
     my $util = $self->_caller_util;
     $self->set_parameters(%args) if %args;
     $self->_soap_facs($util)->_client->outputxml($raw_xml);
@@ -155,8 +158,29 @@ sub run {
     $self->{'_WebEnv'} = $som->valueof("//WebEnv");
 
     # success, parse it out
-    if ($autofetch) {
+    if ($autofetch and $self->_caller_util ne 'efetch') {
 	# do an efetch with the same db and a returned list of ids...
+	# reentering here!
+	$DB::single =1;
+	my $result = Bio::Tools::Run::SoapEUtilities::Result->new($self);
+	my $ids = $result->ids;
+	if (!$result->count) {
+	    $self->warn("Can't fetch; no records returned");
+	    return $result;
+	}
+	if (!$result->ids) {
+	    $self->warn("Can't fetch; no id list returned");
+	    return $result;
+	}
+	if ( !$self->db ) {
+	    my %h = $self->get_parameters;
+	    $self->{db} = $h{db} || $h{DB};
+	}
+	my $fetched = $self->efetch( -db => $self->db,
+				     -id => $ids )->run();
+	1;
+				     
+				     
     }
     else {
 	return Bio::Tools::Run::SoapEUtilities::Result->new($self);
@@ -165,7 +189,6 @@ sub run {
 }
 
 =head2 Useful Accessors
-
 
 =head2 response_message()
 
@@ -207,6 +230,20 @@ sub webenv { shift->{'_WebEnv'} }
  Args    : none
 
 =cut
+
+
+
+=head2 db()
+
+ Title   : db
+ Usage   : 
+ Function: the current NCBI database
+ Returns : scalar string
+ Args    : none
+
+=cut
+
+sub db { shift->{'db'} }
 
 sub errstr { shift->{'errstr'} }
 
