@@ -400,8 +400,27 @@ sub _operation_bookmarks {
 	    $imported->parse(Bio::WebAgent->new()->get($import_url)->content);
 	};
 	$self->throw("Schema import failed (tried url '$import_url') : $@") if $@;
-	# cut-n-paste
 	my $imported_schema = $imported->root;
+	# get included schemata
+	my @included = $imported_schema->children("xs:include");
+	foreach (@included) {
+
+	    my $url = $NCBI_BASEURL.$_->att('schemaLocation');
+	    my $incl = XML::Twig->new();
+	    eval {
+		$incl->parse( Bio::WebAgent->new()->get($url)->content );
+	    };
+	    $self->throw("Schema include failed (tried url '$url') : $@") if $@;
+	    # cut-n-paste
+	    my @incl = $incl->root->children;
+	    $_->cut;
+	    foreach my $child (@incl) {
+		$child->cut;
+		$child->paste( last_child => $_->former_parent );
+	    }
+	}
+	
+	# cut-n-paste
 	$opn_schema->cut;
 	$imported_schema->cut;
 	$imported_schema->paste( first_child => $opn_schema->former_parent );
@@ -650,7 +669,8 @@ sub _get_types {
 		}
 		else { # a 'ref', make sure it's defined
 		    $new_elt = $sch->first_child("xs:element[\@name='$type']");
-		    Bio::Root::Root->throw("type not defined in schema; connot proceed") unless defined $new_elt;
+		    $DB::single=1 unless $new_elt;
+		    Bio::Root::Root->throw("type not defined in schema; cannot proceed") unless defined $new_elt;
 		    push @$res, { $new_elt->att('name').$is_choice => 1 };
 		}
 		last;
