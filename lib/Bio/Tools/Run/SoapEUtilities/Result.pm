@@ -18,7 +18,10 @@ Bio::Tools::Run::SoapEUtilities::Result - Accessor object for SoapEUtilities res
 
 =head1 SYNOPSIS
 
-Give standard usage here
+ $fac = Bio::Tools::Run::SoapEUtilities->new();
+ $result = $fac->esearch( -db => 'gene', -term => 'hedgehog')->run;
+ $count = $result->count; # case important; $result->Count could be arrayref
+ @ids = $result->Ids;
 
 =head1 DESCRIPTION
 
@@ -67,7 +70,6 @@ Internal methods are usually preceded with a _
 
 # Let the code begin...
 
-
 package Bio::Tools::Run::SoapEUtilities::Result;
 use strict;
 use warnings;
@@ -85,6 +87,7 @@ sub new {
     my $self = $class->SUPER::new(@_);
     my $eutil_obj = shift;
     my $alias_hash = shift;
+    $alias_hash ||= { 'Ids' => 'IdList_Id' };
     $self->throw("Result constructor requires Bio::Tools::Run::SoapEUtilities ".
 		 "argument") 
 	unless ($eutil_obj and 
@@ -99,8 +102,31 @@ sub new {
     foreach my $m (@methods) {
 	_traverse_methods($m, '', $som, \%methods, $self->{'_accessors'});
     }
+    if ($alias_hash && ref($alias_hash) eq 'HASH') {
+	for (keys %$alias_hash) {
+	    if ($methods{ $$alias_hash{$_} }) { # avoid undef'd accessors
+		$methods{$_} = $methods{ $$alias_hash{$_} };
+		push @{$self->{_accessors}}, $_;
+	    }
+	}
+    }
+    # specials
+    if ($methods{Count}) {
+	push @{$self->{'_accessors'}}, 'count';
+	for (ref $methods{Count}) {
+	    /^$/ && do {
+		$methods{count} = $methods{Count};
+		last;
+	    };
+	    /ARRAY/ && do {
+		$methods{count} = $methods{Count}->[0];
+		last;
+	    };
+	}
+    }
     $self->_set_from_args( \%methods, 
 			   -methods => $self->{'_accessors'}, 
+			   -case_sensitive => 1,
 			   -create => 1 );
     return $self;
 }
@@ -129,6 +155,21 @@ sub util { shift->{'_util'} }
 
 sub som { shift->{'_som'} }
 
+=head2 accessors()
+
+ Title   : accessors
+ Usage   : 
+ Function: get the list of created accessors for this
+           result
+ Returns : array of scalar strings
+ Args    : none
+ Note    : does not include valid AUTOLOADed accessors; see
+           DESCRIPTION
+
+=cut
+
+sub accessors { shift->{'_accessors'} }
+
 sub _traverse_methods {
     my ($m, $key, $som, $hash, $acc) = @_;
     my $val = $som->valueof("//$m");
@@ -153,7 +194,7 @@ sub _traverse_methods {
 	    return;
 	};
 	do { #else, huh?
-	    $DB::single=1;
+	    Bio::Root::Root->throw("SOAP::SOM parse error : please contact the mailing list"); 
 	};
     }
 }
@@ -167,11 +208,11 @@ sub AUTOLOAD {
     my @list = grep /^${accessor}_/, @{$self->{'_accessors'}};
     $self->throw("Can't locate method '$accessor' in module ".__PACKAGE__) 
 	unless @list;
-    my @ret;
+    my %ret;
     foreach (@list) {
-	push @ret, $self->$_;
+	$ret{$_} = $self->$_;
     }
-    return @ret;
+    return \%ret;
 }
     
 1;
