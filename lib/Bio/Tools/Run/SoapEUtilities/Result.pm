@@ -198,17 +198,25 @@ our $AUTOLOAD;
 
 sub new {
     my $class = shift;
-    my $self = $class->SUPER::new(@_);
-    my $eutil_obj = shift;
-    my $alias_hash = shift;
-    $alias_hash ||= { 'ids' => 'IdList_Id' };
+    my @args = @_;
+    my $self = $class->SUPER::new(@args);
+    my $eutil_obj = shift @args;
+    my ($alias_hash, $prune_at_nodes, $make_index) = $self->_rearrange( [qw( ALIAS_HASH PRUNE_AT_NODES INDEX_ACCESSORS ) ], @args);
     $self->throw("Result constructor requires Bio::Tools::Run::SoapEUtilities ".
 		 "argument") 
 	unless ($eutil_obj and 
 		ref($eutil_obj) eq 'Bio::Tools::Run::SoapEUtilities');
     $self->{'_util'} = $eutil_obj->_caller_util;
+    $alias_hash ||= {};
+    $$alias_hash{ 'ids' } = 'IdList_Id';
+    if ($prune_at_nodes) {
+	$prune_at_nodes = [$prune_at_nodes] unless ref $prune_at_nodes;
+    }
     my $som = $self->{'_som'} = $eutil_obj->last_result;
     return unless ( $som and ref($som) eq 'SOAP::SOM' );
+
+    return $self unless $self->ok; # SOAP fault
+
     $self->{'_result_type'} = $eutil_obj->_soap_facs($eutil_obj->_caller_util)->_result_elt_name;
     $self->{'_accessors'} = [];
     $self->{'_WebEnv'} = $som->valueof("//WebEnv");
@@ -216,7 +224,7 @@ sub new {
     my @methods = keys %{$som->method};
     my %methods;
     foreach my $m (@methods) {
-	_traverse_methods($m, '', $som, \%methods, $self->{'_accessors'});
+	_traverse_methods($m, '/', '', $som, \%methods, $self->{'_accessors'}, $prune_at_nodes);
     }
     # convenience aliases...
     if ($alias_hash && ref($alias_hash) eq 'HASH') {
@@ -272,6 +280,30 @@ sub util { shift->{'_util'} }
 
 sub som { shift->{'_som'} }
 
+=head2 ok()
+
+ Title   : ok
+ Usage   : 
+ Function: 
+ Returns : true if no SOAP fault
+ Args    : 
+
+=cut
+
+sub ok { !(shift->som->fault) }
+
+=head2 errstr()
+
+ Title   : errstr
+ Usage   : 
+ Function: 
+ Returns : fault string of SOAP object
+ Args    : none
+
+=cut
+
+sub errstr { shift->som->faultstring }
+
 =head2 accessors()
 
  Title   : accessors
@@ -314,12 +346,20 @@ sub webenv { shift->{'_WebEnv'} }
 sub query_key { shift->{'_QueryKey'} }
 
 sub _traverse_methods {
-    my ($m, $key, $som, $hash, $acc) = @_;
-    my $val = $som->valueof("//$m");
+    my ($m, $skey, $key, $som, $hash, $acc, $prune) = @_;
+    if ($prune) {
+	foreach (@$prune) {
+	    return if $skey =~ /^$_/;
+	}
+    }
+    my $val = $som->valueof("$skey\/$m");
     for (ref $val) {
 	/^$/ && do {
-	    my @a = $som->valueof("//$m");
-	    my $k = ($key ? "$key\_" : "").$m;
+	    my @a = $som->valueof("$skey\/$m");
+	    my $M = $m;
+	    # camelcase it
+	    $M =~ s/([-_])([a-zA-Z0-9])/\u$2/g;
+	    my $k = ($key ? "$key\_" : "").$M;
 	    push @{$acc}, $k;
 	    if (@a == 1) {
 		$$hash{$k} = $a[0];
@@ -331,8 +371,12 @@ sub _traverse_methods {
 	};
 	/HASH/ && do {
 	    foreach my $k (keys %$val) {
-		_traverse_methods( $k, ($key ? "$key\_" : "").$m,
-				   $som, $hash, $acc );
+	    my $M = $m;
+	    # camelcase it
+	    $M =~ s/([-_])([a-zA-Z0-9])/\u$2/g;
+	    _traverse_methods( $k, "$skey\/$m",
+			       ($key ? "$key\_" : "").$M,
+				   $som, $hash, $acc, $prune );
 	    }
 	    return;
 	};
