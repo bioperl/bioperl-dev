@@ -250,7 +250,23 @@ sub run {
     $self->throw("run requires named args") if @args % 2;
     $self->set_parameters(@args) if scalar @args;
     my %args = $self->get_parameters;
-    my @soap_data = map { defined $args{$_} ? SOAP::Data->name($_)->value($args{$_}) : () } keys %args;
+    my @soap_data;
+    for my $k (keys %args) {
+	my $data = $args{$k};
+	next unless defined $data;
+	for (ref $data) {
+	    /^$/ && do {
+		push @soap_data, SOAP::Data->name($k)->value($data);
+		last;
+	    };
+	    /ARRAY/ && do {
+		foreach my $d (@$data) {
+		    push @soap_data, SOAP::Data->name($k)->value($d);
+		}
+		last;
+	    };
+	}
+    }
     $self->_client->on_action( sub { $self->action } );
     my $som = $self->_client->call( $self->util, 
 				    @soap_data );
