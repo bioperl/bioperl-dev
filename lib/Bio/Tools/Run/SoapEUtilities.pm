@@ -274,7 +274,8 @@ sub set_parameters {
 
 sub get_parameters {
     my $self = shift;
-    my $util = shift;
+    my @args = @_;
+    my %args = @args;
     my $util = $args{'-util'} || $args{'-UTIL'} || $self->_caller_util;
     return unless $self->_soap_facs($util);
     return $self->_soap_facs($util)->get_parameters;
@@ -316,6 +317,8 @@ sub reset_parameters {
 
 sub parameters_changed {
     my $self = shift;
+    my @args = @_;
+    my %args = @args;
     my $util = $args{'-util'} || $args{'-UTIL'} || $self->_caller_util;
     return unless $self->_soap_facs($util);
     return $self->_soap_facs($util)->parameters_changed;

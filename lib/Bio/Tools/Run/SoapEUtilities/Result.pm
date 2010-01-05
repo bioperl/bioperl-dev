@@ -25,7 +25,121 @@ Bio::Tools::Run::SoapEUtilities::Result - Accessor object for SoapEUtilities res
 
 =head1 DESCRIPTION
 
-Describe the object here
+This module attempts to make Entrez Utilities SOAP responses as
+user-friendly and intuitive as possible. These responses can be
+complex structures with much useful data; but users will generally
+desire the values of some key fields. The L<Result> object provides
+access to all response values via systematically named accessor
+methods, and commonly used values as convenience methods. The 'raw'
+SOAP message (a L<SOAP::SOM> object as returned by L<SOAP::Lite>) is
+also provided.
+
+=over
+
+=item Convenience accessors
+
+If a list of record ids is returned by the call, C<ids()> will return these as
+an array reference:
+
+ @seq_ids = $result->ids;
+
+The total count of returned records is provided by C<count()>:
+
+ $num_recs = $result->count;
+
+If C<usehistory> was specified in the SOAP call, the NCBI-assigned web
+environment (that can be used in future calls) is available in
+C<webenv>, and the query key assigned to the result in C<query_key>:
+
+ $next_result = $fac->efetch( -WebEnv => $result->webenv, 
+                              -QueryKey => $result->query_key );
+
+=item Walking the response
+
+This module uses C<AUTOLOAD> to provide accessor methods for all response data.
+Here is an example of a SOAP response as returned by a C<method()> call off the L<SOAP::SOM> object:
+
+    DB<5> x $result->som->method
+ 0  HASH(0x2eac9a4)
+    'Count' => 148
+    'IdList' => HASH(0x4139578)
+      'Id' => 100136227
+    'QueryKey' => 1
+    'QueryTranslation' => 'sonic[All Fields] AND hedgehog[All Fields]'
+    'RetMax' => 20
+    'RetStart' => 0
+    'TranslationSet' => ''
+    'TranslationStack' => HASH(0x4237b4c)
+       'OP' => 'GROUP'
+       'TermSet' => HASH(0x42c43bc)
+          'Count' => 2157
+          'Explode' => 'Y'
+          'Field' => 'All Fields'
+          'Term' => 'hedgehog[All Fields]'
+    'WebEnv' => 'NCID_1_150423569_130.14.22.101_9001_1262703782'
+
+Some of the data values here (at the tips of the data structure) are
+actually arrays of values ( e.g., the tip C<IdList => Id> ), other
+tips are simple scalars. With this in mind, C<Result> accessor methods work as
+follows:
+
+Data values (at the tips of the response structure) are acquired by calling a method with the structure keys separated by underscores (if necessary):
+
+ $query_key = $result->QueryKey; # $query_key == 1
+ $ids = $result->IdList_Id;      # @$ids is an array of record ids
+
+Data I<sets> below a particular node in the response structure can
+also be obtained with similarly constructed method names. These
+'internal node accessors' return a hashref, containing all data leaves
+below the node, keyed by the accessor names:
+
+   $data_hash = $result->TranslationStack
+ 
+   DB<3> x $data_hash
+ 0  HASH(0x43569d4)
+    'TranslationStack_OP' => ARRAY(0x42d9988)
+       0  'AND'
+       1  'GROUP'
+    'TranslationStack_TermSet_Count' => ARRAY(0x4369c64)
+       0  148
+       1  148
+       2  2157
+    'TranslationStack_TermSet_Explode' => ARRAY(0x4368998)
+       0  'Y'
+       1  'Y'
+    'TranslationStack_TermSet_Field' => ARRAY(0x4368260)
+       0  'All Fields'
+       1  'All Fields'
+    'TranslationStack_TermSet_Term' => ARRAY(0x436c97c)
+       0  'sonic[All Fields]'
+       1  'hedgehog[All Fields]'
+
+Similarly, the call C< $result->TranslationStack_TermSet > would
+return a d similar hash containing the last 4 elements of the example
+hash above.
+
+=back
+
+=over
+
+Other methods
+
+=item accessors()
+
+An array of available data accessor names. This
+contains only the data "tips". The internal node accessors are
+autoloaded.
+
+=item som()
+
+The original C<SOAP::SOM> message.
+
+=item util()
+
+The EUtility associated with the result.
+
+=back
+
 
 =head1 FEEDBACK
 
@@ -230,7 +344,6 @@ sub _traverse_methods {
 
 sub AUTOLOAD {
     my $self = shift;
-    $DB::single=1;
     my $accessor = $AUTOLOAD;
     $accessor =~ s/.*:://;
     my @list = grep /^${accessor}_/, @{$self->{'_accessors'}};
