@@ -114,6 +114,7 @@ sub new {
  Args    : named params appropriate to utility
            -autofetch => boolean ( run efetch appropriate to util )
            -raw_xml => boolean ( return raw xml result; no processing )
+           Bio::Tools::Run::SoapEUtilities::Result constructor parms
 
 =cut
 
@@ -126,10 +127,6 @@ sub run {
     my ($autofetch, $raw_xml) = $self->_rearrange( [qw( AUTOFETCH RAW_XML)],
 						   @args );
     my %args = @args;
-    delete $args{'-autofetch'};
-    delete $args{'-AUTOFETCH'};
-    delete  $args{'-raw_xml'};
-    delete  $args{'-RAW_XML'};
     # add tool argument for NCBI records
     $args{tool} = "SoapEUtilities(BioPerl)";
     my $util = $self->_caller_util;
@@ -162,7 +159,7 @@ sub run {
 	# do an efetch with the same db and a returned list of ids...
 	# reentering here!
 	$DB::single =1;
-	my $result = Bio::Tools::Run::SoapEUtilities::Result->new($self);
+	my $result = Bio::Tools::Run::SoapEUtilities::Result->new($self, @args);
 	my $ids = $result->ids;
 	if (!$result->count) {
 	    $self->warn("Can't fetch; no records returned");
@@ -177,13 +174,13 @@ sub run {
 	    $self->{db} = $h{db} || $h{DB};
 	}
 	my $fetched = $self->efetch( -db => $self->db,
-				     -id => $ids )->run();
+				     -id => $ids )->run(@args);
 	1;
 				     
 				     
     }
     else {
-	return Bio::Tools::Run::SoapEUtilities::Result->new($self);
+	return Bio::Tools::Run::SoapEUtilities::Result->new($self,@args);
 	1;
     }
 }

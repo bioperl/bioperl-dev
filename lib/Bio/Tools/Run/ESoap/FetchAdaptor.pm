@@ -134,5 +134,43 @@ sub _load_adaptor {
 	};
     }
 }
-	
+
+=head2 obj_class()
+
+ Title   : obj_class
+ Usage   : $adaptor->obj_class
+ Function: Returns the fully qualified BioPerl classname
+           of the objects returned by next_obj()
+ Returns : scalar string (class name)
+ Args    : none
+
+=cut
+
+sub obj_class { shift->throw_not_implemented }
+
+=head2 next_obj()
+
+ Title   : next_obj
+ Usage   : $obj = $adaptor->next_obj
+ Function: Returns the next parsed BioPerl object from the 
+           adaptor
+ Returns : object of class obj_class()
+ Args    : none
+
+=cut
+
+sub next_obj { shift->throw_not_implemented }
+
+=head2 rewind()
+
+ Title   : rewind
+ Usage   : 
+ Function: Rewind the adaptor's iterator
+ Returns : 
+ Args    : none
+
+=cut
+
+sub rewind { shift->throw_not_implemented }
+    
 1;

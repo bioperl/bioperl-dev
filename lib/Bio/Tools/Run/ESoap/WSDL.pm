@@ -336,6 +336,23 @@ sub service {
 	$self->_cache('service', ($self->_parse->_service_elt->descendants('soap:address'))[0]->att('location'));
 }
 
+=head2 db()
+
+ Title   : db
+ Usage   : 
+ Function: If this is an efetch WSDL, returns the db name
+           associated with it
+ Returns : scalar string or undef
+ Args    : none
+
+=cut
+
+sub db {
+    my $self = shift;
+    $self->url =~ /efetch_(.*?)\.wsdl/;
+    return $1;
+}
+
 =head1 Internals
 
 =head2 _operation_bookmarks()

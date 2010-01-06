@@ -93,9 +93,9 @@ also be obtained with similarly constructed method names. These
 'internal node accessors' return a hashref, containing all data leaves
 below the node, keyed by the accessor names:
 
-   $data_hash = $result->TranslationStack
+    $data_hash = $result->TranslationStack
  
-   DB<3> x $data_hash
+    DB<3> x $data_hash
  0  HASH(0x43569d4)
     'TranslationStack_OP' => ARRAY(0x42d9988)
        0  'AND'
@@ -129,6 +129,14 @@ Other methods
 An array of available data accessor names. This
 contains only the data "tips". The internal node accessors are
 autoloaded.
+
+=item ok()
+
+True if no SOAP fault.
+
+=item errstr()
+
+Returns the SOAP fault error string.
 
 =item som()
 
@@ -201,26 +209,34 @@ sub new {
     my @args = @_;
     my $self = $class->SUPER::new(@args);
     my $eutil_obj = shift @args;
-    my ($alias_hash, $prune_at_nodes, $make_index) = $self->_rearrange( [qw( ALIAS_HASH PRUNE_AT_NODES INDEX_ACCESSORS ) ], @args);
+    my ($alias_hash, $prune_at_nodes, $no_parse, $make_index) = $self->_rearrange( [qw( ALIAS_HASH PRUNE_AT_NODES NO_PARSE INDEX_ACCESSORS ) ], @args);
     $self->throw("Result constructor requires Bio::Tools::Run::SoapEUtilities ".
 		 "argument") 
 	unless ($eutil_obj and 
 		ref($eutil_obj) eq 'Bio::Tools::Run::SoapEUtilities');
-    $self->{'_util'} = $eutil_obj->_caller_util;
+
     $alias_hash ||= {};
     $$alias_hash{ 'ids' } = 'IdList_Id';
     if ($prune_at_nodes) {
 	$prune_at_nodes = [$prune_at_nodes] unless ref $prune_at_nodes;
     }
-    my $som = $self->{'_som'} = $eutil_obj->last_result;
-    return unless ( $som and ref($som) eq 'SOAP::SOM' );
 
+    $self->{'_util'} = $eutil_obj->_caller_util;
+    my $som = $self->{'_som'} = $eutil_obj->last_result;
+
+    return unless ( $som and ref($som) eq 'SOAP::SOM' );
     return $self unless $self->ok; # SOAP fault
 
-    $self->{'_result_type'} = $eutil_obj->_soap_facs($eutil_obj->_caller_util)->_result_elt_name;
+    $self->{'_result_type'} = $eutil_obj->_soap_facs($self->util)->_result_elt_name;
     $self->{'_accessors'} = [];
     $self->{'_WebEnv'} = $som->valueof("//WebEnv");
     $self->{'_QueryKey'} = $som->valueof("//QueryKey");
+    $self->{'_fetch_type'} = $eutil_obj->_soap_facs($self->util)->_wsdl->db;
+
+    return $self if $no_parse; 
+
+    # parse message into accessors
+
     my @methods = keys %{$som->method};
     my %methods;
     foreach my $m (@methods) {
@@ -344,6 +360,20 @@ sub webenv { shift->{'_WebEnv'} }
 =cut
 
 sub query_key { shift->{'_QueryKey'} }
+
+
+
+=head2 fetch_type()
+
+ Title   : fetch_type
+ Usage   : 
+ Function: Get the efetch database name according to WSDL
+ Returns : scalar string (db name) or undef if N/A
+ Args    : none
+
+=cut
+
+sub fetch_type { shift->{'_fetch_type'} }
 
 sub _traverse_methods {
     my ($m, $skey, $key, $som, $hash, $acc, $prune) = @_;
