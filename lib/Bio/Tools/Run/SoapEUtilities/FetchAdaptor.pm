@@ -90,17 +90,48 @@ our %TYPE_MODULE_XLT = (
 
 sub new {
     my ($class,@args) = @_;
-    my $self = $class->SUPER::new(@args);
+    $class = ref($class) || $class;
+    if ($class =~ /.*?::FetchAdaptor::(\S+)/) {
+	my $self = $class->SUPER::new(@args);
+	$self->_initialize(@args);
+	return $self;
+    }
+    else {
+	my %args = @args;
+	my $result = $args{'-result'} || $args{'-RESULT'};
+	$class->throw("Bio::Tools::Run::SoapEUtilities::Result argument required") unless $result;
+	$class->throw("RESULT argument must be a Bio::Tools::Run::SoapEUtilities::Result object") unless
+	ref($result) eq 'Bio::Tools::Run::SoapEUtilities::Result';
+	# identify the correct adaptor module to load using Result info
+	my $type ||= $result->fetch_type;
+	$class->throw("Can't determine fetch type for this result")
+	    unless $type;
+	# $type ultimately contains a FetchAdaptor subclass
+	return unless( $class->_load_adaptor($type) );
+	return "Bio::Tools::Run::SoapEUtilities::FetchAdaptor::$type"->new(@args);
+    }
+}
+
+=head2 _initialize()
+
+ Title   : _initialize
+ Usage   : 
+ Function: 
+ Returns : 
+ Args    : 
+
+=cut
+
+sub _initialize {
+    my $self = shift;
+    my @args = @_;
     my ($result, $type) = $self->_rearrange([qw( RESULT TYPE )], @args);
     $self->throw("Bio::Tools::Run::SoapEUtilities::Result argument required") unless $result;
     $self->throw("RESULT argument must be a Bio::Tools::Run::SoapEUtilities::Result object") unless
 	ref($result) eq 'Bio::Tools::Run::SoapEUtilities::Result';
-    # identify the correct adaptor module to load using Result info
-    $type ||= $result->fetch_type;
-    $self->throw("Can't determine fetch type for this result") unless $type;
-    # $type ultimately contains a FetchAdaptor subclass
-    return unless( $class->_load_adaptor($type) );
-    return "Bio::Tools::Run::SoapEUtilities::FetchAdaptor::$type"->new(@args);
+    $self->{'_type'} = $type || $result->fetch_type;
+    $self->{'_result'} = $result;
+    1;
 }
 
 =head2 _load_adaptor()
@@ -171,5 +202,28 @@ sub next_obj { shift->throw_not_implemented }
 =cut
 
 sub rewind { shift->throw_not_implemented }
-    
+
+=head2 result()
+
+ Title   : result
+ Usage   : 
+ Function: contains the SoapEUtilities::Result object
+ Returns : Bio::Tools::Run::SoapEUtilities::Result object
+ Args    : none
+
+=cut
+
+sub result { shift->{'_result'} }
+
+=head2 type()
+
+ Title   : type
+ Usage   : 
+ Function: contains the fetch type of this adaptor
+ Returns : 
+ Args    : 
+
+=cut
+
+sub type { shift->{'_type'} }
 1;

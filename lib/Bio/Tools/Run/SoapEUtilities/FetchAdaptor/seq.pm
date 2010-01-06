@@ -80,36 +80,41 @@ use strict;
 use lib '../../../../..'; # remove later
 use Bio::Root::Root;
 use Bio::Seq::SeqBuilder;
+use Bio::Seq::SeqFactory;
 
-use base qw(Bio::Root::Root Bio::Tools::Run::SoapEUtilities::FetchAdaptor);
+use base qw(Bio::Tools::Run::SoapEUtilities::FetchAdaptor Bio::Root::Root);
 
-=head2 new
-
- Title   : new
- Usage   : my $obj = new Bio::Tools::Run::SoapEUtilities::FetchAdaptor::seq();
- Function: Builds a new Bio::Tools::Run::SoapEUtilities::FetchAdaptor::seq object
- Returns : an instance of Bio::Tools::Run::SoapEUtilities::FetchAdaptor::seq
- Args    :
-
-=cut
-
-sub new {
-    my ($class,@args) = @_;
-    my $self = $class->SUPER::new(@args);
-
-    $self->{'_result'} = $self->_rearrange( (qw[RESULT]), @args );
-    $self->{'_obj_class'} = 'Bio::RichSeq'; # ??
-    
-    return $self;
+sub _initialize {
+    my ($self, @args) = @_;
+    $self->SUPER::_initialize(@args);
+    my ($builder, $seqfac ) = $self->_rearrange( [qw(SEQBUILDER
+                                                     SEQFACTORY)], @args );
+    $self->{'_obj_class'} = ($seqfac ? $seqfac->type : 'Bio::Seq::RichSeq') ; 
+    $self->{'_builder'} = $builder || Bio::Seq::SeqBuilder->new();
+    $self->{'_builder'}->sequence_factory( 
+	$seqfac || Bio::Seq::SeqFactory->new( -type => $self->{'_obj_class'} )
+	);
+    1;
 }
 
 sub obj_class { shift->{'_obj_class'} }
 
+sub builder { shift->{'_builder'} };
+
 sub next_obj {
     my $self = shift;
+    my $a = $self->{'_idx'};
+    my $val = $self->som->valueof("//GBSet/GBSeq/[$a]");
+	# parsing based on Bio::SeqIO::genbank
+
+	# source, id, accessions
+	# molecule
+	# features
+	# annotations
+	
 
 }
-    
+
 1;
 __END__
 
