@@ -233,14 +233,29 @@ sub new {
     $self->{'_QueryKey'} = $som->valueof("//QueryKey");
     $self->{'_fetch_type'} = $eutil_obj->_soap_facs($self->util)->_wsdl->db;
 
-    return $self if $no_parse; 
+    return ($no_parse ? $self : $self->parse_methods($alias_hash,
+						     $prune_at_nodes));
+}
 
+=head2 parse_methods()
+
+ Title   : parse_methods
+ Usage   : 
+ Function: parse out the accessor methods
+ Returns : self (Result object)
+ Args    : $alias_hash (hashref), $prune_at_nodes (scalar or arrayref)
+
+=cut
+
+sub parse_methods {
+    my $self = shift;
     # parse message into accessors
+    my ($alias_hash, $prune_at_nodes) = @_;
 
-    my @methods = keys %{$som->method};
+    my @methods = keys %{$self->som->method};
     my %methods;
     foreach my $m (@methods) {
-	_traverse_methods($m, '/', '', $som, \%methods, $self->{'_accessors'}, $prune_at_nodes);
+	_traverse_methods($m, '/', '', $self->som, \%methods, $self->{'_accessors'}, $prune_at_nodes);
     }
     # convenience aliases...
     if ($alias_hash && ref($alias_hash) eq 'HASH') {
@@ -265,11 +280,23 @@ sub new {
 	    };
 	}
     }
+    else { #work harder
+	my @toplev = keys %{$self->som->method};
+	my ($set) = grep /^.*?Set$/, @toplev;
+	if ($set) {
+	    $methods{count} = 0;
+	    foreach ($self->som->valueof("//$set/*")) {
+		$methods{count}++;
+	    }
+	}
+	push @{$self->{'_accessors'}}, 'count';
+    }
     $self->_set_from_args( \%methods, 
 			   -methods => $self->{'_accessors'}, 
 			   -case_sensitive => 1,
 			   -create => 1 );
     return $self;
+    
 }
 
 =head2 util()
@@ -360,8 +387,6 @@ sub webenv { shift->{'_WebEnv'} }
 =cut
 
 sub query_key { shift->{'_QueryKey'} }
-
-
 
 =head2 fetch_type()
 

@@ -77,7 +77,7 @@ use strict;
 use lib '../../..'; # remove later
 use Bio::Root::Root;
 use Bio::Tools::Run::ESoap;
-use Bio::Tools::Run::ESoap::FetchAdaptor;
+use Bio::Tools::Run::SoapEUtilities::FetchAdaptor;
 use Bio::Tools::Run::SoapEUtilities::Result;
 
 use base qw(Bio::Root::Root Bio::ParameterBaseI );

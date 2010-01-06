@@ -1,6 +1,6 @@
 # $Id$
 #
-# BioPerl module for Bio::Tools::Run::ESoap::FetchAdaptor
+# BioPerl module for Bio::Tools::Run::SoapEUtilities::FetchAdaptor
 #
 # Please direct questions and support issues to <bioperl-l@bioperl.org>
 #
@@ -14,7 +14,7 @@
 
 =head1 NAME
 
-Bio::Tools::Run::ESoap::FetchAdaptor - Conversion of Entrez SOAP messages to BioPerl objects
+Bio::Tools::Run::SoapEUtilities::FetchAdaptor - Conversion of Entrez SOAP messages to BioPerl objects
 
 =head1 SYNOPSIS
 
@@ -65,7 +65,7 @@ Internal methods are usually preceded with a _
 
 =cut
 
-package Bio::Tools::Run::ESoap::FetchAdaptor;
+package Bio::Tools::Run::SoapEUtilities::FetchAdaptor;
 use strict;
 
 use Bio::Root::Root;
@@ -79,9 +79,9 @@ our %TYPE_MODULE_XLT = (
 =head2 new
 
  Title   : new
- Usage   : my $obj = new Bio::Tools::Run::ESoap::FetchAdaptor();
- Function: Builds a new Bio::Tools::Run::ESoap::FetchAdaptor object
- Returns : an instance of Bio::Tools::Run::ESoap::FetchAdaptor
+ Usage   : my $obj = new Bio::Tools::Run::SoapEUtilities::FetchAdaptor();
+ Function: Builds a new Bio::Tools::Run::SoapEUtilities::FetchAdaptor object
+ Returns : an instance of Bio::Tools::Run::SoapEUtilities::FetchAdaptor
  Args    : named arguments
            -som => $soap_som_object (soap message)
            -type => $type ( optional, forces loading of $type adaptor )
@@ -91,17 +91,16 @@ our %TYPE_MODULE_XLT = (
 sub new {
     my ($class,@args) = @_;
     my $self = $class->SUPER::new(@args);
-    my ($som, $type) = $self->_rearrange([qw( SOM TYPE )], @args);
-    $self->throw("SOM argument required") unless $som;
-    $self->throw("SOM argument must be a SOAP::SOM object") unless
-	ref($som) eq 'SOAP::SOM';
-    # identify the correct adaptor module to load using SOM info
-    # if no module available, return raw message with warning
-    
-
+    my ($result, $type) = $self->_rearrange([qw( RESULT TYPE )], @args);
+    $self->throw("Bio::Tools::Run::SoapEUtilities::Result argument required") unless $result;
+    $self->throw("RESULT argument must be a Bio::Tools::Run::SoapEUtilities::Result object") unless
+	ref($result) eq 'Bio::Tools::Run::SoapEUtilities::Result';
+    # identify the correct adaptor module to load using Result info
+    $type ||= $result->fetch_type;
+    $self->throw("Can't determine fetch type for this result") unless $type;
     # $type ultimately contains a FetchAdaptor subclass
     return unless( $class->_load_adaptor($type) );
-    return "Bio::Tools::Run::ESoap::FetchAdaptor::$type"->new(@args);
+    return "Bio::Tools::Run::SoapEUtilities::FetchAdaptor::$type"->new(@args);
 }
 
 =head2 _load_adaptor()
@@ -117,7 +116,7 @@ sub new {
 sub _load_adaptor {
     my ($self, $type) = @_;
     return unless $type;
-    my $module = "Bio::Tools::Run::ESoap::FetchAdaptor::".$type;
+    my $module = "Bio::Tools::Run::SoapEUtilities::FetchAdaptor::".$type;
     my $ok;
     eval {
 	$ok = $self->_load_module($module);
