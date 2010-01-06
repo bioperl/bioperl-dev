@@ -260,9 +260,7 @@ sub run {
 		last;
 	    };
 	    /ARRAY/ && do {
-		foreach my $d (@$data) {
-		    push @soap_data, SOAP::Data->name($k)->value($d);
-		}
+		push @soap_data, SOAP::Data->name($k)->value(join(',',@$data));
 		last;
 	    };
 	}
