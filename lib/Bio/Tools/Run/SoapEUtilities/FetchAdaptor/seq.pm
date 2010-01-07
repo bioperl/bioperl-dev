@@ -77,9 +77,13 @@ use strict;
 
 use lib '../../../../..'; # remove later
 use Bio::Root::Root;
+use Bio::Annotation::Collection;
+use Bio::Annotation::Reference;
+use Bio::Annotation::Comment;
+use Bio::Annotation::SimpleValue;
 use Bio::Seq::SeqBuilder;
 use Bio::Seq::SeqFactory;
-use Bio::Annotation::Collection;
+use Bio::Species;
 
 use base qw(Bio::Tools::Run::SoapEUtilities::FetchAdaptor Bio::Root::Root);
 
@@ -110,10 +114,10 @@ sub builder { shift->{'_builder'} };
 sub next_obj {
     my $self = shift;
     my $a = $self->{'_idx'};
-    my $stem = "//GBSet/GBSeq/[$a]";
+    my $stem = "//GBSet/[$a]";
+    my $som = $self->result->som;
     return unless defined $som->valueof("$stem");
 
-    my $som = $self->result->som;
     my $get = sub { $som->valueof("$stem/GBSeq_".shift) };
     # parsing based on Bio::SeqIO::genbank
 
@@ -143,8 +147,21 @@ sub next_obj {
     # accessions, version, pid, description
     $get->('accession-version') =~ /.*\.([0-9]+)$/;
     $params{'-version'} = $params{'-seq_version'} = $1;
-    $get->{'other-seqids/GBSeqid'} =~ /^gi.([0-9]+)/i;
-    $params{'-primary_id'} = $1;
+    my @secondary_ids;
+    my @ids = $get->('other-seqids/GBSeqid');
+    foreach (@ids) {
+	/^gi\|([0-9]+)/ && do {
+	    $params{'-primary_id'} = $1;
+	    $params{'-accession_number'} = $_; # correct?
+	    next;
+	};
+	do { # else
+	    push @secondary_ids, $_;
+	    next;
+	};
+    }
+    $params{'-secondary_accessions'} = \@secondary_ids;
+	    
     $params{'-desc'} = $get->('definition');
 
     # sequence 
@@ -153,14 +170,180 @@ sub next_obj {
     }
 
     # organism data
+    if ( $self->builder->want_slot('species') && $get->('source') ) {
+	my $sp = _read_species($get);
+	$params{'-species'} = $sp if $sp;
+    }
+
+    # keywords
+    if ($get->('keywords')) {
+	my @kw;
+	foreach my $kw ($som->valueof("$stem/GBSeq_keywords/*")) {
+	    push @kw, $kw;
+	}
+	$params{'-keywords'} = join(' ',@kw);
+    }
+    
+    $self->builder->add_slot_value(%params);
+    %params = ();    
+	
+    my $ann;
+    # annotations
+    if ($self->builder->want_slot('annotation')) {
+	$ann = Bio::Annotation::Collection->new();
+	# references
+	$ann->add_Annotation('reference', $_) for _read_references($stem,$som);
+	# comment
+	if ($get->('comment')) {
+	    $ann->add_Annotation('comment', 
+			       Bio::Annotation::Comment->new(
+				   -tagname => 'comment',
+				   -text => $get->('comment')
+				 )
+		);
+	}
+	# project
+	if ( $get->('project') ) {
+	    $ann->add_Annotation('project',
+			       Bio::Annotation::SimpleValue->new(
+				   -value => $get->('project')
+				 )
+		);
+	}
+	# deal with making dblink as in SeqIO::genbank line 470 here.
+
+	$self->builder->add_slot_value(-annotation => $ann);
+    }
 
     # features
-    # annotations
-    
+    if ($self->builder->want_slot('features')) {
+
+
+    }
     
     ($self->{_idx})++;
+    return $self->builder->make_object;
 }
 
+# mostly ripped from Bio::SeqIO::genbank...
+
+sub _read_species {
+    my ($get) = @_;
+    
+    my @unkn_names = ('other', 'unknown organism', 'not specified', 'not shown',
+		      'Unspecified', 'Unknown', 'None', 'unclassified',
+		      'unidentified organism', 'not supplied');
+    # dictionary of synonyms for taxid 32644
+    my @unkn_genus = ('unknown','unclassified','uncultured','unidentified');
+    # all above can be part of valid species name
+
+    my( $sub_species, $species, $genus, $sci_name, $common, 
+         $abbr_name, $organelle);
+
+    $sci_name = $get->('organism') || return;
+
+    # parse out organelle, common name, abbreviated name if present;
+    # this should catch everything, but falls back to
+    # entire GBSeq_taxonomy element just in case
+    if ($get->('source') =~ m{^
+		              (mitochondrion|chloroplast|plastid)?
+		              \s*(.*?)
+		              \s*(?: \( (.*?) \) )?\.?
+		              $}xms ) { 
+        ($organelle, $abbr_name, $common) = ($1, $2, $3); # optional
+    } else {
+        $abbr_name = $get->('source'); # nothing caught; this is a backup!
+    }
+
+    # Convert data in classification lines into classification array.
+    my @class = split(/; /, $get->('taxonomy'));
+
+    # do we have a genus?
+    my $possible_genus =  quotemeta($class[-1])
+       . ($class[-2] ? "|" . quotemeta($class[-2]) : '');
+    if ($sci_name =~ /^($possible_genus)/) {
+	$genus = $1;
+	($species) = $sci_name =~ /^$genus\s+(.+)/;
+    }
+    else {
+	$species = $sci_name;
+    }
+
+    # is this organism of rank species or is it lower?
+    # (we don't catch everything lower than species, but it doesn't matter -
+    # this is just so we abide by previous behaviour whilst not calling a
+    # species a subspecies)
+    if ($species && $species =~ /subsp\.|var\./) {
+	($species, $sub_species) = $species =~ /(.+)\s+((?:subsp\.|var\.).+)/;
+    }
+
+    # Don't make a species object if it's empty or "Unknown" or "None"
+    # return unless $genus and  $genus !~ /^(Unknown|None)$/oi;
+    # Don't make a species object if it belongs to taxid 32644
+    my $src = $get->('source');
+    return unless ($species || $genus) and 
+	!grep { $_ eq $src } @unkn_names;
+
+    # Bio::Species array needs array in Species -> Kingdom direction
+    push(@class, $sci_name);
+    @class = reverse @class;
+
+    my $make = Bio::Species->new();
+    $make->scientific_name($sci_name);
+    $make->classification(@class) if @class > 0;
+    $make->common_name( $common ) if $common;
+    $make->name('abbreviated', $abbr_name) if $abbr_name;
+    $make->organelle($organelle) if $organelle;
+
+    return $make;
+}
+
+sub next_seq { shift->next_obj }
+
+sub _read_references {
+    my ($stem, $som) = @_;
+    my @ret;
+    for ( my $i = 1; $som->valueof($stem."/GBSeq_references/[$i]"); $i++ ) {
+	my $get = sub { 
+	    $som->valueof($stem."/GBSeq_references/[$i]/GBReference_".shift ) 
+	};
+	my %params;
+	$params{'-title'} = $get->('title');
+	$params{'-pubmed'} = $get->('pubmed');
+	$params{'-medline'} = $get->('pubmed');
+	$params{'-journal'} = $get->('journal');
+	$params{'-comment'} = $get->('remark');
+	$params{'-consortium'} = $get->('consortium');
+
+	my $pos = $get->('position');
+	$pos =~ /^([0-9]+)[.]+([0-9]+)$/;
+	$params{'-start'} = $1;
+	$params{'-end'} = $2;
+	$params{'-gb_reference'} = $get->('reference');
+	$params{'-authors'} = '';
+	foreach my $author ( $get->('authors/*') ) {
+	    $params{'-authors'} .= " $author";
+	}
+	push @ret, Bio::Annotation::Reference->new(
+	    -tagname => 'reference',
+	    %params);
+    }
+    return @ret;
+}
+
+sub _read_features {
+    my ($stem, $som) = @_;
+    my @ret;
+    for ( my $i = 0; $som->valueof($stem."/GBSeq_feature-table/[$i]"); $i++ ) {
+	my $get = sub { 
+	    $som->valueof($stem."/GBSeq_feature-table/[$i]/GBFeature_".shift ) 
+	};
+	my %params;
+	
+    }
+
+}
+	
 1;
 __END__
 
