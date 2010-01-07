@@ -78,9 +78,12 @@ use strict;
 use lib '../../../../..'; # remove later
 use Bio::Root::Root;
 use Bio::Annotation::Collection;
-use Bio::Annotation::Reference;
 use Bio::Annotation::Comment;
+use Bio::Annotation::DBLink;
+use Bio::Annotation::Reference;
 use Bio::Annotation::SimpleValue;
+use Bio::Factory::FTLocationFactory;
+use Bio::SeqFeature::Generic;
 use Bio::Seq::SeqBuilder;
 use Bio::Seq::SeqFactory;
 use Bio::Species;
@@ -103,6 +106,7 @@ sub _initialize {
     $self->{'_builder'}->sequence_factory( 
 	$seqfac || Bio::Seq::SeqFactory->new( -type => $self->{'_obj_class'} )
 	);
+    $self->{'_locfac'} = Bio::Factory::FTLocationFactory->new();
     $self->{'_idx'} = 1;
     1;
 }
@@ -111,11 +115,13 @@ sub obj_class { shift->{'_obj_class'} }
 
 sub builder { shift->{'_builder'} };
 
+sub locfac { shift->{'_locfac'} };
+
 sub next_obj {
     my $self = shift;
-    my $a = $self->{'_idx'};
-    my $stem = "//GBSet/[$a]";
+    my $stem = "//GBSet/[".$self->{'_idx'}."]";
     my $som = $self->result->som;
+    my $seqid;
     return unless defined $som->valueof("$stem");
 
     my $get = sub { $som->valueof("$stem/GBSeq_".shift) };
@@ -151,7 +157,7 @@ sub next_obj {
     my @ids = $get->('other-seqids/GBSeqid');
     foreach (@ids) {
 	/^gi\|([0-9]+)/ && do {
-	    $params{'-primary_id'} = $1;
+	    $seqid = $params{'-primary_id'} = $1;
 	    $params{'-accession_number'} = $_; # correct?
 	    next;
 	};
@@ -167,12 +173,6 @@ sub next_obj {
     # sequence 
     if ( $self->builder->want_slot('seq')) {
 	$params{'-seq'} = $get->('sequence');
-    }
-
-    # organism data
-    if ( $self->builder->want_slot('species') && $get->('source') ) {
-	my $sp = _read_species($get);
-	$params{'-species'} = $sp if $sp;
     }
 
     # keywords
@@ -192,34 +192,69 @@ sub next_obj {
     if ($self->builder->want_slot('annotation')) {
 	$ann = Bio::Annotation::Collection->new();
 	# references
-	$ann->add_Annotation('reference', $_) for _read_references($stem,$som);
+	if ($get->('references')) {
+	    $ann->add_Annotation('reference', $_) 
+		for _read_references($stem,$som);
+	}
+	
 	# comment
 	if ($get->('comment')) {
 	    $ann->add_Annotation('comment', 
-			       Bio::Annotation::Comment->new(
-				   -tagname => 'comment',
-				   -text => $get->('comment')
+				 Bio::Annotation::Comment->new(
+				     -tagname => 'comment',
+				     -text => $get->('comment')
 				 )
 		);
 	}
 	# project
 	if ( $get->('project') ) {
 	    $ann->add_Annotation('project',
-			       Bio::Annotation::SimpleValue->new(
-				   -value => $get->('project')
+				 Bio::Annotation::SimpleValue->new(
+				     -value => $get->('project')
 				 )
 		);
 	}
-	# deal with making dblink as in SeqIO::genbank line 470 here.
+	# contig
+	if ($get->('contig')) {
+	    $ann->add_Annotation('contig',
+			       Bio::Annotation::SimpleValue->new(
+				   -value => $get->('contig')
+				   )
+		);
+	}
+	    
+	# dblink
+	if ($get->('source-db')) {
+	    _read_db_source($ann, $get);
+	} 
 
 	$self->builder->add_slot_value(-annotation => $ann);
     }
 
     # features
+    my $feats;
     if ($self->builder->want_slot('features')) {
-
-
+	$feats = _read_features($stem,$som,$self->locfac,$get);
+	$self->builder->add_slot_value(
+	    -features => $feats
+	    );
     }
+
+    # organism data
+    if ( $self->builder->want_slot('species') && $get->('source') ) {
+	my $sp = _read_species($get);
+	if ($sp && !$sp->ncbi_taxid) {
+	    my ($src) = grep { $_->primary_tag eq 'source' } @$feats;
+	    if ($src) {
+		foreach my $val ($src->get_tag_values('db_xref')) {
+		    $sp->ncbi_taxid(substr($val,6)) if index($val,"taxon:") == 0;
+		}
+	    }
+	}
+	$self->builder->add_slot_value( -species => $sp );
+    }
+
+
     
     ($self->{_idx})++;
     return $self->builder->make_object;
@@ -332,19 +367,183 @@ sub _read_references {
 }
 
 sub _read_features {
-    my ($stem, $som) = @_;
+    my ($stem, $som, $locfac, $get_pri) = @_;
     my @ret;
-    for ( my $i = 0; $som->valueof($stem."/GBSeq_feature-table/[$i]"); $i++ ) {
+    my $seqid = $get_pri->('primary-accession');
+    $DB::single=1;
+    for ( my $i = 1; $get_pri->("feature-table/[$i]"); $i++ ) {
 	my $get = sub { 
 	    $som->valueof($stem."/GBSeq_feature-table/[$i]/GBFeature_".shift ) 
 	};
-	my %params;
+	my $loc;
+	my $sf = Bio::SeqFeature::Generic->direct_new();
+	if ($get->('location')) {
+	    # may have to parse GBIntervals instead here...
+	    $loc = $locfac->from_string( $get->('location') );
+	    if ($seqid && !($loc->is_remote)) {
+		$loc->seq_id($seqid);
+	    }
+	}
+	$sf->location($loc);
+	$sf->seq_id($seqid);
+	$sf->primary_tag($get->('key'));
+	$sf->source_tag('EMBL/GenBank/SwissProt');
+	# fill other fields using $sf->add_tag_value...
 	
+	# qualifiers are name => value pairs. add as tags 
+	# to this feature
+	if ($get->('quals')) {
+	    foreach ($get->('quals/*')) {
+		$sf->add_tag_value( $_->{'GBQualifier_name'},
+				    $_->{'GBQualifier_value'} );
+	    }
+	}
+	if ($get->('partial5')) {
+	    $sf->add_tag_value( 'is_partial5', 
+				$get->('partial5') eq 'true' ? 1 : 0)
+	}
+	if ($get->('partial3')) {
+	    $sf->add_tag_value( 'is_partial3', 
+				$get->('partial3') eq 'true' ? 1 : 0)
+	}
+	push @ret, $sf;
     }
-
+    return \@ret;
 }
-	
+
+sub _read_db_source {
+    my ($ann, $get) = @_;
+    my $dbsource = $get->('source-db');
+    # ripped mainly from Bio::SeqIO::genbank...
+    # deal with UniProKB dbsources
+    if( $dbsource =~ 
+	s/(UniProt(?:KB)?|swissprot):\s+locus\s+(\S+)\,[^.]+\.\s*// ) {
+	$ann->add_Annotation
+	    ('dblink',
+	     Bio::Annotation::DBLink->new
+	     (-primary_id => $2,
+	      -database => $1,
+	      -tagname => 'dblink'));
+	if( $dbsource =~ s/created:\s+([^.]+)\.\s*// ) {
+	    $ann->add_Annotation
+		('swissprot_dates',
+		 Bio::Annotation::SimpleValue->new
+		 (-tagname => 'date_created',
+		  -value => $1));
+	}
+	while( $dbsource =~ 
+	       s/\s+(sequence|annotation)\s+
+                         updated:\s+([^.]+)\.\s*//xg ) {
+	    $ann->add_Annotation
+		('swissprot_dates',
+		 Bio::Annotation::SimpleValue->new
+		 (-tagname => 'date_updated',
+		  -value => $2));
+	}
+	$dbsource =~ s/\n/ /g;
+	if ( $dbsource =~ s/xrefs:\s+
+                                    ((?:\S+,\s+)+\S+)\s+xrefs/xrefs/x ) {
+	    # will use $i to determine even or odd
+	    # for swissprot the accessions are paired
+	    my $i = 0;
+	    for my $dbsrc ( split(/,\s+/,$1) ) {
+		if( $dbsrc =~ /(\S+)\.(\d+)/ ||
+		    $dbsrc =~ /(\S+)/ ) {
+		    my ($id,$version) = ($1,$2);
+		    $version ='' unless defined $version;
+		    my $db;
+		    if( $id =~ /^\d\S{3}/) {
+			$db = 'PDB';
+		    } else {
+			$db = ($i++ % 2 ) ? 'GenPept' : 'GenBank';
+		    }
+		    $ann->add_Annotation
+			('dblink',
+			 Bio::Annotation::DBLink->new
+			 (-primary_id => $id,
+			  -version => $version,
+			  -database => $db,
+			  -tagname => 'dblink'));
+		}
+	    }
+	} 
+	elsif ( $dbsource =~ s/xrefs:\s+(.+)\s+xrefs/xrefs/i ) {
+	    # download screwed up and ncbi didn't put 
+	    # acc in for gi numbers
+	    my $i = 0;
+	    for my $id ( split(/\,\s+/,$1) ) {
+		my ($acc,$db);
+		if( $id =~ /gi:\s+(\d+)/ ) {
+		    $acc= $1;
+		    $db = ($i++ % 2 ) ? 'GenPept' : 'GenBank';
+		} elsif( $id =~ /pdb\s+accession\s+(\S+)/ ) {
+		    $acc= $1;
+		    $db = 'PDB';
+		} else {
+		    $acc= $id;
+		    $db = '';
+		}
+		$ann->add_Annotation
+		    ('dblink',
+		     Bio::Annotation::DBLink->new
+		     (-primary_id => $acc,
+		      -database => $db,
+		      -tagname => 'dblink'));
+	    }
+	} else {
+	    warn "Cannot match $dbsource";
+	}
+	if( $dbsource =~ s/xrefs\s+\(non\-sequence\s+databases\):\s+
+			   ((?:\S+,\s+)+\S+)//x ) {
+	    for my $id ( split(/\,\s+/,$1) ) {
+		my $db;
+		# quote from Bio::SeqIO::genbank:
+		# this is because GenBank dropped the spaces!!!
+		# I'm sure we're not going to get this right
+		$db = substr($id,0,index($id,':'));
+		$id = substr($id,index($id,':')+1);
+		$ann->add_Annotation
+		    ('dblink',
+		     Bio::Annotation::DBLink->new
+		     (-primary_id => $id,
+		      -database => $db,
+		      -tagname => 'dblink'));
+	    }
+	}
+    }
+    else {
+	if( $dbsource =~ /^(\S*?):?\s*accession\s+(\S+)\.(\d+)/ ) {
+	    my ($db,$id,$version) = ($1,$2,$3);
+	    $ann->add_Annotation
+		('dblink',
+		 Bio::Annotation::DBLink->new
+		 (-primary_id => $id,
+		  -version => $version,
+		  -database => $db || 'GenBank',
+		  -tagname => 'dblink'));
+	} elsif ( $dbsource =~ /(\S+)([\.:])(\d+)/ ) {
+	    my ($id, $db, $version);
+	    if ($2 eq ':') {
+		($db, $id) = ($1, $3);
+	    } else {
+		($db, $id, $version) = ('GenBank', $1, $3);
+	    }
+	    $ann->add_Annotation('dblink',
+				 Bio::Annotation::DBLink->new(
+				     -primary_id => $id,
+				     -version => $version,
+				     -database => $db,
+				     -tagname => 'dblink')
+		);
+	} 
+	else {
+	    warn "Unrecognized DBSOURCE data: $dbsource";
+	}
+    }
+    return 1;
+}
 1;
+
 __END__
 
 here\'s an example:
