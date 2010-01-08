@@ -118,6 +118,20 @@ Similarly, the call C< $result->TranslationStack_TermSet > would
 return a d similar hash containing the last 4 elements of the example
 hash above.
 
+Creating accessors is somewhat costly, especially for fetch responses
+which can be deep and complex (not unlike BioPerl
+developers). Portions of the response tree can be ignored by setting
+C<-prune_at_node> to a arrayref of nodes to skip. Nodes should be
+specified in L<SOAP::SOM> format, e.g.
+
+ ...::Result->new( -prune_at_nodes => ['//GBSeq_references'] );
+
+Accessor creation can be skipped altogether by passing C<-no_parse =>
+1> to the C<Result> constructor. This is recommended if a result is
+being passed to a
+L<Bio::Tools::Run::SoapEUtilities::FetchAdaptor>. The original SOAP
+message with all data is always available in C<$result->som>.
+
 =back
 
 =over
@@ -147,7 +161,6 @@ The original C<SOAP::SOM> message.
 The EUtility associated with the result.
 
 =back
-
 
 =head1 FEEDBACK
 
@@ -285,7 +298,10 @@ sub parse_methods {
 	my ($set) = grep /^.*?Set$/, @toplev;
 	if ($set) {
 	    $methods{count} = 0;
-	    foreach ($self->som->valueof("//$set/*")) {
+	    # kludge out NCBI inconsistencies
+	    my $stem = ($set eq 'LinkSet' ? "//Body/".$self->result_type."/*" :
+			"//$set/*");
+	    foreach ($self->som->valueof($stem)) {
 		$methods{count}++;
 	    }
 	}
@@ -399,6 +415,8 @@ sub query_key { shift->{'_QueryKey'} }
 =cut
 
 sub fetch_type { shift->{'_fetch_type'} }
+
+sub result_type { shift->{'_result_type'} }
 
 sub _traverse_methods {
     my ($m, $skey, $key, $som, $hash, $acc, $prune) = @_;

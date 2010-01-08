@@ -22,7 +22,23 @@ Give standard usage here
 
 =head1 DESCRIPTION
 
-Describe the object here
+This module allows the user to query the NCBI Entrez database via its
+SOAP (Simple Object Access Protocol) web service (described at
+L<http://eutils.ncbi.nlm.nih.gov/entrez/eutils/soap/v2.0/DOC/esoap_help.html>).
+The basic tools (C<einfo, esearch, elink, efetch, espell, epost>) are
+available as methods off a C<SoapEUtilities> factory
+object. Parameters for each tool can be queried, set and reset for
+each method through the L<Bio::ParameterBaseI> standard calls
+(C<available_parameters(), set_parameters(), get_parameters(),
+reset_parameters()>). Returned data can be retrieved, accessed and
+parsed in several ways, according to user preference; database records
+obtained using C<efetch> can be converted to appropropriate BioPerl
+objects via L<Bio::Tools::Run::SoapEUtilities::FetchAdaptor>.
+
+=head1 SEE ALSO
+
+L<Bio::DB::EUtilities>, L<Bio::Tools::Run::SoapEUtilities::Result>,
+L<Bio::Tools::Run::ESoap>.
 
 =head1 FEEDBACK
 
@@ -131,6 +147,14 @@ sub run {
     $args{tool} = "SoapEUtilities(BioPerl)";
     my $util = $self->_caller_util;
     $self->set_parameters(%args) if %args;
+    # kludge for elink : make sure to-ids and from-ids are associated
+    if ( $util eq 'elink' ) {
+	my $es = $self->_soap_facs($util);
+	my $ids = $es->id;
+	my %ids;
+	@ids{@$ids} = (1) x scalar @$ids;
+	$es->id(\%ids);
+    }
     $self->_soap_facs($util)->_client->outputxml($raw_xml);
     my $som = $self->{'_response_message'} = $self->_soap_facs($util)->run;
     # raw xml only...
@@ -202,8 +226,6 @@ sub response_message { shift->{'_response_message'} }
 sub last_response { shift->{'_response_message'} }
 sub last_result { shift->{'_response_message'} }
 
-
-
 =head2 webenv()
 
  Title   : webenv
@@ -228,7 +250,7 @@ sub webenv { shift->{'_WebEnv'} }
 
 =cut
 
-
+sub errstr { shift->{'errstr'} }
 
 =head2 db()
 
@@ -242,12 +264,7 @@ sub webenv { shift->{'_WebEnv'} }
 
 sub db { shift->{'db'} }
 
-sub errstr { shift->{'errstr'} }
-
-
-
 =head2 Bio::ParameterBaseI compliance
-
 
 =head2 available_parameters()
 
@@ -357,7 +374,6 @@ sub parameters_changed {
     return unless $self->_soap_facs($util);
     return $self->_soap_facs($util)->parameters_changed;
 }
-
 
 # idea behind using autoload: attempt to buffer the module
 # against additions of new eutilities, and (of course) to 

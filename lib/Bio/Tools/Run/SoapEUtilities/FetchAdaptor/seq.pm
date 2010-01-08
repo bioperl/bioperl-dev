@@ -111,6 +111,8 @@ sub _initialize {
     1;
 }
 
+sub rewind { shift->{'_idx'} = 1 }
+
 sub obj_class { shift->{'_obj_class'} }
 
 sub builder { shift->{'_builder'} };

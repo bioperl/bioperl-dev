@@ -18,11 +18,22 @@ Bio::Tools::Run::SoapEUtilities::FetchAdaptor - Conversion of Entrez SOAP messag
 
 =head1 SYNOPSIS
 
-Give standard usage here
+ $fac = Bio::Tools::Run::SoapEUtilities->new();
+ $soap_result = $fac->efetch( -db => 'protein', -id => 2597988 );
+ $adp = Bio::Tools::Run::SoapEUtilities::FetchAdaptor(
+         -result => $soap_result,
+         -type => 'seq'
+        );
+
+ while ( $gb_seq = $adp->next_obj ) {
+    # do stuff
+ }
 
 =head1 DESCRIPTION
 
-Describe the object here
+C<FetchAdaptor> is the base class of a system, modeled after
+L<Bio::SeqIO>, to parse SOAP responses from the NCBI Entrez C<efetch>
+utility into germane BioPerl objects.
 
 =head1 FEEDBACK
 

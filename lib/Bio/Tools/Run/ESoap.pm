@@ -21,6 +21,8 @@ Bio::Tools::Run::ESoap - Client for the NCBI Entrez EUtilities SOAP server
  $fac = Bio::Tools::Run::ESoap->new( -util => 'esearch' );
  $som = $fac->run( -db => 'prot', -term => 'HIV and gp120' );
  $fac->set_parameters( -term => 'HIV2 and gp160' );
+ # accessors corresponding to valid parameters are also created:
+ $fac->db('nuccore');
  $som = $fac->run;
 
  # more later.
@@ -262,6 +264,14 @@ sub run {
 	    /ARRAY/ && do {
 		push @soap_data, SOAP::Data->name($k)->value(join(',',@$data));
 		last;
+	    };
+	    /HASH/ && do {
+		# for adding multiple data items with the same message 
+		# key (id lists for elink, e.g.)
+		# see ...::SoapEUtilities, c. line 151
+		push @soap_data, map { 
+		    SOAP::Data->name($k)->value($_)
+		} keys %$data;
 	    };
 	}
     }
