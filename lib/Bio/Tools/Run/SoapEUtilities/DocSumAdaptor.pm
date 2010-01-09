@@ -121,8 +121,24 @@ sub next_docsum {
     my $get = sub { $som->valueof("$stem/".shift) };
     
     $params{'-id'} = $get->('Id');
-    # flatten item list here
 
+    my $names = [];
+    for (my $i = 1; my $data = $som->dataof("$stem/[$i]"); $i++) {
+	if ( $data->value ) {
+	    my $name = $data->attr->{'Name'}[0];
+	    next unless $name;
+	    my $content = $data->value->{'ItemContent'};
+	    unless ($content) {
+		next unless $som->dataof("$stem/[$i]/Item");
+		my $h = {};
+	        _traverse_items("$stem/[$i]", $som, $h);
+		$content = $h;
+	    }
+	    push @$names, $name;
+	    $params{$name} = $content;
+	}
+    }
+    $params{'-item_names'} = $names;
     my $class = ref($self)."::docsum";
     $ret = $class->new(%params);
     ($self->{'_idx'})++;
@@ -131,8 +147,32 @@ sub next_docsum {
 
 sub rewind { shift->{'_idx'} = 1; };
 
+sub _traverse_items {
+    my ($stem, $som, $h) = @_;
+    for (my $i = 1; my $data = $som->dataof($stem."/[$i]"); $i++) {
+	my $name = $data->attr->{'Name'}[0];
+	next unless $name;
+	if ($name =~ /Type$/) {
+	    # clip out this node
+	    _traverse_items("$stem/[$i]", $som, $h);
+	}
+	else {
+	    my $content = $data->value->{'ItemContent'};
+	    if ($content) {
+		$$h{$name} = $content;
+	    }
+	    else {
+		$$h{$name} = {};
+		_traverse_items("$stem/[$i]", $som, $$h{$name});
+	    }
+	}
+    }
+    return;
+}
+
 1; 
 
+####
 package Bio::Tools::Run::SoapEUtilities::DocSumAdaptor::docsum;
 use strict;
 use warnings;
