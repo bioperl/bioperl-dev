@@ -14,7 +14,7 @@
 
 =head1 NAME
 
-Bio::Tools::Run::SoapEUtilities::LinkAdaptor - Iterator for Entrez SOAP LinkSets
+Bio::Tools::Run::SoapEUtilities::LinkAdaptor - Handle for Entrez SOAP LinkSets
 
 =head1 SYNOPSIS
 
@@ -117,15 +117,16 @@ sub next_linkset {
     my $self = shift;
     my $stem = "//Body/".$self->result->result_type."/[".$self->{'_idx'}."]";
     return unless $self->result->som and $self->result->som->valueof($stem);
-    my $ret;
-    my $get = sub { $self->result->som->valueof("$stem/".shift) };
-    my %params;
+    my $som = $self->result->som;
+    my ($ret, %params);
+    my $get = sub { $som->valueof("$stem/".shift) };
     
     $params{'-db_from'} = $get->('DbFrom');
     $params{'-db_to'} = $get->('LinkSetDb/DbTo');
     $params{'-link_name'} = $get->('LinkSetDb/LinkName');
     $params{'-submitted_ids'} = [$get->('IdList/*')];
     $params{'-ids'} = [$get->('LinkSetDb/Link/*')];
+    $params{'-webenv'} = $get->('WebEnv');
     my $class = ref($self)."::linkset";
     $ret = $class->new(%params);
     ($self->{'_idx'})++;
@@ -133,6 +134,39 @@ sub next_linkset {
 }
 
 sub rewind { shift->{'_idx'} = 1; };
+
+=head2 id_map()
+
+ Title   : id_map
+ Usage   : $to_id = $adaptor->id_map($from_id)
+ Function: Return 'to-database' ids corresponding to
+           given specified 'from-database' or
+           submitted ids
+ Returns : array of scalars (to-database ids or arrayrefs of ids)
+ Args    : array of scalars (from-database ids)
+
+=cut
+
+sub id_map {
+    my $self = shift;
+    my @from_ids = @_;
+    my $som = $self->result->som;
+    my $stem = "//Body/".$self->result->result_type."/";
+    if (!defined $self->{'_id_map'}) {
+	my $h = {};
+	for (my $i=1; $som->valueof($stem."[$i]"); $i++) {
+	    # note this assumes that in the elink query, 
+	    # ids were provided individually (not as a comma-sep
+	    # list). This is the standard behavior for elink 
+	    # in SoapEUtilities.
+	    my @to_ids = $som->valueof($stem."[$i]/LinkSetDb/Link/*");
+	    $$h{$som->valueof($stem."[$i]/IdList/[1]")} =
+		(@to_ids == 1 ? $to_ids[0] : \@to_ids);
+	}
+	$self->{'_id_map'} = $h;
+    }
+    return @{$self->{'_id_map'}}{@from_ids};
+}
 
 package Bio::Tools::Run::SoapEUtilities::LinkAdaptor::linkset;
 use strict;
