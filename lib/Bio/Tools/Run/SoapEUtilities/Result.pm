@@ -299,7 +299,7 @@ sub parse_methods {
 	if ($set) {
 	    $methods{count} = 0;
 	    # kludge out NCBI inconsistencies
-	    my $stem = ($set eq 'LinkSet' ? "//Body/".$self->result_type."/*" :
+	    my $stem = ($set =~ /(?:Doc|Link)Set/ ? "//Body/".$self->result_type."/*" :
 			"//$set/*");
 	    foreach ($self->som->valueof($stem)) {
 		$methods{count}++;
