@@ -10,7 +10,7 @@ BEGIN {
     $home = '..'; # set to '.' for Build use, 
                       # '..' for debugging from .t file
     unshift @INC, $home;
-    test_begin(-tests => 43, # modify
+    test_begin(-tests => 62, # modify
 	       -requires_modules => [qw(Bio::DB::ESoap
                                         Bio::DB::ESoap::WSDL
                                         Bio::DB::SoapEUtilities
@@ -146,6 +146,7 @@ open my $xmlf, test_input_file('esum_result.xml');
 }
 
 ok my $result = Bio::DB::SoapEUtilities::Result->new($dumfac), "create Result object (esummary)";
+is $result->util, 'esummary', 'util accessor';
 is $result->count, 3, "count";
 is_deeply( $result->ids, [828392, 790, 470338], "ids" );
 
@@ -155,6 +156,7 @@ open $xmlf, test_input_file('esearch_result.xml');
   $dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlf>);
 }
 ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac), "create Result object (esearch)";
+is $result->util, 'esearch', 'util accessor';
 is $result->count, 777, "count";
 is_deeply $result->ids, [qw(
            4212556
@@ -184,9 +186,54 @@ open $xmlf, test_input_file('elink_result.xml');
 { local $/ = undef;
   $dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlf>);
 }
-ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac), "create Result object (elink)";
+ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac, -no_parse=>1), "create Result object (elink, don't parse)";
+ok !$result->count, "as requested, did not parse accessors";
+ok $result->parse_methods( { 'ids' => 'LinkSet_IdList_Id' } ), "parse_methods on object";
+is $result->util, 'elink', 'util accessor';
 is $result->count, 3, "count";
 is_deeply( [sort @{$result->ids}], [sort qw(828392 790 470338)], "ids" );
+
+# check accessors; one for each xml tree tip below <eLinkResult>
+is_deeply( [sort $result->accessors], [ sort qw(
+                                     count ids
+                                     LinkSet_DbFrom LinkSet_IdList_Id
+                                     LinkSet_LinkSetDb_DbTo
+                                     LinkSet_LinkSetDb_LinkName
+                                     LinkSet_LinkSetDb_Link_Id) ],
+	   "accessors for each response tip" );
+
+is ( ref $result->LinkSet, 'HASH', "autoload higher level accessor returns hashref");
+is( ref $result->LinkSet_LinkSetDb_DbTo, 'ARRAY', "created accessor return arrayref" );
+is ( $result->count, scalar @{$result->LinkSet_LinkSetDb_DbTo}, "count same as number of records same as number elts returned by accessor");
+is_deeply( [sort keys %{$result->LinkSet_LinkSetDb}], [sort qw(
+                                     LinkSet_LinkSetDb_DbTo
+                                     LinkSet_LinkSetDb_LinkName
+                                     LinkSet_LinkSetDb_Link_Id) ],
+	   "autoload higher level accessor, return list");
+ok $result->LinkSet_LinkSetDb_LinkName, "LinkName is present";
+ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac, 
+						  -alias_hash =>
+						  { 'gefilte_fish' =>
+							'LinkSet_DbFrom' },
+						  -prune_at_nodes =>
+						      '//LinkSet/LinkSetDb/LinkName'
+    ), "result, parse but prune at single node //LinkSet/LinkSetDb/LinkName";
+is ($result->LinkSet_DbFrom, 'gene', "DbFrom");
+is ($result->gefilte_fish, 'gene', "alias correct");
+ok $result->LinkSet_LinkSetDb_DbTo, "DbTo present, but..";
+ok !$result->LinkSet_LinkSetDb_LinkName, "LinkName is not";
+ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac, 
+						  -prune_at_nodes =>
+						  ['//LinkSet/LinkSetDb', 
+						   '//LinkSet/DbFrom']
+    ), " prune at multiple nodes: //LinkSet/LinkSetDb, //LinkSet/";
+
+ok grep(/LinkSet_IdList_Id/, $result->accessors), "IdList_Id present";
+ok !grep(/LinkSet_LinkSetDb/, $result->accessors), "LinkSet_LinkSetDb not present";
+
+
+
+
 
 SKIP : {
     test_skip(-tests => 0, # modify
