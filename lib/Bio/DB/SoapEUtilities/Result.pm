@@ -115,7 +115,7 @@ below the node, keyed by the accessor names:
        1  'hedgehog[All Fields]'
 
 Similarly, the call C< $result->TranslationStack_TermSet > would
-return a d similar hash containing the last 4 elements of the example
+return a similar hash containing the last 4 elements of the example
 hash above.
 
 Creating accessors is somewhat costly, especially for fetch responses
@@ -381,7 +381,7 @@ sub errstr { shift->som->faultstring }
 
 =cut
 
-sub accessors { shift->{'_accessors'} }
+sub accessors { my $a = shift->{'_accessors'} ; @$a if $a }
 
 =head2 webenv()
 
@@ -427,7 +427,7 @@ sub _traverse_methods {
     my ($m, $skey, $key, $som, $hash, $acc, $prune) = @_;
     if ($prune) {
 	foreach (@$prune) {
-	    return if $skey =~ /^$_/;
+	    return if "$skey\/$m" =~ /^$_/;
 	}
     }
     my $val = $som->valueof("$skey\/$m");
