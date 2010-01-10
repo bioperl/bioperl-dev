@@ -140,9 +140,9 @@ ok !$dumfac->elink->parameters_changed, "elink not parameters_changed";
 # work over SoapEUtilities::Result
 
 $dumfac->esummary();
-open my $xmlf, test_input_file('esum_result.xml');
+open my $xmlsumf, test_input_file('esum_result.xml');
 { local $/ = undef;
-  $dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlf>);
+  $dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlsumf>);
 }
 
 ok my $result = Bio::DB::SoapEUtilities::Result->new($dumfac), "create Result object (esummary)";
@@ -231,15 +231,34 @@ ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac,
 ok grep(/LinkSet_IdList_Id/, $result->accessors), "IdList_Id present";
 ok !grep(/LinkSet_LinkSetDb/, $result->accessors), "LinkSet_LinkSetDb not present";
 
+# Adaptors
+
+# linkset
+
+ok my $links = Bio::DB::SoapEUtilities::LinkAdaptor->new(
+    -result => $result
+    ), "get linkset adapator";
 
 
 
+# docsum
+$dumfac->esummary;
+$dumfac->{'_response_message'} = SOAP::Deserializer->deserialize($xmlsumf);
+$result = Bio::DB::SoapEUtilities::Result->new($dumfac, -no_parse=>1);
 
-SKIP : {
-    test_skip(-tests => 0, # modify
-	      -requires_networking => 1);
+ok my $docsums = Bio::DB::SoapEUtilities::DocSumAdaptor->new(
+    -result = $result
+    ), "get docsum adaptor";
 
+# fetch genbank
+
+$dumfac->efetch;
+open $xmlf, test_input_file('gb_result.xml');
+{ local $/ = undef;
+  $dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlf>);
 }
+ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac, -no_parse=>1), "create Result object (efetch protein (GenBank), don't parse methods)";
+
 
 # remove later
 sub test_input_file { "data/".shift };
