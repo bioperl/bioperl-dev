@@ -214,6 +214,11 @@ use Bio::Root::Root;
 use base qw(Bio::Root::Root );
 
 our $AUTOLOAD;
+our %ID_LIST_ELT = (
+    esearch => 'IdList_Id',
+    esummary => 'DocSum_Id',
+    elink => 'LinkSet_IdList_Id'
+    );
 
 # an object of accessors
 
@@ -229,7 +234,7 @@ sub new {
 		ref($eutil_obj) eq 'Bio::DB::SoapEUtilities');
 
     $alias_hash ||= {};
-    $$alias_hash{ 'ids' } = 'IdList_Id';
+    $$alias_hash{ 'ids' } = ($ID_LIST_ELT{$eutil_obj->_caller_util} || 'IdList_Id');
     if ($prune_at_nodes) {
 	$prune_at_nodes = [$prune_at_nodes] unless ref $prune_at_nodes;
     }
@@ -295,11 +300,11 @@ sub parse_methods {
     }
     else { #work harder
 	my @toplev = keys %{$self->som->method};
-	my ($set) = grep /^.*?Set$/, @toplev;
+	my ($set) = grep /^.*?S(et|um)$/, @toplev;
 	if ($set) {
 	    $methods{count} = 0;
 	    # kludge out NCBI inconsistencies
-	    my $stem = ($set =~ /(?:Doc|Link)Set/ ? "//Body/".$self->result_type."/*" :
+	    my $stem = ($set =~ /(?:DocSum|LinkSet)/ ? "//Body/".$self->result_type."/*" :
 			"//$set/*");
 	    foreach ($self->som->valueof($stem)) {
 		$methods{count}++;
