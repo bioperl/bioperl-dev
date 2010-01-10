@@ -173,9 +173,11 @@ sub run {
     if ( $util eq 'elink' ) {
 	my $es = $self->_soap_facs($util);
 	my $ids = $es->id;
-	my %ids;
-	@ids{@$ids} = (1) x scalar @$ids;
-	$es->id(\%ids);
+	if (ref $ids eq 'ARRAY') {
+	    my %ids;
+	    @ids{@$ids} = (1) x scalar @$ids;
+	    $es->id(\%ids);
+	}
     }
     $self->_soap_facs($util)->_client->outputxml($raw_xml);
     my $som = $self->{'_response_message'} = $self->_soap_facs($util)->run;

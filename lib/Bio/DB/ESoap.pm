@@ -316,8 +316,8 @@ sub set_parameters {
     }
 
     $self->_set_from_args(\%args, -methods=>$self->_init_parameters);
-    $self->parameters_changed(1);
-    return;
+    return $self->parameters_changed(1);
+
 }
 
 sub get_parameters {
