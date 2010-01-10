@@ -96,7 +96,7 @@ package Bio::DB::ESoap;
 use strict;
 use warnings;
 
-use lib '../../..'; # remove later
+use lib '../..'; # remove later
 use Bio::Root::Root;
 use Bio::DB::ESoap::WSDL;
 use SOAP::Lite;
@@ -118,10 +118,17 @@ sub new {
     my $self = $class->SUPER::new(@args);
     my ($util, $fetch_db, $wsdl) = $self->_rearrange( [qw( UTIL FETCH_DB WSDL_FILE )], @args );
     $self->throw("Argument -util must be specified") unless $util;
-    $fetch_db ||= 'seq';
-    my $url = ($util =~ /fetch/ ? 'f_'.$fetch_db : 'eutils');
-    $url = $NCBI_BASEURL.$WSDL{$url};
-    $self->_wsdl(Bio::DB::ESoap::WSDL->new(-url => $url));
+    my @wsdl_pms;
+    if ($wsdl) {
+	@wsdl_pms = ( '-wsdl' => $wsdl );
+    }
+    else {
+	$fetch_db ||= 'seq';
+	my $url = ($util =~ /fetch/ ? 'f_'.$fetch_db : 'eutils');
+	$url = $NCBI_BASEURL.$WSDL{$url};
+	@wsdl_pms = ( '-url' => $url );
+    }
+    $self->_wsdl(Bio::DB::ESoap::WSDL->new(@wsdl_pms));
     $self->_operation($util);
     $self->_init_parameters;
     $self->_client( SOAP::Lite->new( proxy => $self->_wsdl->service ) );
@@ -333,7 +340,8 @@ sub reset_parameters {
     @reset{@{$self->_init_parameters}} = (undef) x @{$self->_init_parameters};
     $reset{$_} = $args{$_} for keys %args;
     $self->_set_from_args( \%reset, -methods => $self->_init_parameters );
-    return;
+    $self->parameters_changed(1);
+    return 1;
 }
 
 =head2 parameters_changed()

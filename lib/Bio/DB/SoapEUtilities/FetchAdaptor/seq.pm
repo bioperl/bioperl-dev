@@ -75,7 +75,6 @@ Internal methods are usually preceded with a _
 package Bio::DB::SoapEUtilities::FetchAdaptor::seq;
 use strict;
 
-use lib '../../../../..'; # remove later
 use Bio::Root::Root;
 use Bio::Annotation::Collection;
 use Bio::Annotation::Comment;
