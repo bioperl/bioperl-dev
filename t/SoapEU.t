@@ -10,7 +10,7 @@ BEGIN {
     $home = '..'; # set to '.' for Build use, 
                       # '..' for debugging from .t file
     unshift @INC, $home;
-    test_begin(-tests => 100, # modify
+    test_begin(-tests => 43, # modify
 	       -requires_modules => [qw(Bio::DB::ESoap
                                         Bio::DB::ESoap::WSDL
                                         Bio::DB::SoapEUtilities
@@ -98,7 +98,7 @@ is_deeply( $wsdl->response_parameters('egquery'),
 
 ok my $dumfac = Bio::DB::ESoap->new( -util => 'run_eLink',
 				     -wsdl_file => test_input_file('eutils.wsdl') ), "dummy ESoap factory";
-if (0) {
+
 is $dumfac->util, 'run_eLink', 'operation accessor';
 ok $dumfac = Bio::DB::ESoap->new( -util => 'elink',
 				     -wsdl_file => test_input_file('eutils.wsdl') ), "dummy ESoap factory";
@@ -117,9 +117,9 @@ is $dumfac->db, 'gene', 'parameter as accessor';
 is $dumfac->tool, 'ESoapTest', 'parameter as accessor (2)';
 ok $dumfac->reset_parameters, "reset_parameters";
 ok $dumfac->parameters_changed, "parameters_changed flipped";
-}
+
 # SoapEUtilities
-$DB::single=1;
+
 ok $dumfac = Bio::DB::SoapEUtilities->new(), "make SoapEU factory";
 
 ok $dumfac->esearch( -db => 'gene', -term => 'bat guano' ), "esearch instance";
@@ -133,15 +133,63 @@ is_deeply( [$dumfac->elink->get_parameters],
 is $dumfac->esearch->db, 'gene', "esearch delegation";
 is $dumfac->elink->db, 'taxonomy', "elink delegation";
 ok $dumfac->esearch->db('protein'), "esearch set parameter by accessor";
-is $dumfac->esearch->db, 'protein', "was set";
 ok $dumfac->esearch->parameters_changed, "esearch parameters_changed";
+is $dumfac->esearch->db, 'protein', "was set";
 ok !$dumfac->elink->parameters_changed, "elink not parameters_changed";
 
 # work over SoapEUtilities::Result
 
+$dumfac->esummary();
+open my $xmlf, test_input_file('esum_result.xml');
+{ local $/ = undef;
+  $dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlf>);
+}
+
+ok my $result = Bio::DB::SoapEUtilities::Result->new($dumfac), "create Result object (esummary)";
+is $result->count, 3, "count";
+is_deeply( $result->ids, [828392, 790, 470338], "ids" );
+
+$dumfac->esearch;
+open $xmlf, test_input_file('esearch_result.xml');
+{ local $/ = undef;
+  $dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlf>);
+}
+ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac), "create Result object (esearch)";
+is $result->count, 777, "count";
+is_deeply $result->ids, [qw(
+           4212556
+	   7103559
+	   7036330
+	   7005509
+	   6515581
+	   6333573
+	   6067533
+	   5849183
+	   5625162
+	   5613996
+	   5451592
+	   5188376
+	   5182770
+	   5174340
+	   5132346
+	   5079123
+	   4625535
+	   4233539
+	   4227906
+           4171988)], "ids";
+
+
+$dumfac->elink;
+open $xmlf, test_input_file('elink_result.xml');
+{ local $/ = undef;
+  $dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlf>);
+}
+ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac), "create Result object (elink)";
+is $result->count, 3, "count";
+is_deeply( [sort @{$result->ids}], [sort qw(828392 790 470338)], "ids" );
 
 SKIP : {
-    test_skip(-tests => 100, # modify
+    test_skip(-tests => 0, # modify
 	      -requires_networking => 1);
 
 }
