@@ -108,10 +108,12 @@ Internal methods are usually preceded with a _
 package Bio::DB::SoapEUtilities;
 use strict;
 
-use lib '../../..'; # remove later
+use lib '../..'; # remove later
 use Bio::Root::Root;
 use Bio::DB::ESoap;
+use Bio::DB::SoapEUtilities::DocSumAdaptor;
 use Bio::DB::SoapEUtilities::FetchAdaptor;
+use Bio::DB::SoapEUtilities::LinkAdaptor;
 use Bio::DB::SoapEUtilities::Result;
 
 use base qw(Bio::Root::Root Bio::ParameterBaseI );
@@ -146,7 +148,8 @@ sub new {
            (reason in errstr(), for more detail check the SOAP message
             in last_result() )
  Args    : named params appropriate to utility
-           -autofetch => boolean ( run efetch appropriate to util )
+           -auto_adapt => boolean ( return an iterator over results as 
+                                    appropriate to util if true)
            -raw_xml => boolean ( return raw xml result; no processing )
            Bio::DB::SoapEUtilities::Result constructor parms
 
@@ -158,8 +161,9 @@ sub run {
     $self->throw("run method requires named arguments") if @args % 2;
     $self->throw("call run method like '\$fac->\$eutility->run(\@args)") unless
 	$self->_caller_util;
-    my ($autofetch, $raw_xml) = $self->_rearrange( [qw( AUTOFETCH RAW_XML)],
+    my ($autofetch, $raw_xml) = $self->_rearrange( [qw( ADAPTOR RAW_XML)],
 						   @args );
+    my ($adaptor);
     my %args = @args;
     # add tool argument for NCBI records
     $args{tool} = "SoapEUtilities(BioPerl)";
@@ -195,34 +199,53 @@ sub run {
     }
     # attach some key properties to the factory
     $self->{'_WebEnv'} = $som->valueof("//WebEnv");
+    my $result = Bio::DB::SoapEUtilities::Result->new($self, @args);
 
     # success, parse it out
-    if ($autofetch and $self->_caller_util ne 'efetch') {
-	# do an efetch with the same db and a returned list of ids...
-	# reentering here!
-	$DB::single =1;
-	my $result = Bio::DB::SoapEUtilities::Result->new($self, @args);
-	my $ids = $result->ids;
-	if (!$result->count) {
-	    $self->warn("Can't fetch; no records returned");
-	    return $result;
+    if ($autofetch) {
+	for ($self->_caller_util) {
+	    $_ eq 'esearch' && do {
+		# do an efetch with the same db and a returned list of ids...
+		# reentering here!
+		$DB::single =1;
+		my $ids = $result->ids;
+		if (!$result->count) {
+		    $self->warn("Can't fetch; no records returned");
+		    return $result;
+		}
+		if (!$result->ids) {
+		    $self->warn("Can't fetch; no id list returned");
+		    return $result;
+		}
+		if ( !$self->db ) {
+		    my %h = $self->get_parameters;
+		    $self->{db} = $h{db} || $h{DB};
+		}
+		my $fetched = $self->efetch( -db => $self->db,
+					     -id => $ids )->run(-no_parse => 1, @args);
+		$adaptor = Bio::DB::SoapEUtilities::FetchAdaptor->new(
+		    -result => $fetched
+		    );
+		last
+	    };
+	    $_ eq 'elink' && do {
+		$adaptor = Bio::DB::SoapEUtilities::LinkAdaptor->new(
+		    -result => $result
+		    );
+		last;
+	    };
+	    $_ eq 'esummary' && do {
+		$adaptor = Bio::DB::SoapEUtilities::DocSumAdaptor->new(
+		    -result => $result
+		    );
+		last;
+	    };
+	    # else, ignore
 	}
-	if (!$result->ids) {
-	    $self->warn("Can't fetch; no id list returned");
-	    return $result;
-	}
-	if ( !$self->db ) {
-	    my %h = $self->get_parameters;
-	    $self->{db} = $h{db} || $h{DB};
-	}
-	my $fetched = $self->efetch( -db => $self->db,
-				     -id => $ids )->run(@args);
-	1;
-				     
-				     
+	return $adaptor || $result;
     }
     else {
-	return Bio::DB::SoapEUtilities::Result->new($self,@args);
+	return $result;
 	1;
     }
 }
