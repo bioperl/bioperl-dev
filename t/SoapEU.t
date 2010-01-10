@@ -28,10 +28,11 @@ BEGIN {
 
 # ESoap::WSDL
 my $NCBI_SOAP_SVC = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/soap/v2.0/soap_adapter_2_0.cgi";
+my @EUTILS = qw( einfo esearch elink egquery epost espell esummary);
 
 ok my $wsdl = Bio::DB::ESoap::WSDL->new(-wsdl => test_input_file('eutils.wsdl')), "wsdl parse from file";
 
-is_deeply ( [sort values %{$wsdl->operations}], [sort qw( einfo esearch elink egquery epost espell esummary)], "available operations" );
+is_deeply ( [sort values %{$wsdl->operations}], [sort @EUTILS ], "available operations (as of 1/9/10)" );
 is $wsdl->service, $NCBI_SOAP_SVC, "correct soap svc url (as of 1/9/10)";
 
 is_deeply( $wsdl->request_parameters('einfo'), 
@@ -97,7 +98,7 @@ is_deeply( $wsdl->response_parameters('egquery'),
 
 ok my $dumfac = Bio::DB::ESoap->new( -util => 'run_eLink',
 				     -wsdl_file => test_input_file('eutils.wsdl') ), "dummy ESoap factory";
-
+if (0) {
 is $dumfac->util, 'run_eLink', 'operation accessor';
 ok $dumfac = Bio::DB::ESoap->new( -util => 'elink',
 				     -wsdl_file => test_input_file('eutils.wsdl') ), "dummy ESoap factory";
@@ -116,8 +117,27 @@ is $dumfac->db, 'gene', 'parameter as accessor';
 is $dumfac->tool, 'ESoapTest', 'parameter as accessor (2)';
 ok $dumfac->reset_parameters, "reset_parameters";
 ok $dumfac->parameters_changed, "parameters_changed flipped";
+}
+# SoapEUtilities
+$DB::single=1;
+ok $dumfac = Bio::DB::SoapEUtilities->new(), "make SoapEU factory";
 
+ok $dumfac->esearch( -db => 'gene', -term => 'bat guano' ), "esearch instance";
+ok $dumfac->elink( -dbfrom => 'protein', -db => 'taxonomy', -id => [1234,5678] ),
+    "elink instance";
+is_deeply( [$dumfac->esearch->get_parameters],
+	   [qw( db gene term ), "bat guano"], "esearch get_parameters");
+is_deeply( [$dumfac->elink->get_parameters], 
+	   [qw(db taxonomy dbfrom protein id ), [1234, 5678]],
+	   "elink get_parameters" );
+is $dumfac->esearch->db, 'gene', "esearch delegation";
+is $dumfac->elink->db, 'taxonomy', "elink delegation";
+ok $dumfac->esearch->db('protein'), "esearch set parameter by accessor";
+is $dumfac->esearch->db, 'protein', "was set";
+ok $dumfac->esearch->parameters_changed, "esearch parameters_changed";
+ok !$dumfac->elink->parameters_changed, "elink not parameters_changed";
 
+# work over SoapEUtilities::Result
 
 
 SKIP : {

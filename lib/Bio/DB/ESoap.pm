@@ -386,8 +386,11 @@ sub _init_parameters {
 			   -create => 1,
 			   -code => 
 			   'my $self = shift; 
+                            if (@_) {
+                              $self->parameters_changed(1);
+                              return $self->{\'_\'.$method} = shift;
+                            }
                             $self->parameters_changed(0);
-                            return $self->{\'_\'.$method} = shift if @_;
                             return $self->{\'_\'.$method};' );
     $self->parameters_changed(1);
     return $self->{_params};

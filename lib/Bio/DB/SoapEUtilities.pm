@@ -293,18 +293,6 @@ sub webenv { shift->{'_WebEnv'} }
 
 sub errstr { shift->{'errstr'} }
 
-=head2 db()
-
- Title   : db
- Usage   : 
- Function: the current NCBI database
- Returns : scalar string
- Args    : none
-
-=cut
-
-sub db { shift->{'db'} }
-
 =head2 Bio::ParameterBaseI compliance
 
 =head2 available_parameters()
@@ -425,36 +413,49 @@ sub AUTOLOAD {
     my $util = $AUTOLOAD;
     my @args = @_;
     $util =~ s/.*:://;
-    unless ( $util =~ /^e/ ) {
-	$self->throw("Can't locate method '$util' in module ".__PACKAGE__);
+
+    if ( $util =~ /^e/ ) { # this will bite me someday
+	# create an ESoap factory for this utility
+	my $fac = $self->_soap_facs($util); # check cache
+	eval {
+	    $fac ||= Bio::DB::ESoap->new( -util => $util );
+	};
+	for ($@) {
+	    /^$/ && do {
+		$self->_soap_facs($util,$fac); # put in cache
+		last;
+	    };
+	    /Utility .* not recognized/ && do {
+		my $err = (ref $@ ? $@->text : $@);
+		$self->throw($err);
+	    };
+	    do { #else 
+		my $err = (ref $@ ? $@->text : $@);
+		die $err;
+		$self->throw("Problem creating ESoap client : $err");
+	    };
+	}
+	# arg setting 
+	$self->throw("Named arguments required") if @args % 2;
+	$fac->set_parameters(@args) if @args;
+	$self->_caller_util($util);
+	return $self; # now, can do $obj->esearch()->run, etc, with methods in 
+	# this package, with an appropriate low-level factory 
+	# set up in the background.
     }
-    # create an ESoap factory for this utility
-    my $fac = $self->_soap_facs($util); # check cache
-    eval {
-        $fac ||= Bio::DB::ESoap->new( -util => $util );
-    };
-    for ($@) {
-	/^$/ && do {
-	    $self->_soap_facs($util,$fac); # put in cache
-	    last;
-	};
-	/Utility .* not recognized/ && do {
-	    my $err = (ref $@ ? $@->text : $@);
-	    $self->throw($err);
-	};
-	do { #else 
-	    my $err = (ref $@ ? $@->text : $@);
-	    die $err;
-	    $self->throw("Problem creating ESoap client : $err");
-	};
+    elsif ($self->_caller_util) {
+	# delegate to the appropriate soap factory
+	my $method = $util;
+	$util = $self->_caller_util;
+	my $soapfac = $self->_soap_facs($util);
+	if ( $soapfac && $soapfac->can($method) ) {
+	    return $soapfac->$method(@args);
+	}
     }
-    # arg setting 
-    $self->throw("Named arguments required") if @args % 2;
-    $fac->set_parameters(@args) if @args;
-    $self->_caller_util($util);
-    return $self; # now, can do $obj->esearch()->run, etc, with methods in 
-                  # this package, with an appropriate low-level factory 
-                  # set up in the background.
+    else {
+	$self->throw("Can't locate method '$util' in module ".
+		     __PACKAGE__);
+    }
     1;
 }
 
