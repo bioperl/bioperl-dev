@@ -117,6 +117,7 @@ sub next_docsum {
     my $self = shift;
     my $stem = "//Body/".$self->result->result_type."/[".$self->{'_idx'}."]";
     my $som = $self->result->som;
+    return unless $som->valueof($stem);
     my ($ret, %params);
     my $get = sub { $som->valueof("$stem/".shift) };
     
@@ -128,17 +129,17 @@ sub next_docsum {
 	    my $name = $data->attr->{'Name'}[0];
 	    next unless $name;
 	    my $content = $data->value->{'ItemContent'};
-	    unless ($content) {
+	    unless (defined $content) {
 		next unless $som->dataof("$stem/[$i]/Item");
 		my $h = {};
-	        _traverse_items("$stem/[$i]", $som, $h);
+		_traverse_items("$stem/[$i]", $som, $h);
 		$content = $h;
 	    }
 	    push @$names, $name;
 	    $params{$name} = $content;
 	}
     }
-    $params{'-item_names'} = $names;
+    $params{'_item_names'} = $names;
     my $class = ref($self)."::docsum";
     $ret = $class->new(%params);
     ($self->{'_idx'})++;
@@ -197,6 +198,20 @@ sub new {
 	);
     return $self;
 }
+
+=head2 item_names()
+
+ Title   : item_names
+ Usage   : @accs = $docsum->item_names
+ Function: Return a list of items accessible from the 
+           object
+ Returns : array of scalar strings
+ Args    : none
+
+=cut
+
+sub item_names { my $a = shift->{'__item_names'} ; return @$a if $a }
+
 
     
 1;
