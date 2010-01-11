@@ -349,7 +349,8 @@ sub service {
 
 sub db {
     my $self = shift;
-    $self->root->namespace('nsef') =~ /efetch_(.*?)\.wsdl/;
+    $DB::single =1 if $self->root->namespace('nsef');
+    $self->root->namespace('nsef') =~ /efetch_(.*?)$/;
     return $1;
 }
 
