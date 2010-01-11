@@ -78,13 +78,40 @@ TODO: {
     ok $seq = $seqio->next_seq, "iterate adaptor";
     if ($seq) { ok $seq->seq, "sequence now present"; } else {ok 1;}
 }
-    }
-$DB::single=1;
 
 diag("Get the scientific name for an organism");
 ok $fac->efetch->reset_parameters( -db=>'taxonomy', -id=>[$sciname_id, $sciname_id+1] ), "set params for sciname test";
 ok my $spio = $fac->efetch->run(-auto_adapt => 1), "run with autoadapt";
 ok my $sp = $spio->next_species;
+like $sp->scientific_name, qr/Bacillus thuringiensis/, "sciname";
+is ($sciname_id, $sp->ncbi_taxid, "taxid retrieved and correct");
+
+ok $fac->esummary( -db => 'taxonomy', -id => $sciname_id ), "set esummary parms";
+ok my $docs = $fac->run(-auto_adapt=>1), "run with autoadapt";
+ok my $doc = $docs->next_docsum, "iterate adaptor";
+like $doc->ScientificName, qr/Bacillus thuringiensis/, "sciname";
+is ($sciname_id, $doc->TaxId, "taxid retrieved and correct");
+
+ok $fac->esearch( -db=>'protein', -term=> 'BRCA and human', -usehistory=>1 );
+ok $result = $fac->run, "run with method parsing";
+is $result->QueryTranslation, 
+   'BRCA[All Fields] AND ("Homo sapiens"[Organism] OR human[All Fields])',
+"query translation";
+cmp_ok $result->count, ">=", 73, "result count";
+ok $fac->esearch->reset_parameters( -WebEnv => $result->webenv, 
+				    -QueryKey => $result->query_key,
+				    -RetMax => 100 );
+ok my $wresult = $fac->esearch->run, "run web environment query with retmax set";
+cmp_ok $wresult->count, ">=", 73, "all ids retrieved";
+
+ok $result = $fac->einfo()->run, "run einfo general query";
+cmp_ok scalar(@{$result->dbs}), ">=", 42, "bunch o' dbs";
+ok $result = $fac->einfo(-db=>'pubmed')->run, "run pubmed info";
+is $result->db, 'pubmed', "dbname";
+cmp_ok $result->record_count, ">=", 19000000, "record count";
+
+    }
+$DB::single=1;
 
 
 1;
