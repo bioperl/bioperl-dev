@@ -122,7 +122,7 @@ ok $dumfac->parameters_changed, "parameters_changed flipped";
 
 # SoapEUtilities
 
-ok $dumfac = Bio::DB::SoapEUtilities->new(), "make SoapEU factory";
+ok $dumfac = Bio::DB::SoapEUtilities->new( -wsdl_file => test_input_file('eutils.wsdl') ), "make SoapEU factory";
 
 ok $dumfac->esearch( -db => 'gene', -term => 'bat guano' ), "esearch instance";
 ok $dumfac->elink( -dbfrom => 'protein', -db => 'taxonomy', -id => [1234,5678] ),
@@ -331,15 +331,33 @@ my @item_names = qw(
                     ChrStart
                    );
 is_deeply( [$docsums->next_docsum->item_names], [@item_names], "docsum item list" );
-# fetch genbank
 
-$dumfac->efetch;
+
+### test FetchAdaptors : add test set with local wsdls and xml result data
+### for each new subclass...
+### create local wsdls by including and importing types/schemas by hand into
+### the local copy (to avoid network hits in this .t)
+###
+
+# fetch genbank
+$DB::single=1;
+# change wsdls
+ok $dumfac = Bio::DB::SoapEUtilities->new( -wsdl_file => test_input_file('efetch_seq.wsdl') ), "change wsdl";
+$dumfac->efetch();
 open $xmlf, test_input_file('gb_result.xml');
 { local $/ = undef;
   $dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlf>);
 }
 ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac, -no_parse=>1), "create Result object (efetch protein (GenBank), don't parse methods)";
 
+ok my $seqio = Bio::DB::SoapEUtilities::FetchAdaptor->new( -result => $result ),
+    "create FetchAdaptor";
+
+isa_ok $seqio, 'Bio::DB::SoapEUtilities::FetchAdaptor::seq';
+
+ok my $seq = $seqio->next_obj, "iterate with next_obj";
+ok $seq = $seqio->next_seq, "iterate with next_seq";
+1;
 
 # remove later
 sub test_input_file { "data/".shift };
