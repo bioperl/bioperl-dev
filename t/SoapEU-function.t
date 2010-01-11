@@ -92,6 +92,7 @@ ok my $doc = $docs->next_docsum, "iterate adaptor";
 like $doc->ScientificName, qr/Bacillus thuringiensis/, "sciname";
 is ($sciname_id, $doc->TaxId, "taxid retrieved and correct");
 
+diag("Simple database query");
 ok $fac->esearch( -db=>'protein', -term=> 'BRCA and human', -usehistory=>1 );
 ok $result = $fac->run, "run with method parsing";
 is $result->QueryTranslation, 
@@ -104,17 +105,62 @@ ok $fac->esearch->reset_parameters( -WebEnv => $result->webenv,
 ok my $wresult = $fac->esearch->run, "run web environment query with retmax set";
 cmp_ok $wresult->count, ">=", 73, "all ids retrieved";
 
+diag("What databases are available for querying via eUtils?");
 ok $result = $fac->einfo()->run, "run einfo general query";
 cmp_ok scalar(@{$result->dbs}), ">=", 42, "bunch o' dbs";
+
+diag("What information is available for database 'x'?");
 ok $result = $fac->einfo(-db=>'pubmed')->run, "run pubmed info";
 is $result->db, 'pubmed', "dbname";
 cmp_ok $result->record_count, ">=", 19000000, "record count";
 
+diag("How do I run a global query against all Entrez databases?");
+
+ok my $queries = $fac->egquery( -term => 'BRCA and human' )->run(-auto_adapt=>1), "run fac for eGQuery, autoadapt";
+
+ok my $query = $queries->query_by_db('protein'), "query by db (protein)";
+is $query->term, 'BRCA and human', "term accessor correct";
+ok !$queries->query_by_db('bllog'), "no query by db (bllog)";
+for ( $i=0; my $q = $queries->next_query; $i++ ) {
+    ok $q->db, "db (query $i)";
+}
+cmp_ok scalar($queries->found_in_dbs), ">=", 11, "found in enuf dbs";
+cmp_ok scalar($queries->found_in_dbs), "<=", $i, "but not in too many";
+
+diag("I want the document summaries for a list of IDs from database 'x'.");
+ok my $docs = $fac->esummary( -db=>'gene', -id=>\@prot_ids_2 )->run(-auto_adapt=>1), "run esummary, autoadapt";
+my @tax = (3702, 9606, 9598);
+my @acc = qw( NC_003075.7 NC_000002.11 NC_006469.2 );
+for ($i=0; my $doc = $docs->next_docsum; $i++) {
+    is $doc->id, $prot_ids_2[$i], " id retrieved";
+    is $doc->TaxID, $tax[$i], " taxid retrieved correctly";
+    is $doc->GenomicInfo->{ChrAccVer}, $acc[$i], "chrom acc/ver retrived correctly";
+    cmp_ok scalar ($doc->item_names), ">", 5, "bunch o' items";
+}
+is $i, 3, "got all docsums";
     }
 $DB::single=1;
 
+diag("I want a list of database 'x' UIDs that are linked from a list of database 'y' UIDs");
 
+ok my $links =$fac->elink( -db => 'nucleotide',
+			 -dbfrom => 'protein',
+			 -id => \@prot_ids )->run( -auto_adapt => 1), 
+"run elink protein->nucleotide, auto adapt";
+my %h;
+for ($i=0; my $linkset = $links->next_linkset; $i++) {
+    my @ids = $linkset->ids;
+    my @submitted_ids = $linkset->submitted_ids;
+    $h{$submitted_ids[0]} = @ids == 1 ? $ids[0] : [@ids];
+}
+for (keys %h) {
+    is_deeply( $links->id_map($_) || [], $h{$_}, "id_map correct ($_)");
+    1;
+}
+is $i, 5, "got all linksets";
 1;
+    
+
 
 
 1;
