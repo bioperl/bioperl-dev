@@ -10,7 +10,7 @@ BEGIN {
     $home = '..'; # set to '.' for Build use, 
                       # '..' for debugging from .t file
     unshift @INC, $home;
-    test_begin(-tests => 62, # modify
+    test_begin(-tests => 103, # modify
 	       -requires_modules => [qw(Bio::DB::ESoap
                                         Bio::DB::ESoap::WSDL
                                         Bio::DB::SoapEUtilities
@@ -29,6 +29,8 @@ BEGIN {
 # ESoap::WSDL
 my $NCBI_SOAP_SVC = "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/soap/v2.0/soap_adapter_2_0.cgi";
 my @EUTILS = qw( einfo esearch elink egquery epost espell esummary);
+
+diag("NOTE: No network access required for these tests; all are local file-based.");
 
 ok my $wsdl = Bio::DB::ESoap::WSDL->new(-wsdl => test_input_file('eutils.wsdl')), "wsdl parse from file";
 
@@ -151,7 +153,7 @@ is $result->count, 3, "count";
 is_deeply( $result->ids, [828392, 790, 470338], "ids" );
 
 $dumfac->esearch;
-open $xmlf, test_input_file('esearch_result.xml');
+open my $xmlf, test_input_file('esearch_result.xml');
 { local $/ = undef;
   $dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlf>);
 }
@@ -218,8 +220,8 @@ ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac,
 						  -prune_at_nodes =>
 						      '//LinkSet/LinkSetDb/LinkName'
     ), "result, parse but prune at single node //LinkSet/LinkSetDb/LinkName";
-is ($result->LinkSet_DbFrom, 'gene', "DbFrom");
-is ($result->gefilte_fish, 'gene', "alias correct");
+is ($result->LinkSet_DbFrom->[0], 'gene', "DbFrom");
+is ($result->gefilte_fish->[0], 'gene', "alias correct");
 ok $result->LinkSet_LinkSetDb_DbTo, "DbTo present, but..";
 ok !$result->LinkSet_LinkSetDb_LinkName, "LinkName is not";
 ok $result = Bio::DB::SoapEUtilities::Result->new($dumfac, 
@@ -234,22 +236,101 @@ ok !grep(/LinkSet_LinkSetDb/, $result->accessors), "LinkSet_LinkSetDb not presen
 # Adaptors
 
 # linkset
+my $i;
+
+my %testdata = (
+    'db_from' => 'gene',
+    'db_to' => 'taxonomy',
+    'link_name' => 'gene_taxonomy',
+    'submitted_ids' => [ [790], [828392], [470338] ],
+    'ids' => [ [9606], [3702], [9598] ],
+    'submitted_ids_flat' => [790, 828392, 470338 ],
+    'ids_flat' => [ 9606, 3702, 9598 ]
+    );
 
 ok my $links = Bio::DB::SoapEUtilities::LinkAdaptor->new(
     -result => $result
     ), "get linkset adapator";
 
+for ($i = 0; my $linkset = $links->next_linkset; $i++) {
+    for ( keys %testdata ) {
+	next if /flat/;
+	if (/ids/) {
+	    is_deeply( [$linkset->$_], $testdata{$_}->[$i], "linkset accessor ($_)");
+	}
+	else {
+	    is $linkset->$_, $testdata{$_}, "linkset accessor ($_)";
+	}
+    }
+    is ($links->id_map($testdata{'submitted_ids_flat'}->[$i]),
+	$testdata{'ids_flat'}->[$i], 'id_map correct correspondence');
+    
+}
+
+is ($i, 3, "all linksets accessed");
+$links->rewind;
+ok $links->next_linkset, "rewind works";
+
 
 
 # docsum
 $dumfac->esummary;
-$dumfac->{'_response_message'} = SOAP::Deserializer->deserialize($xmlsumf);
+open $xmlf, test_input_file('esum_result.xml');
+{local $/=undef;
+$dumfac->{'_response_message'} = SOAP::Deserializer->deserialize(<$xmlf>);
+}
 $result = Bio::DB::SoapEUtilities::Result->new($dumfac, -no_parse=>1);
 
 ok my $docsums = Bio::DB::SoapEUtilities::DocSumAdaptor->new(
-    -result = $result
+    -result => $result
     ), "get docsum adaptor";
 
+
+%testdata = (
+    'id' => [828392, 790, 470338],
+    'Name' => [qw(PYR4 CAD CAD)],
+    'Orgname' => [qw(Arabidopsis Homo Pan)],
+    'TaxID' => [3702, 9606, 9598],
+    'ChrAccVer' => [qw( NC_003075.7 NC_000002.11 NC_006469.2 )]
+    );
+
+for ( $i=0; my $docsum = $docsums->next_docsum; $i++ ) {
+    foreach (keys %testdata) {
+	if (!/Chr/) {
+	    my $t =  $testdata{$_}->[$i];
+	    like $docsum->$_, qr/$t/, "docsum accessor ($_)";
+	}
+	else {
+	    is ($docsum->GenomicInfo->{$_}, $testdata{$_}->[$i], "docsum hash accessor (GenomicInfo/$_)");
+	}
+    }
+}
+is ($i, 3, "all docsums accessed");
+$docsums->rewind;
+ok $docsums->next_docsum, "rewind works";
+
+my @item_names = qw(
+                    Name
+                    Description
+                    Orgname
+                    Status
+                    CurrentID
+                    Chromosome
+                    GeneticSource
+                    MapLocation
+                    OtherDesignations
+                    NomenclatureSymbol
+                    NomenclatureName
+                    NomenclatureStatus
+                    TaxID
+                    Mim
+                    GenomicInfo
+                    GeneWeight
+                    Summary
+                    ChrSort
+                    ChrStart
+                   );
+is_deeply( [$docsums->next_docsum->item_names], [@item_names], "docsum item list" );
 # fetch genbank
 
 $dumfac->efetch;
