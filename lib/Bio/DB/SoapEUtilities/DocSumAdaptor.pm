@@ -125,7 +125,7 @@ sub next_docsum {
 
     my $names = [];
     for (my $i = 1; my $data = $som->dataof("$stem/[$i]"); $i++) {
-	if ( $data->value ) {
+	if ( $data->value and $data->value !~ /^\s*$/) {
 	    my $name = $data->attr->{'Name'}[0];
 	    next unless $name;
 	    my $content = $data->value->{'ItemContent'};
@@ -192,8 +192,8 @@ sub new {
                             my $d = shift;
                             my $k = \'_\'.$method;
                             $self->{$k} = $d if $d;
-                            return (ref $self->{$k} eq \'ARRAY\') ?
-                                   @{$self->{$k}} : $self->{$k};'
+                            return (ref($self->{$k}) eq \'ARRAY\' ?
+                                   @{$self->{$k}} : $self->{$k});'
 
 	);
     return $self;

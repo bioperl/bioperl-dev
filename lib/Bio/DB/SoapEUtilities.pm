@@ -113,6 +113,7 @@ use Bio::Root::Root;
 use Bio::DB::ESoap;
 use Bio::DB::SoapEUtilities::DocSumAdaptor;
 use Bio::DB::SoapEUtilities::FetchAdaptor;
+use Bio::DB::SoapEUtilities::GQueryAdaptor;
 use Bio::DB::SoapEUtilities::LinkAdaptor;
 use Bio::DB::SoapEUtilities::Result;
 
@@ -261,6 +262,12 @@ sub run {
 	    };
 	    $_ eq 'esummary' && do {
 		$adaptor = Bio::DB::SoapEUtilities::DocSumAdaptor->new(
+		    -result => $result
+		    );
+		last;
+	    };
+	    $_ eq 'egquery' && do {
+		$adaptor = Bio::DB::SoapEUtilities::GQueryAdaptor->new(
 		    -result => $result
 		    );
 		last;
