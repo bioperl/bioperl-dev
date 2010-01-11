@@ -126,21 +126,24 @@ sub next_obj {
     return unless defined $som->valueof("$stem");
 
     my $get = sub { $som->valueof("$stem/GBSeq_".shift) };
+    # speed up (?) by caching top-level data hash
+    my $toplev = $som->valueof("$stem");
+    my $get_tl = sub { $toplev->{'GBSeq_'.shift} };
     # parsing based on Bio::SeqIO::genbank
 
     my %params = (-verbose => $self->verbose);
 
     # source, id, alphabet
-    $params{'-display_id'} = $get->('locus');
-    $params{'-length'} = $get->('length');
-    $get->('moltype') =~ /(AA|[DR]NA)/;
+    $params{'-display_id'} = $get_tl->('locus');
+    $params{'-length'} = $get_tl->('length');
+    $get_tl->('moltype') =~ /(AA|[DR]NA)/;
     $params{'-alphabet'} = $VALID_ALPHABET{$1} || '';
 
     # molecule, division, dates
-    $params{'-molecule'} = $get->('moltype');
-    $params{'-is_circular'} = ($get->('topology') eq 'circular');
+    $params{'-molecule'} = $get_tl->('moltype');
+    $params{'-is_circular'} = ($get_tl->('topology') eq 'circular');
     $params{'-division'} = $get->('division');
-    $params{'-dates'} = [$get->('create-date'), $get->('update-date')];
+    $params{'-dates'} = [$get_tl->('create-date'), $get_tl->('update-date')];
 
     $self->builder->add_slot_value(%params);
     %params = ();
@@ -152,7 +155,7 @@ sub next_obj {
     }
 
     # accessions, version, pid, description
-    $get->('accession-version') =~ /.*\.([0-9]+)$/;
+    $get_tl->('accession-version') =~ /.*\.([0-9]+)$/;
     $params{'-version'} = $params{'-seq_version'} = $1;
     my @secondary_ids;
     my @ids = $get->('other-seqids/GBSeqid');
@@ -199,33 +202,33 @@ sub next_obj {
 	}
 	
 	# comment
-	if ($get->('comment')) {
+	if ($get_tl->('comment')) {
 	    $ann->add_Annotation('comment', 
 				 Bio::Annotation::Comment->new(
 				     -tagname => 'comment',
-				     -text => $get->('comment')
+				     -text => $get_tl->('comment')
 				 )
 		);
 	}
 	# project
-	if ( $get->('project') ) {
+	if ( $get_tl->('project') ) {
 	    $ann->add_Annotation('project',
 				 Bio::Annotation::SimpleValue->new(
-				     -value => $get->('project')
+				     -value => $get_tl->('project')
 				 )
 		);
 	}
 	# contig
-	if ($get->('contig')) {
+	if ($get_tl->('contig')) {
 	    $ann->add_Annotation('contig',
 			       Bio::Annotation::SimpleValue->new(
-				   -value => $get->('contig')
+				   -value => $get_tl->('contig')
 				   )
 		);
 	}
 	    
 	# dblink
-	if ($get->('source-db')) {
+	if ($get_tl->('source-db')) {
 	    _read_db_source($ann, $get);
 	} 
 
@@ -242,7 +245,7 @@ sub next_obj {
     }
 
     # organism data
-    if ( $self->builder->want_slot('species') && $get->('source') ) {
+    if ( $self->builder->want_slot('species') && $get_tl->('source') ) {
 	my $sp = _read_species($get);
 	if ($sp && !$sp->ncbi_taxid) {
 	    my ($src) = grep { $_->primary_tag eq 'source' } @$feats;
