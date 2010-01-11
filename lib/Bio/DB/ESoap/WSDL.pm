@@ -349,7 +349,7 @@ sub service {
 
 sub db {
     my $self = shift;
-    $self->url =~ /efetch_(.*?)\.wsdl/;
+    $self->root->namespace('nsef') =~ /efetch_(.*?)\.wsdl/;
     return $1;
 }
 
