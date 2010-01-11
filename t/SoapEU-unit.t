@@ -10,7 +10,7 @@ BEGIN {
     $home = '..'; # set to '.' for Build use, 
                       # '..' for debugging from .t file
     unshift @INC, $home;
-    test_begin(-tests => 103, # modify
+    test_begin(-tests => 139,
 	       -requires_modules => [qw(Bio::DB::ESoap
                                         Bio::DB::ESoap::WSDL
                                         Bio::DB::SoapEUtilities
@@ -340,7 +340,8 @@ is_deeply( [$docsums->next_docsum->item_names], [@item_names], "docsum item list
 ###
 
 # fetch genbank
-$DB::single=1;
+
+#my ($dumfac, $xmlf,$result,%testdata,$i);
 # change wsdls
 ok $dumfac = Bio::DB::SoapEUtilities->new( -wsdl_file => test_input_file('efetch_seq.wsdl') ), "change wsdl";
 $dumfac->efetch();
@@ -355,8 +356,81 @@ ok my $seqio = Bio::DB::SoapEUtilities::FetchAdaptor->new( -result => $result ),
 
 isa_ok $seqio, 'Bio::DB::SoapEUtilities::FetchAdaptor::seq';
 
-ok my $seq = $seqio->next_obj, "iterate with next_obj";
-ok $seq = $seqio->next_seq, "iterate with next_seq";
+%testdata = (
+    'id' => [qw( CAB02640 EAS10332 )],
+    'seq' => [qw( mgaagdaaigres mgapdqsgsdrelmsa )],
+    'alphabet' => [qw( protein protein )],
+    'molecule' => [qw( AA AA )],
+    'seq_version' => [ 1, 1 ],
+    'feats' => [{ 'Region' => { 'start' => [11,11],
+				'end' => [193, 186],
+				'tags' => {
+				    'region_name' => [qw( Pribosyltran Pribosyltran )]
+				}
+		  },
+		  'CDS' => {
+		      'start' => [1, 1],
+		      'end'   => [193, 193],
+		      'tags'  => {
+			  'coded_by' => [qw( BX842576.1:169611..170192
+                                             AAPA01000007.1:178491..179072)]
+		      }
+		  }
+			  
+		}],
+    'annotation' => [{ 
+	'reference' => { 
+	    'title' => ['Deciphering the biology',
+                       'Sequencing of the draft'],
+	    'consortium' => [ undef, 'JGI-PGF' ],
+	    'pubmed' => [9634230, undef]
+	}
+		     }],
+    'species' => { 
+	'genus' => [qw( Mycobacterium Mycobacterium )],
+	'binomial' => [qw( tuberculosis gilvum ) ]
+    }
+    );
+
+	             
+for ( $i=0; my $seq = $seqio->next_seq; $i++ ) {
+    is( $seq->id, $testdata{id}->[$i], 'id' );
+    like $seq->seq, qr/${$testdata{seq}}[$i]/, 'seq';
+    is $seq->alphabet, $testdata{alphabet}->[$i], 'alphabet';
+    is $seq->molecule, $testdata{molecule}->[$i], 'molecule';
+    is $seq->version, 1, 'seq_version';
+    like $seq->species->genus, qr/${$testdata{species}}{genus}[$i]/, 'species/genus';
+    like $seq->species->binomial, qr/${$testdata{species}}{binomial}[$i]/, 
+    'species/binomial';
+    my @feats = $seq->get_SeqFeatures;
+    foreach my $testf (@{$testdata{feats}}) {
+	foreach my $pt (keys %$testf) {
+	    my ($feat) = grep { $_->primary_tag eq $pt } @feats;
+	    is $feat->start, $testf->{$pt}{'start'}[$i], "$pt/start";
+	    is $feat->end, $testf->{$pt}{'end'}[$i], "$pt/end";
+	    foreach my $tag (keys %{$testf->{$pt}{tags}}) {
+		my $tdata = $testf->{$pt}{tags}{$tag}[$i];
+		is (($feat->get_tag_values($tag))[0], $tdata, "$pt/$tag");
+	    }
+	}
+    }
+
+    foreach my $testa (@{$testdata{annotation}}) {
+	foreach (keys %$testa) {
+	    my ($ann) = $seq->annotation->get_Annotations($_);
+	    foreach my $key (keys %{$testa->{$_}}) {
+		my $tdata = $testa->{$_}{$key}[$i];
+		if (!defined $tdata && !defined $ann->$key) {
+		    ok 1;
+		}
+		else {
+		    like $ann->$key, qr/$tdata/, "$_/$key";
+		}
+	    }
+	}
+    }
+}
+is ($i, 2, "got all seqs");
 1;
 
 # remove later
