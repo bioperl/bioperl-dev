@@ -261,15 +261,28 @@ sub run {
     my %args = $self->get_parameters;
     my @soap_data;
     for my $k (keys %args) {
+	## kludges for NCBI inconsistencies:
+	my $k_ncbi;
+	for ($k) {
+	    /QueryKey/ && do {
+		$k_ncbi = 'query_key';
+		last;
+	    };
+	    /RetMax/ && do {
+		$k_ncbi = 'retmax';
+		last;
+	    };
+	    $k_ncbi = $k;
+	}
 	my $data = $args{$k};
 	next unless defined $data;
 	for (ref $data) {
 	    /^$/ && do {
-		push @soap_data, SOAP::Data->name($k)->value($data);
+		push @soap_data, SOAP::Data->name($k_ncbi)->value($data);
 		last;
 	    };
 	    /ARRAY/ && do {
-		push @soap_data, SOAP::Data->name($k)->value(join(',',@$data));
+		push @soap_data, SOAP::Data->name($k_ncbi)->value(join(',',@$data));
 		last;
 	    };
 	    /HASH/ && do {
@@ -277,7 +290,7 @@ sub run {
 		# key (id lists for elink, e.g.)
 		# see ...::SoapEUtilities, c. line 151
 		push @soap_data, map { 
-		    SOAP::Data->name($k)->value($_)
+		    SOAP::Data->name($k_ncbi)->value($_)
 		} keys %$data;
 	    };
 	}

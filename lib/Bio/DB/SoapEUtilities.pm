@@ -202,7 +202,29 @@ sub run {
     }
     # attach some key properties to the factory
     $self->{'_WebEnv'} = $som->valueof("//WebEnv");
-    my $result = Bio::DB::SoapEUtilities::Result->new($self, @args);
+    # create convenient aliases off result for different utils
+    my @alias_hash;
+    for ($util) {
+	/einfo/ && do {
+	    my %args = $self->get_parameters;
+	    if ($args{db}) {
+		push @alias_hash, (
+		    '-alias_hash' => {
+			'record_count' => 'DbInfo_Count',
+			'last_update' => 'DbInfo_LastUpdate',
+			'db' => 'DbInfo_DbName',
+			'description' => 'DbInfo_Description'
+		    } );
+	    }
+	    else {
+		push @alias_hash, ('-alias_hash' => {'dbs' => 'DbList_DbName'} );
+	    }
+	    last;
+	};
+	# put others here as nec
+    }
+    my $result = Bio::DB::SoapEUtilities::Result->new($self, @args,
+	@alias_hash);
 
     # success, parse it out
     if ($autofetch) {
