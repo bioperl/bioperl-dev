@@ -371,7 +371,7 @@ sub _read_features {
     my ($stem, $som, $locfac, $get_pri) = @_;
     my @ret;
     my $seqid = $get_pri->('primary-accession');
-    $DB::single=1;
+
     for ( my $i = 1; $get_pri->("feature-table/[$i]"); $i++ ) {
 	my $get = sub { 
 	    $som->valueof($stem."/GBSeq_feature-table/[$i]/GBFeature_".shift ) 
