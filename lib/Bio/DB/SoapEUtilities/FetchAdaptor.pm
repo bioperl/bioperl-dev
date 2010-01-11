@@ -118,7 +118,7 @@ sub new {
 	$class->throw("Can't determine fetch type for this result")
 	    unless $type;
 	# $type ultimately contains a FetchAdaptor subclass
-	return unless( $class->_load_adaptor($type) );
+	return unless( $class->_load_adaptor($type, $result) );
 	return "Bio::DB::SoapEUtilities::FetchAdaptor::$type"->new(@args);
     }
 }
@@ -156,22 +156,30 @@ sub _initialize {
 =cut
 
 sub _load_adaptor {
-    my ($self, $type) = @_;
+    my ($class, $type, $result) = @_;
     return unless $type;
+    # specials
+    for ($result->fetch_type) {
+	$_ eq 'seq' && do {
+	    $_[1] = $type = 'species' if $result->fetch_db eq 'taxonomy';
+	    last;
+	};
+	# else, leave $type alone
+    }
     my $module = "Bio::DB::SoapEUtilities::FetchAdaptor::".$type;
     my $ok;
     eval {
-	$ok = $self->_load_module($module);
+	$ok = $class->_load_module($module);
     };
     for ($@) {
 	/^$/ && do {
 	    return $ok;
 	};
 	/Can't locate/ && do {
-	    $self->throw("Fetch adaptor for '$type' not found");
+	    $class->throw("Fetch adaptor for '$type' not found");
 	};
 	do { # else 
-	    $self->throw("Error in fetch adaptor for '$type' : $@");
+	    $class->throw("Error in fetch adaptor for '$type' : $@");
 	};
     }
 }

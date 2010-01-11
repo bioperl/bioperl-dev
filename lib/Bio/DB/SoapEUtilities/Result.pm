@@ -250,6 +250,9 @@ sub new {
     $self->{'_WebEnv'} = $som->valueof("//WebEnv");
     $self->{'_QueryKey'} = $som->valueof("//QueryKey");
     $self->{'_fetch_type'} = $eutil_obj->_soap_facs($self->util)->_wsdl->db;
+    $self->{'_fetch_db'} = ($self->util eq 'efetch' ? 
+			    $eutil_obj->_soap_facs($self->util)->db :
+			    undef);
 
     return ($no_parse ? $self : $self->parse_methods($alias_hash,
 						     $prune_at_nodes));
@@ -420,6 +423,8 @@ sub query_key { shift->{'_QueryKey'} }
 =cut
 
 sub fetch_type { shift->{'_fetch_type'} }
+
+sub fetch_db { shift->{'_fetch_db'} }
 
 sub result_type { shift->{'_result_type'} }
 

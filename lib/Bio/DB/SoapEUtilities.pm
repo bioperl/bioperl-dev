@@ -162,7 +162,7 @@ sub run {
     $self->throw("run method requires named arguments") if @args % 2;
     $self->throw("call run method like '\$fac->\$eutility->run(\@args)") unless
 	$self->_caller_util;
-    my ($autofetch, $raw_xml) = $self->_rearrange( [qw( ADAPTOR RAW_XML)],
+    my ($autofetch, $raw_xml) = $self->_rearrange( [qw( AUTO_ADAPT RAW_XML)],
 						   @args );
     my ($adaptor);
     my %args = @args;
@@ -239,6 +239,12 @@ sub run {
 	    };
 	    $_ eq 'esummary' && do {
 		$adaptor = Bio::DB::SoapEUtilities::DocSumAdaptor->new(
+		    -result => $result
+		    );
+		last;
+	    };
+	    $_ eq 'efetch' && do {
+		$adaptor = Bio::DB::SoapEUtilities::FetchAdaptor->new(
 		    -result => $result
 		    );
 		last;
