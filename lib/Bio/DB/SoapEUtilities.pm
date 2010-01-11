@@ -133,8 +133,9 @@ our $AUTOLOAD;
 sub new {
     my ($class,@args) = @_;
     my $self = $class->SUPER::new(@args);
-    my ($db) = $self->_rearrange( [qw( DB )], @args );
+    my ($db, $wsdl) = $self->_rearrange( [qw( DB WSDL_FILE )], @args );
     $self->{db} = $db;
+    $self->{'_wsdl_file'} = $wsdl;
 
     return $self;
 }
@@ -295,6 +296,8 @@ sub webenv { shift->{'_WebEnv'} }
 
 sub errstr { shift->{'errstr'} }
 
+sub _wsdl_file { shift->{'_wsdl_file'} }
+
 =head2 Bio::ParameterBaseI compliance
 
 =head2 available_parameters()
@@ -419,8 +422,12 @@ sub AUTOLOAD {
     if ( $util =~ /^e/ ) { # this will bite me someday
 	# create an ESoap factory for this utility
 	my $fac = $self->_soap_facs($util); # check cache
+	my @pms = ( -util => $util );
+	if ($self->_wsdl_file) {
+	    push @pms, ( -wsdl_file => $self->_wsdl_file );
+	}
 	eval {
-	    $fac ||= Bio::DB::ESoap->new( -util => $util );
+	    $fac ||= Bio::DB::ESoap->new( @pms );
 	};
 	for ($@) {
 	    /^$/ && do {
