@@ -14,7 +14,7 @@
 
 =head1 NAME
 
-Bio::DB::SoapEUtilities - Interface to NCBI Entrez web service
+Bio::DB::SoapEUtilities - Interface to the NCBI Entrez web service
 
 =head1 SYNOPSIS
 
@@ -38,10 +38,109 @@ each method through the L<Bio::ParameterBaseI> standard calls
 (C<available_parameters(), set_parameters(), get_parameters(),
 reset_parameters()>). Returned data can be retrieved, accessed and
 parsed in several ways, according to user preference. Adaptors and
-object iterators are availabe for C<efetch>, C<elink>, and C<esummary>
-results.
+object iterators are available for C<efetch>, C<egquery>, C<elink>,
+and C<esummary> results.
 
 =head1 USAGE
+
+The C<SoapEU> system has been designed to be as easy (few includes,
+available parameter facilities, reasonable defaults, intuitive
+aliases, built-in pipelines) or as complex (accessors for underlying
+low-level objects, all parameters accessible, custom hooks for builder
+objects, facilities for providing local copies of WSDLs) as the user
+requires or desires. (To the extent that it does not succeed in either
+direction, it it up to the user to report to the mailing list
+(L</FEEDBACK>)!)
+
+=head2 Factory
+
+To begin, make a factory:
+
+ my $fac = Bio::DB::EUtilities->new();
+
+From the factory, utilities are called, parameters are set, and
+results or adaptors are retrieved.
+
+=head2 Utilities and parameters
+
+To run any of the standard NCBI EUtilities (C<einfo, esearch, esummary, 
+elink, egquery, epost, espell>), call the desired utility from the factory.
+To use a utility, you must set its parameters and run it to get a result. 
+TMTOWTDI:
+
+ # verbose
+ my $fetch = $fac->efetch();
+ $fetch->set_parameters( -db => 'gene', -id => [828392, 790]);
+ my $result = $fetch->run;
+
+ # compact
+ my $result = $fac->efetch(-db =>'gene',-id => [828392,790])->run;
+
+ # change ids
+ $fac->efetch->set_parameters( -id => 470338 );
+ $result = $fac->run;
+
+ # another util
+ $result = $fac->esearch(-db => 'protein', -term => 'BRCA and human')->run;
+ 
+ # the utilities are kept separate
+ %search_params = $fac->esearch->get_parameters;
+ %fetch_params = $fac->efetch->get_parameters;
+ $search_param{db}; # is 'protein'
+ $fetch_params{db}; # is 'gene'
+ 
+The factory is L<Bio::ParameterBaseI> compliant: that means you can
+find out what you can set with
+ 
+ @available_search = $fac->esearch->available_parameters;
+ @available_egquery = $fac->egquery->available_parameters;
+
+For more information on parameters, see
+L<http://www.ncbi.nlm.nih.gov/entrez/query/static/eutils_help.html>.
+
+=head2 Results
+
+The "intermediate" object for C<SoapEU> query results is the
+L<Bio::DB::SoapEUtilities::Result>. This is a BioPerly parsing of the
+SOAP message sent by NCBI when a query is C<run()>. This can be very
+useful on it's own, but most users will likely want to proceed
+directly to L</Adaptors>, which take a C<Result> and turn it into more
+intuitive/familiar BioPerl objects. Go there if the following details
+are too gory.
+
+Results can be highly- or lowly-parsed, depending on the parameters
+passed to the factory C<run()> method. To get the raw XML message with
+no parsing, do
+
+ my $xml = $fac->$util->run(-raw_xml => 1); # $xml is a scalar string
+
+To retrieve a L<Bio::DB::SoapEUtilities::Result> object with limited
+parsing, but with accessors to the L<SOAP::SOM> message (provided by
+L<SOAP::Lite>), do
+
+ my $result = $fac->$util->run(-no_parse => 1);
+ my $som = $result->som;
+ my $method_hash = $som->method; # etc...
+
+To retrieve a C<Result> object with message elements parsed into
+accessors, including C<count()> and C<ids()>, run without arguments:
+
+ my $result = $fac->esearch->run()
+ my $count = $result->count;
+ my @Count = $result->Count; # counts for each member of the translation stack
+ my @ids = $result->IdList_Id; # from automatic message parsing
+ @ids = $result->ids; # a convenient alias
+
+See L<Bio::DB::SoapEUtilities::Result> for more, even gorier details.
+
+=head2 Adaptors
+
+Adaptors convert EUtility C<Result>s into convenient objects, via a
+handle that usually provides an iterator, in the spirit of
+L<Bio::SeqIO>. These are probably more useful than the C<Result> to
+the typical user, and so you can retrieve them automatically by
+setting the C<run()> parameter C<-auto_adapt => 1>. Here is a rundown
+of the different flavors:
 
 =over
 
@@ -50,6 +149,8 @@ results.
 =item C<elink>, the Link adaptor, and the C<linkset> iterator
 
 =item C<esummary>, the DocSum adaptor, and the C<docsum> iterator
+
+=item C<egquery>, the GQuery adaptor, and the C<query> iterator
 
 =back
 
@@ -91,12 +192,6 @@ the web:
 =head1 AUTHOR - Mark A. Jensen
 
 Email maj -at- fortinbras -dot- us
-
-Describe contact details here
-
-=head1 CONTRIBUTORS
-
-Additional contributors names and emails here
 
 =head1 APPENDIX
 
