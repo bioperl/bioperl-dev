@@ -95,12 +95,33 @@ our %VALID_ALPHABET = (
     'RNA' => 'rna'
 );
 
+our %TYPE_XLT = (
+    'Bio::Seq' => ['TSeqSet','TSeq'],
+    'Bio::Seq::RichSeq' => ['GBSet', 'GBSeq']
+    );
+
 sub _initialize {
     my ($self, @args) = @_;
     $self->SUPER::_initialize(@args);
     my ($builder, $seqfac ) = $self->_rearrange( [qw(SEQBUILDER
                                                      SEQFACTORY)], @args );
-    $self->{'_obj_class'} = ($seqfac ? $seqfac->type : 'Bio::Seq::RichSeq') ; 
+    # choose rich or simple seq based on result
+
+    my ($t) = keys %{$self->result->som->method};
+    for ($t) {
+	/^GB/ && do {
+	    $t = 'GB'; # genbank info
+	    $self->{'_obj_class'} = ($seqfac ? $seqfac->type : 'Bio::Seq::RichSeq');
+	    last;
+	};
+	/^T/ && do {
+	    $t = 'T'; # fasta info
+	    $self->{'_obj_class'} = ($seqfac ? $seqfac->type : 'Bio::Seq');
+	    last;
+	};
+	$self->throw("FetchAdaptor::seq : unrecognized result elt type '$t', can't parse");
+    }
+    
     $self->{'_builder'} = $builder || Bio::Seq::SeqBuilder->new();
     $self->{'_builder'}->sequence_factory( 
 	$seqfac || Bio::Seq::SeqFactory->new( -type => $self->{'_obj_class'} )
@@ -120,145 +141,166 @@ sub locfac { shift->{'_locfac'} };
 
 sub next_obj {
     my $self = shift;
-    my $stem = "//GBSet/[".$self->{'_idx'}."]";
+    my $t = $TYPE_XLT{$$self{_obj_class}};
+    
+    my $stem = "//$$t[0]/[".$self->{'_idx'}."]";
     my $som = $self->result->som;
     my $seqid;
     return unless defined $som->valueof("$stem");
 
-    my $get = sub { $som->valueof("$stem/GBSeq_".shift) };
+    my $get = sub { $som->valueof("$stem/$$t[1]_".shift) };
     # speed up (?) by caching top-level data hash
     my $toplev = $som->valueof("$stem");
-    my $get_tl = sub { $toplev->{'GBSeq_'.shift} };
-    # parsing based on Bio::SeqIO::genbank
+    my $get_tl = sub { $toplev->{"$$t[1]_".shift} };
 
     my %params = (-verbose => $self->verbose);
 
-    # source, id, alphabet
-    $params{'-display_id'} = $get_tl->('locus');
-    $params{'-length'} = $get_tl->('length');
-    $get_tl->('moltype') =~ /(AA|[DR]NA)/;
-    $params{'-alphabet'} = $VALID_ALPHABET{$1} || '';
-
-    # molecule, division, dates
-    $params{'-molecule'} = $get_tl->('moltype');
-    $params{'-is_circular'} = ($get_tl->('topology') eq 'circular');
-    $params{'-division'} = $get->('division');
-    $params{'-dates'} = [$get_tl->('create-date'), $get_tl->('update-date')];
-
-    $self->builder->add_slot_value(%params);
-    %params = ();
-
-    if ( !$self->builder->want_object ) { # skip this
-	$self->builder->make_object;
+    if ($t->[0] =~ /^T/) {
+	$params{'-display_id'} = $get_tl->('accver');
+	$params{'-primary_id'} = $get_tl->('gi');
+	$params{'-length'} = $get_tl->('length');
+	$params{'-desc'} = $get_tl->('defline');
+	$params{'-seq'} = $get_tl->('sequence');
+	$params{'-alphabet'} = $get_tl->('seqtype') || undef;
+	$self->builder->add_slot_value(%params);
 	($self->{_idx})++;
-	goto &next_obj;
-    }
-
-    # accessions, version, pid, description
-    $get_tl->('accession-version') =~ /.*\.([0-9]+)$/;
-    $params{'-version'} = $params{'-seq_version'} = $1;
-    my @secondary_ids;
-    my @ids = $get->('other-seqids/GBSeqid');
-    foreach (@ids) {
-	/^gi\|([0-9]+)/ && do {
-	    $seqid = $params{'-primary_id'} = $1;
-	    $params{'-accession_number'} = $_; # correct?
-	    next;
-	};
-	do { # else
-	    push @secondary_ids, $_;
-	    next;
-	};
-    }
-    $params{'-secondary_accessions'} = \@secondary_ids;
-	    
-    $params{'-desc'} = $get->('definition');
-
-    # sequence 
-    if ( $self->builder->want_slot('seq')) {
-	$params{'-seq'} = $get->('sequence');
-    }
-
-    # keywords
-    if ($get->('keywords')) {
-	my @kw;
-	foreach my $kw ($som->valueof("$stem/GBSeq_keywords/*")) {
-	    push @kw, $kw;
+	if ( !$self->builder->want_object ) { # skip 
+	    $self->builder->make_object;
+	    goto &next_obj;
 	}
-	$params{'-keywords'} = join(' ',@kw);
+	else {
+	    return $self->builder->make_object;
+	}
     }
-    
-    $self->builder->add_slot_value(%params);
-    %params = ();    
+    elsif ($t->[0] =~ /^GB/) {
+	# source, id, alphabet
+	$params{'-display_id'} = $get_tl->('locus');
+	$params{'-length'} = $get_tl->('length');
+	$get_tl->('moltype') =~ /(AA|[DR]NA)/;
+	$params{'-alphabet'} = $VALID_ALPHABET{$1} || '';
 	
-    my $ann;
-    # annotations
-    if ($self->builder->want_slot('annotation')) {
-	$ann = Bio::Annotation::Collection->new();
-	# references
-	if ($get->('references')) {
-	    $ann->add_Annotation('reference', $_) 
-		for _read_references($stem,$som);
+	# molecule, division, dates
+	$params{'-molecule'} = $get_tl->('moltype');
+	$params{'-is_circular'} = ($get_tl->('topology') eq 'circular');
+	$params{'-division'} = $get->('division');
+	$params{'-dates'} = [$get_tl->('create-date'), $get_tl->('update-date')];
+
+	$self->builder->add_slot_value(%params);
+	%params = ();
+	
+	if ( !$self->builder->want_object ) { # skip this
+	    $self->builder->make_object;
+	    ($self->{_idx})++;
+	    goto &next_obj;
 	}
 	
-	# comment
-	if ($get_tl->('comment')) {
-	    $ann->add_Annotation('comment', 
-				 Bio::Annotation::Comment->new(
-				     -tagname => 'comment',
-				     -text => $get_tl->('comment')
-				 )
-		);
+	# accessions, version, pid, description
+	$get_tl->('accession-version') =~ /.*\.([0-9]+)$/;
+	$params{'-version'} = $params{'-seq_version'} = $1;
+	my @secondary_ids;
+	my @ids = $get->('other-seqids/GBSeqid');
+	foreach (@ids) {
+	    /^gi\|([0-9]+)/ && do {
+		$seqid = $params{'-primary_id'} = $1;
+		$params{'-accession_number'} = $_; # correct?
+		next;
+	    };
+	    do { # else
+		push @secondary_ids, $_;
+		next;
+	    };
 	}
-	# project
-	if ( $get_tl->('project') ) {
-	    $ann->add_Annotation('project',
-				 Bio::Annotation::SimpleValue->new(
-				     -value => $get_tl->('project')
-				 )
-		);
+	$params{'-secondary_accessions'} = \@secondary_ids;
+	
+	$params{'-desc'} = $get->('definition');
+	
+	# sequence 
+	if ( $self->builder->want_slot('seq')) {
+	    $params{'-seq'} = $get->('sequence');
 	}
-	# contig
-	if ($get_tl->('contig')) {
-	    $ann->add_Annotation('contig',
-			       Bio::Annotation::SimpleValue->new(
-				   -value => $get_tl->('contig')
-				   )
-		);
+	
+	# keywords
+	if ($get->('keywords')) {
+	    my @kw;
+	    foreach my $kw ($som->valueof("$stem/GBSeq_keywords/*")) {
+		push @kw, $kw;
+	    }
+	    $params{'-keywords'} = join(' ',@kw);
 	}
+	
+	$self->builder->add_slot_value(%params);
+	%params = ();    
+	
+	my $ann;
+	# annotations
+	if ($self->builder->want_slot('annotation')) {
+	    $ann = Bio::Annotation::Collection->new();
+	    # references
+	    if ($get->('references')) {
+		$ann->add_Annotation('reference', $_) 
+		    for _read_references($stem,$som);
+	    }
 	    
-	# dblink
-	if ($get_tl->('source-db')) {
-	    _read_db_source($ann, $get);
-	} 
+	    # comment
+	    if ($get_tl->('comment')) {
+		$ann->add_Annotation('comment', 
+				     Bio::Annotation::Comment->new(
+					 -tagname => 'comment',
+					 -text => $get_tl->('comment')
+				     )
+		    );
+	    }
+	    # project
+	    if ( $get_tl->('project') ) {
+		$ann->add_Annotation('project',
+				     Bio::Annotation::SimpleValue->new(
+					 -value => $get_tl->('project')
+				     )
+		    );
+	    }
+	    # contig
+	    if ($get_tl->('contig')) {
+		$ann->add_Annotation('contig',
+				     Bio::Annotation::SimpleValue->new(
+					 -value => $get_tl->('contig')
+				     )
+		    );
+	    }
+	    
+	    # dblink
+	    if ($get_tl->('source-db')) {
+		_read_db_source($ann, $get);
+	    } 
+	    
+	    $self->builder->add_slot_value(-annotation => $ann);
+	}
 
-	$self->builder->add_slot_value(-annotation => $ann);
-    }
-
-    # features
-    my $feats;
-    if ($self->builder->want_slot('features')) {
-	$feats = _read_features($stem,$som,$self->locfac,$get);
-	$self->builder->add_slot_value(
-	    -features => $feats
-	    );
-    }
-
-    # organism data
-    if ( $self->builder->want_slot('species') && $get_tl->('source') ) {
-	my $sp = _read_species($get);
-	if ($sp && !$sp->ncbi_taxid) {
-	    my ($src) = grep { $_->primary_tag eq 'source' } @$feats;
-	    if ($src) {
-		foreach my $val ($src->get_tag_values('db_xref')) {
-		    $sp->ncbi_taxid(substr($val,6)) if index($val,"taxon:") == 0;
+	# features
+	my $feats;
+	if ($self->builder->want_slot('features')) {
+	    $feats = _read_features($stem,$som,$self->locfac,$get);
+	    $self->builder->add_slot_value(
+		-features => $feats
+		);
+	}
+	
+	# organism data
+	if ( $self->builder->want_slot('species') && $get_tl->('source') ) {
+	    my $sp = _read_species($get);
+	    if ($sp && !$sp->ncbi_taxid) {
+		my ($src) = grep { $_->primary_tag eq 'source' } @$feats;
+		if ($src) {
+		    foreach my $val ($src->get_tag_values('db_xref')) {
+			$sp->ncbi_taxid(substr($val,6)) if index($val,"taxon:") == 0;
+		    }
 		}
 	    }
+	    $self->builder->add_slot_value( -species => $sp );
 	}
-	$self->builder->add_slot_value( -species => $sp );
     }
-
-
+    else {
+	$self->throw("FetchAdaptor::seq : unrecognized result elt type '$t', can't parse");
+    }
     
     ($self->{_idx})++;
     return $self->builder->make_object;

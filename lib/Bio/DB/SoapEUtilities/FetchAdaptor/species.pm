@@ -99,7 +99,7 @@ sub next_obj {
     my $stem = "//TaxaSet/[".$self->{'_idx'}."]";
 #    my $stem = "//Body/".$self->result->result_type."/[".$self->{'_idx'}."]";
     my $som = $self->result->som;
-    $DB::single =1;
+
     return unless defined $som->valueof($stem);
     my $get = sub { $som->valueof("$stem/".shift) };
     my $toplev = $som->valueof("$stem");

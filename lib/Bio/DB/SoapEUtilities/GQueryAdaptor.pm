@@ -178,7 +178,7 @@ sub found_in_dbs {
 sub query_by_db {
     my $self = shift;
     my $db = shift;
-    $DB::single=1;
+
     $self->throw("db must be specified") unless $db;
     return $self->{_query_by_db}->{$db} if $self->{_query_by_db}->{$db};
     my $som = $self->result->som;
