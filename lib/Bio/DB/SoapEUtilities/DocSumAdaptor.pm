@@ -18,11 +18,24 @@ Bio::DB::SoapEUtilities::DocSumAdaptor - Handle for Entrez SOAP DocSums
 
 =head1 SYNOPSIS
 
-Give standard usage here
+ my $fac = Bio::DB::SoapEUtilities->new();
+ # run a query, returning a DocSumAdaptor
+ my $docs = $fac->esummary( -db => 'taxonomy',
+                            -id => 527031 )->run(-auto_adapt=>1);
+ # iterate over docsums
+ while (my $d = $docs->next_docsum) {
+    @available_items = $docsum->item_names;
+    # any available item can be called as an accessor
+    # from the docsum object...watch your case...
+    $sci_name = $d->ScientificName;
+    $taxid = $d->TaxId;
+ }
 
 =head1 DESCRIPTION
 
-Describe the object here
+This adaptor provides an iterator (C<next_docsum()>) and other
+convenience functions for parsing NCBI Entrez EUtility C<esummary>
+SOAP results.
 
 =head1 FEEDBACK
 
@@ -74,7 +87,6 @@ use strict;
 # Object preamble - inherits from Bio::Root::Root
 
 use Bio::Root::Root;
-
 
 use base qw(Bio::Root::Root );
 

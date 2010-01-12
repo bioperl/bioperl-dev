@@ -14,15 +14,33 @@
 
 =head1 NAME
 
-Bio::DB::SoapEUtilities::DocSumAdaptor - Handle for Entrez SOAP GlobalQuery items
+Bio::DB::SoapEUtilities::GQueryAdaptor - Handle for Entrez SOAP GlobalQuery items
 
 =head1 SYNOPSIS
 
-Give standard usage here
+ my $fac = Bio::DB::SoapEUtilities->new();
+ # run a query, returning a GQueryAdaptor
+ my $queries = $fac->egquery( -term => 'BRCA and human' )->run(-auto_adapt=>1);
+ # all databases with hits
+ my @dbs = $queries->found_in_dbs;
+ # queries by database
+ my $prot_count = $queries->query_by_db('prot')->count;
+ # iterate over gquery
+ while ( my $q = $queries->next_query ) {
+    my $db = $q->db;
+    my $count = $q->count;
+    my $status = $q->status;
+ }
 
 =head1 DESCRIPTION
 
-Describe the object here
+This adaptor provides an iterator (C<next_query()>) and other
+convenience functions for parsing NCBI Entrez EUtility C<egquery>
+SOAP results.
+
+=head1 SEE ALSO
+
+L<Bio::DB::SoapEUtilities>
 
 =head1 FEEDBACK
 
@@ -66,7 +84,6 @@ Internal methods are usually preceded with a _
 =cut
 
 # Let the code begin...
-
 
 package Bio::DB::SoapEUtilities::GQueryAdaptor;
 use strict;

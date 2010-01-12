@@ -18,11 +18,32 @@ Bio::DB::SoapEUtilities::LinkAdaptor - Handle for Entrez SOAP LinkSets
 
 =head1 SYNOPSIS
 
-Give standard usage here
+ my $fac = Bio::DB::SoapEUtilities->new();
+ # run a query, returning a LinkAdaptor
+ $fac->elink( -db => 'nucleotide',
+              -dbfrom => 'protein',
+              -id => [qw(828392 790 470338)]);
+ my $links = $fac->elink->run( -auto_adapt => 1);
+ # get the linked ids corresponding to the submitted ids
+ # (may be arrays if multiple crossrefs, or undef if none)
+ my @nucids = $links->id_map(828392);
+ # iterate over linksets
+ while ( my $ls = $links->next_linkset ) {
+    my @from_ids = $ls->submitted_ids;
+    my @to_ids = $ls->ids;
+    my $from_db = $ls->db_from;
+    my $to_db = $ls->db_to;
+ }
 
 =head1 DESCRIPTION
 
-Describe the object here
+This adaptor provides an iterator (C<next_linkset()>) and other
+convenience functions for parsing NCBI Entrez EUtility C<elink>
+SOAP results.
+
+=head1 SEE ALSO
+
+L<Bio::DB::SoapEUtilities>
 
 =head1 FEEDBACK
 
@@ -66,7 +87,6 @@ Internal methods are usually preceded with a _
 =cut
 
 # Let the code begin...
-
 
 package Bio::DB::SoapEUtilities::LinkAdaptor;
 use strict;
