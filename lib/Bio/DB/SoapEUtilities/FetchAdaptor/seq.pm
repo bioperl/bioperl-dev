@@ -14,7 +14,8 @@
 
 =head1 NAME
 
-Bio::DB::SoapEUtilities::FetchAdaptor::seq - Fetch adaptor for 'seq' efetch SOAP messages
+Bio::DB::SoapEUtilities::FetchAdaptor::seq - Fetch adaptor for 'seq'
+efetch SOAP messages
 
 =head1 SYNOPSIS
 
@@ -22,7 +23,33 @@ Imported by L<Bio::DB::SoapEUtilities::FetchAdaptor> as required.
 
 =head1 DESCRIPTION
 
-Describe the object here
+Returns an iterator over L<Bio::Seq> or L<Bio::Seq::RichSeq> objects,
+depending on the the return type of the C<efetch>. A standard
+C<efetch> to a sequence database will return a GenBank SOAP result;
+this will be parsed into rich sequence objects:
+
+ my $fac = Bio::DB::SoapEUtilities->new;
+ my $seqio = $fac->efetch(-db => 'protein', -id => 730439)->run(-auto_adapt=>1);
+ my $seq = $seqio->next_seq;
+ $seq->species->binomial; # returns 'Bacillus caldolyticus'
+
+An C<efetch> with C<-rettype => 'fasta'> will be parsed into
+L<Bio::Seq> objects (VERY much faster):
+
+ $seqio = $fac->efetch( -rettype => 'fasta' )->run(-auto_adapt=>1);
+ $seq = $seqio->next_seq;
+ $seq->species; # undef
+ $seq->desc; # kitchen sink
+
+To find out the object type returned:
+ 
+ $class = $seqio->obj_class;
+
+as for all L<Bio::DB::SoapEUtilities::FetchAdaptor> objects.
+
+=head1 SEE ALSO
+
+L<Bio::DB::SoapEUtilities>, L<Bio::DB::SoapEUtilities::FetchAdaptor>
 
 =head1 FEEDBACK
 
@@ -70,7 +97,6 @@ Internal methods are usually preceded with a _
 =cut
 
 # Let the code begin...
-
 
 package Bio::DB::SoapEUtilities::FetchAdaptor::seq;
 use strict;

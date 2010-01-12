@@ -14,7 +14,8 @@
 
 =head1 NAME
 
-Bio::DB::SoapEUtilities::FetchAdaptor::species - Fetch adaptor for 'taxonomy' efetchs via SOAP
+Bio::DB::SoapEUtilities::FetchAdaptor::species - Fetch adaptor for
+'taxonomy' efetch SOAP messages
 
 =head1 SYNOPSIS
 
@@ -22,7 +23,22 @@ Imported by L<Bio::DB::SoapEUtilities::FetchAdaptor> as required.
 
 =head1 DESCRIPTION
 
-Returns an iterator over L<Bio::Species> objects.
+Returns an iterator over L<Bio::Species> objects:
+
+ my $fac = Bio::DB::SoapEUtilities->new;
+ my $taxio = $fac->efetch(-db => 'taxonomy', -id => 1394)->run(-auto_adapt=>1);
+ my $sp = $taxio->next_species;
+ $sp->binomial; # returns 'Bacillus caldolyticus'
+
+To find out the object type returned:
+ 
+ $class = $seqio->obj_class; # $class is 'Bio::Species'
+
+as for all L<Bio::DB::SoapEUtilities::FetchAdaptor> objects.
+
+=head1 SEE ALSO
+
+L<Bio::DB::SoapEUtilities>, L<Bio::DB::SoapEUtilities::FetchAdaptor>
 
 =head1 FEEDBACK
 

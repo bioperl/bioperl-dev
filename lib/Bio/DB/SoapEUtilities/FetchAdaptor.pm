@@ -24,7 +24,6 @@ Bio::DB::SoapEUtilities::FetchAdaptor - Conversion of Entrez SOAP messages to Bi
          -result => $soap_result,
          -type => 'seq'
         );
-
  while ( $gb_seq = $adp->next_obj ) {
     # do stuff
  }
@@ -34,6 +33,21 @@ Bio::DB::SoapEUtilities::FetchAdaptor - Conversion of Entrez SOAP messages to Bi
 C<FetchAdaptor> is the base class of a system, modeled after
 L<Bio::SeqIO>, to parse SOAP responses from the NCBI Entrez C<efetch>
 utility into germane BioPerl objects.
+
+The user will rarely need to instantiate a C<FetchAdaptor> with
+L<Bio::DB::SoapEUtilities::Result> object as in the L</SYNOPSIS>. It
+usually suffices to use the C<-auto_adapt> parameter in the factory
+C<run()> method:
+
+ my $fac = Bio::DB::SoapEUtilities->new();
+ my $taxio = $fac->efetch(-db => 'taxonomy', -id => 1394)->run(-auto_adapt=>1);
+ my $sp = $taxio->next_species; # Bio::Species objects
+ my $seqio = $fac->efetch(-db => 'protein', -id => 730439)->run(-auto_adapt=>1);
+ my $seq = $seqio->next_seq; # Bio::Seq::RichSeq objects
+
+=head1 SEE ALSO
+
+L<Bio::DB::SoapEUtilities>, C<FetchAdaptor> subclasses
 
 =head1 FEEDBACK
 
