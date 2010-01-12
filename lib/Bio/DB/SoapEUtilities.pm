@@ -14,7 +14,7 @@
 
 =head1 NAME
 
-Bio::DB::SoapEUtilities - Interface to the NCBI Entrez web service
+Bio::DB::SoapEUtilities - Interface to the NCBI Entrez web service *BETA*
 
 =head1 SYNOPSIS
 
@@ -139,18 +139,120 @@ Adaptors convert EUtility C<Result>s into convenient objects, via a
 handle that usually provides an iterator, in the spirit of
 L<Bio::SeqIO>. These are probably more useful than the C<Result> to
 the typical user, and so you can retrieve them automatically by
-setting the C<run()> parameter C<-auto_adapt => 1>. Here is a rundown
-of the different flavors:
+setting the C<run()> parameter C<-auto_adapt => 1>. 
+
+In general, retrieve an adaptor like so:
+
+ $adp = $fac->$util->run( -auto_adapt => 1 );
+ # iterate...
+ while ( my $obj = $adp->next_obj ) {
+    # do stuff with $obj
+ }
+
+The adaptor itself occasionally possesses useful methods besides the
+iterator. The method C<next_obj> always works, but a natural alias is
+also always available:
+
+ $seqio = $fac->esearch->run( -auto_adapt => 1 );
+ while ( my $seq = $seqio->next_seq ) {
+    # do stuff with $seq
+ }
+
+In the above example, C<-auto_adapt => 1> also instructs the factory
+to perform an C<efetch> based on the ids returned by the C<esearch>
+(if any), so that the adaptor returned iterates over L<Bio::SeqI>
+objects.
+
+Here is a rundown of the different adaptor flavors:
 
 =over
 
 =item C<efetch>, Fetch Adaptors, and BioPerl object iterators
 
+The C<FetchAdaptor> creates bona fide BioPerl objects. Currently,
+there are FetchAdaptor subclasses for sequence data (both Genbank and
+FASTA rettypes) and taxonomy data. The choice of FetchAdaptor is based
+on information in the result message, and should be transparent to the
+user.
+
+ $seqio = $fac->efetch( -db =>'nucleotide',
+                        -id => \@ids,
+                        -rettype => 'gb' )->run( -auto_adapt => 1 );
+ while (my $seq = $seqio->next_seq) {
+    my $taxio = $fac->efetch( -db => 'taxonomy', 
+                              -id => $seq->species->ncbi_taxid )->run(-auto_adapt => 1);
+    my $tax = $taxio->next_species;
+    unless ( $tax->TaxId == $seq->species->ncbi_taxid ) {
+      print "more work for MAJ"
+    }
+ }
+
+See the pod for the FetchAdaptor subclasses (e.g.,
+L<Bio::DB::EUtilities::FetchAdaptor::seq>) for more detail.
+
 =item C<elink>, the Link adaptor, and the C<linkset> iterator
+
+The C<LinkAdaptor> manages LinkSets. In C<SoapEU>, an C<elink> call
+B<always> preserves the correspondence between submitted and retrieved
+ids. The mapping between these can be accessed from the adaptor object
+directly as C<id_map()>
+
+ my $links = $fac->elink( -db => 'protein', 
+                          -dbfrom => 'nucleotide',
+                          -id => \@nucids )->run( -auto_adapt => 1 );
+
+ my @prot_0 = $links->id_map( $nucids[0] ); # maybe more than one associated id
+ 
+Or iterate over the linksets:
+ 
+ while ( my $ls = $links->next_linkset ) {
+    @ids = $ls->ids;
+    @submitted_ids = $ls->submitted_ids;
+    # etc.
+ }
 
 =item C<esummary>, the DocSum adaptor, and the C<docsum> iterator
 
+The C<DocSumAdaptor> manages docsums, the C<esummary> return type.
+The objects returned by iterating with a C<DocSumAdaptor> have
+accessors that let you obtain field information directly. Docsums
+contain lots of easy-to-forget fields; use C<item_names()> to remind yourself.
+
+ my $docs = $fac->esummary( -db => 'taxonomy',
+                            -id => 527031 )->run(-auto_adapt=>1);
+ # iterate over docsums
+ while (my $d = $docs->next_docsum) {
+    @available_items = $docsum->item_names;
+    # any available item can be called as an accessor
+    # from the docsum object...watch your case...
+    $sci_name = $d->ScientificName;
+    $taxid = $d->TaxId;
+ }
+
 =item C<egquery>, the GQuery adaptor, and the C<query> iterator
+
+The C<GQueryAdaptor> manages global query items returned by calls to
+C<egquery>, which identifies all NCBI databases containing hits for
+your query term. The databases actually containing hits can be
+retrieved directly from the adaptor with C<found_in_dbs>:
+
+ my $queries = $fac->egquery( -term => 'BRCA and human' )->run(-auto_adapt=>1);
+ my @dbs = $queries->found_in_dbs;
+
+Retrieve the global query info returned for B<any> database with C<query_by_db>:
+ 
+ my $prot_q = $queries->query_by_db('protein');
+ if ($prot_q->count) {
+    #do something
+ }
+
+Or iterate as usual:
+
+ while ( my $q = $queries->next_query ) {
+    if ($q->status eq 'Ok') {
+      # do sth
+    }
+ }
 
 =back
 

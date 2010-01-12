@@ -157,6 +157,8 @@ sub next_query {
     return $ret;
 }
 
+sub next_obj { shift->next_query(@_) }
+
 sub rewind { shift->{'_idx'} = 1; };
 
 =head2 found_in_dbs()

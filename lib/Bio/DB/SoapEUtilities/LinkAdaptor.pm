@@ -153,6 +153,8 @@ sub next_linkset {
     return $ret;
 }
 
+sub next_obj { shift->next_linkset(@_) }
+
 sub rewind { shift->{'_idx'} = 1; };
 
 =head2 id_map()

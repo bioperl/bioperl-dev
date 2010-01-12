@@ -158,6 +158,8 @@ sub next_docsum {
     return $ret;
 }
 
+sub next_obj { shift->next_docsum(@_) }
+
 sub rewind { shift->{'_idx'} = 1; };
 
 sub _traverse_items {
