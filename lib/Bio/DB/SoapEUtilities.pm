@@ -18,13 +18,53 @@ Bio::DB::SoapEUtilities - Interface to the NCBI Entrez web service *BETA*
 
 =head1 SYNOPSIS
 
+ use Bio::DB::SoapEUtilities;
+
  # factory construction
+
+ my $fac = Bio::DB::SoapEUtilities->new()
 
  # executing a utility call
 
- # parsing the results
+ #get an iteratable adaptor
+ my $links = $fac->elink( 
+               -dbfrom => 'protein',
+               -db => 'taxonomy',
+               -id => \@protein_ids )->run(-auto_adapt => 1);
 
- # iterating over result objects
+ # get a Bio::DB::SoapEUtilities::Result object
+ my $result = $fac->esearch(
+               -db => 'gene',
+               -term => 'sonic and human')->run;
+
+ # get the raw XML message
+ my $xml = $fac->efetch(
+             -db => 'gene',
+             -id => \@gids )->run( -raw_xml => 1 );
+
+ # change parameters 
+ my $new_result = $fac->efetch(
+                   -db => 'gene',
+                   -id => \@more_gids)->run;
+ # reset parameters
+ $fac->efetch->reset_parameters( -db => 'nucleotide',
+                                 -id => $nucid );
+ $result = $fac->efetch->run;
+                
+ # parsing and iterating the results
+
+ $count = $result->count;
+ @ids = $result->ids;
+ 
+ while ( my $linkset = $links->next_link ) {
+    $submitted = $linkset->submitted_id;
+ }
+ 
+ ($taxid) = $links->id_map($submitted_prot_id);
+ $species_io = $fac->efetch( -db => 'taxonomy',
+                             -id => $taxid )->run( -auto_adapt => 1);
+ $species = $species_io->next_species;
+ $linnaeus = $species->binomial;
 
 =head1 DESCRIPTION
 
@@ -49,7 +89,7 @@ aliases, built-in pipelines) or as complex (accessors for underlying
 low-level objects, all parameters accessible, custom hooks for builder
 objects, facilities for providing local copies of WSDLs) as the user
 requires or desires. (To the extent that it does not succeed in either
-direction, it it up to the user to report to the mailing list
+direction, it is up to the user to report to the mailing list
 (L</FEEDBACK>)!)
 
 =head2 Factory
@@ -439,7 +479,9 @@ sub run {
     # add tool argument for NCBI records
     $args{tool} = "SoapEUtilities(BioPerl)";
     my $util = $self->_caller_util;
-    $self->set_parameters(%args) if %args;
+    # pass util args to run only to a downstream utility (i.e., efetch
+    # on autofetch..
+    # $self->set_parameters(%args) if %args;
     # kludge for elink : make sure to-ids and from-ids are associated
     if ( $util eq 'elink' ) {
 	my $es = $self->_soap_facs($util);
@@ -516,8 +558,11 @@ sub run {
 		    my %h = $self->get_parameters;
 		    $self->{db} = $h{db} || $h{DB};
 		}
+		# pass run() args to the downstream utility here
+		# (so can specify -rettype, basically)
 		my $fetched = $self->efetch( -db => $self->db,
-					     -id => $ids )->run(-no_parse => 1, @args);
+					     -id => $ids,
+					     @arg )->run(-no_parse => 1, @args);
 		$adaptor = Bio::DB::SoapEUtilities::FetchAdaptor->new(
 		    -result => $fetched
 		    );
