@@ -13,7 +13,7 @@ BEGIN {
     $home = '..'; # set to '.' for Build use, 
                       # '..' for debugging from .t file
     unshift @INC, $home;
-    test_begin(-tests => 100, # modify
+    test_begin(-tests => 116,
 	       -requires_modules => [qw(Bio::DB::ESoap
                                         Bio::DB::ESoap::WSDL
                                         Bio::DB::SoapEUtilities
@@ -40,14 +40,23 @@ SKIP : {
 #    test_skip(-tests => 100, #modify
 #	      -requires_networking => 1); # add back on final commit
 ok $fac = Bio::DB::SoapEUtilities->new(), "SoapEUtilities factory";
-    if (0) {
+
 diag("Retrieve raw data records from GenBank, save raw data to file, then parse via Bio::SeqIO");
 
-ok $result = $fac->efetch( -db => 'protein', -id => \@prot_ids )->run(-no_parse=>1), "do efetch";
-is $result->count, 5, "fetched all";
+ok $result = $fac->efetch( -db => 'protein', -id => \@prot_ids_2 )->run(-no_parse=>1), "run efetch, no parse methods";
+
 ok $seqio = Bio::DB::SoapEUtilities::FetchAdaptor->new(-result=>$result), "create adaptor";
-for ($i=0; $seq = $seqio->next_seq; $i++) {1;}
-is $i, 5, "iterated all seq objs";
+for ($i=0; $seq = $seqio->next_seq; $i++) {
+     isa_ok($seq, 'Bio::Seq::RichSeq');
+     ok $seq->id, "primary_id present";
+1;}
+is $i, 3, "iterated all seq objs";
+ok $result = $fac->efetch( -rettype => 'fasta' )->run(-no_parse=>1), "run efetch, fasta return, no parse methods";
+ok $seqio = Bio::DB::SoapEUtilities::FetchAdaptor->new(-result=>$result), "create adaptor";
+for ($i=0; $seq = $seqio->next_seq; $i++) {
+     isa_ok($seq, 'Bio::Seq');
+     ok $seq->id, "primary_id present";
+1;}
 
 diag("Get accessions (actually accession.versions) for a list of GenBank IDs (GIs)");
 # SOAP server doesn't seem to like 'acc' as a rettype, get in fasta format
@@ -128,18 +137,16 @@ cmp_ok scalar($queries->found_in_dbs), ">=", 11, "found in enuf dbs";
 cmp_ok scalar($queries->found_in_dbs), "<=", $i, "but not in too many";
 
 diag("I want the document summaries for a list of IDs from database 'x'.");
-ok my $docs = $fac->esummary( -db=>'gene', -id=>\@prot_ids_2 )->run(-auto_adapt=>1), "run esummary, autoadapt";
+ok  $docs = $fac->esummary( -db=>'gene', -id=>\@prot_ids_2 )->run(-auto_adapt=>1), "run esummary, autoadapt";
 my @tax = (3702, 9606, 9598);
 my @acc = qw( NC_003075.7 NC_000002.11 NC_006469.2 );
 for ($i=0; my $doc = $docs->next_docsum; $i++) {
     is $doc->id, $prot_ids_2[$i], " id retrieved";
     is $doc->TaxID, $tax[$i], " taxid retrieved correctly";
-    is $doc->GenomicInfo->{ChrAccVer}, $acc[$i], "chrom acc/ver retrived correctly";
+    is $doc->GenomicInfo->{ChrAccVer}, $acc[$i], "chrom acc/ver retrieved correctly";
     cmp_ok scalar ($doc->item_names), ">", 5, "bunch o' items";
 }
 is $i, 3, "got all docsums";
-    }
-$DB::single=1;
 
 diag("I want a list of database 'x' UIDs that are linked from a list of database 'y' UIDs");
 
@@ -158,19 +165,8 @@ for (keys %h) {
     1;
 }
 is $i, 5, "got all linksets";
-1;
-    
 
-
-
-1;
-
-
-
-
-    
-
-    
+1;    
 }
 
 # remove later
