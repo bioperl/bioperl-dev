@@ -61,6 +61,13 @@ To begin, make a factory:
 From the factory, utilities are called, parameters are set, and
 results or adaptors are retrieved.
 
+If you have your own copy of the wsdl, use
+
+ my $fac = Bio::Db::EUtilities->new( -wsdl_file => $my_wsdl );
+
+otherwise, the correct one will be obtained over the network (by
+L<Bio::DB::ESoap> and friends).
+
 =head2 Utilities and parameters
 
 To run any of the standard NCBI EUtilities (C<einfo, esearch, esummary, 
@@ -127,7 +134,8 @@ accessors, including C<count()> and C<ids()>, run without arguments:
 
  my $result = $fac->esearch->run()
  my $count = $result->count;
- my @Count = $result->Count; # counts for each member of the translation stack
+ my @Count = $result->Count; # counts for each member of 
+                             # the translation stack
  my @ids = $result->IdList_Id; # from automatic message parsing
  @ids = $result->ids; # a convenient alias
 
@@ -167,7 +175,7 @@ Here is a rundown of the different adaptor flavors:
 
 =over
 
-=item C<efetch>, Fetch Adaptors, and BioPerl object iterators
+=item * C<efetch>, Fetch Adaptors, and BioPerl object iterators
 
 The C<FetchAdaptor> creates bona fide BioPerl objects. Currently,
 there are FetchAdaptor subclasses for sequence data (both Genbank and
@@ -179,8 +187,9 @@ user.
                         -id => \@ids,
                         -rettype => 'gb' )->run( -auto_adapt => 1 );
  while (my $seq = $seqio->next_seq) {
-    my $taxio = $fac->efetch( -db => 'taxonomy', 
-                              -id => $seq->species->ncbi_taxid )->run(-auto_adapt => 1);
+    my $taxio = $fac->efetch( 
+	-db => 'taxonomy', 
+	-id => $seq->species->ncbi_taxid )->run(-auto_adapt => 1);
     my $tax = $taxio->next_species;
     unless ( $tax->TaxId == $seq->species->ncbi_taxid ) {
       print "more work for MAJ"
@@ -190,7 +199,7 @@ user.
 See the pod for the FetchAdaptor subclasses (e.g.,
 L<Bio::DB::EUtilities::FetchAdaptor::seq>) for more detail.
 
-=item C<elink>, the Link adaptor, and the C<linkset> iterator
+=item * C<elink>, the Link adaptor, and the C<linkset> iterator
 
 The C<LinkAdaptor> manages LinkSets. In C<SoapEU>, an C<elink> call
 B<always> preserves the correspondence between submitted and retrieved
@@ -201,7 +210,8 @@ directly as C<id_map()>
                           -dbfrom => 'nucleotide',
                           -id => \@nucids )->run( -auto_adapt => 1 );
 
- my @prot_0 = $links->id_map( $nucids[0] ); # maybe more than one associated id
+ # maybe more than one associated id...
+ my @prot_0 = $links->id_map( $nucids[0] ); 
  
 Or iterate over the linksets:
  
@@ -211,7 +221,7 @@ Or iterate over the linksets:
     # etc.
  }
 
-=item C<esummary>, the DocSum adaptor, and the C<docsum> iterator
+=item * C<esummary>, the DocSum adaptor, and the C<docsum> iterator
 
 The C<DocSumAdaptor> manages docsums, the C<esummary> return type.
 The objects returned by iterating with a C<DocSumAdaptor> have
@@ -229,14 +239,16 @@ contain lots of easy-to-forget fields; use C<item_names()> to remind yourself.
     $taxid = $d->TaxId;
  }
 
-=item C<egquery>, the GQuery adaptor, and the C<query> iterator
+=item * C<egquery>, the GQuery adaptor, and the C<query> iterator
 
 The C<GQueryAdaptor> manages global query items returned by calls to
 C<egquery>, which identifies all NCBI databases containing hits for
 your query term. The databases actually containing hits can be
 retrieved directly from the adaptor with C<found_in_dbs>:
 
- my $queries = $fac->egquery( -term => 'BRCA and human' )->run(-auto_adapt=>1);
+ my $queries = $fac->egquery( 
+     -term => 'BRCA and human'
+    )->run(-auto_adapt=>1);
  my @dbs = $queries->found_in_dbs;
 
 Retrieve the global query info returned for B<any> database with C<query_by_db>:
@@ -255,6 +267,66 @@ Or iterate as usual:
  }
 
 =back
+
+=head2 Web environments and query keys
+
+To make large or complex requests for data, or to share queries, it
+may be helpful to use the NCBI WebEnv system to manage your
+queries. Each EUtility accepts the following parameters:
+
+ -usehistory
+ -WebEnv
+ -QueryKey
+
+for this purpose. These store the details of your queries serverside.
+
+C<SoapEU> attempts to make using these relatively straightforward. Use
+C<Result> objects to obtain the correct parameters, and don't forget
+C<-usehistory>:
+
+ my $result1 = $fac->esearch( 
+     -term => 'BRCA and human', 
+     -db => 'nucleotide',
+     -usehistory => 1 )->run( -no_parse=>1 );
+
+ my $result = $fac->esearch( 
+     -term => 'AND early onset', 
+     -QueryKey => $result1->query_key,
+     -WebEnv => $result1->webenv )->run( -no_parse => 1 );
+
+ my $result = $fac->esearch(
+    -db => 'protein',
+    -term => 'sonic', 
+    -usehistory => 1 )->run( -no_parse => 1 );
+
+ # later (but not more than 8 hours later) that day...
+
+ $result = $fac->esearch(
+    -WebEnv => $result->webenv,
+    -QueryKey => $result->query_key,
+    -RetMax => 800 # get 'em all
+    )->run; # note we're parsing the result...
+ @all_ids = $result->ids;
+
+=head2 Error checking
+
+Two kinds of errors can ensue on an Entrez SOAP run. One is a SOAP
+fault, and the other is an error sent in non-faulted SOAP message from
+the server. The distinction is probably systematic, and I would
+welcome an explanation of it. To check for result errors, try something like:
+
+ unless ( $result = $fac->$util->run ) {
+    die $fac->errstr; # this will catch a SOAP fault
+ }
+ # a valid result object was returned, but it may carry an error
+ if ($result->count == 0) {
+    warn "No hits returned";
+    if ($result->ERROR) {
+      warn "Entrez error : ".$result->ERROR;
+    }
+ }
+
+Error handling will be improved in the package eventually.
 
 =head1 SEE ALSO
 
