@@ -1,0 +1,448 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- $Id$ -->
+
+<xs:schema 
+    targetNamespace="http://www.bioperl.org/wrappermaker/1.0" 
+    xmlns:tns="http://www.bioperl.org/wrappermaker/1.0"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema" 
+    elementFormDefault="qualified" >
+<xs:annotation>
+  <xs:documentation>
+    This revision: $Rev$
+    WrapperMaker definition schema
+    Notes:
+    idea : render the information in the Config.pm as XML
+    The Config.pm structure is fairly flat; the XML can be deep and
+    probably easier to read and grok:
+    main section : ?? properties? meta?
+    program 
+     name
+     pseudo or not
+     dash use
+     join character
+    main section : commands
+    commands have prefixes (abbreviations)
+             have options: parameters
+		           switches (boolean parameters)
+                  options have translations (actual command-line characters)
+    switches/parameters have logic:
+      can be independent, compatible, incompatible, requisite, corequisite
+      Dan has represented a lot of these
+    composite commands : review how these work....
+    main section : filespecs
+
+  </xs:documentation>
+</xs:annotation>
+
+<!-- Simple Types -->
+
+<xs:simpleType name="optionToken">
+  <xs:restriction base="xs:token">
+    <xs:enumeration value="parameter"/>
+    <xs:enumeration value="switch"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="dashPolicyToken">
+  <xs:restriction base="xs:token">
+    <xs:enumeration value="single"/>
+    <xs:enumeration value="double"/>
+    <xs:enumeration value="mixed"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="filespecPolicyToken">
+  <xs:restriction base="xs:token">
+    <xs:enumeration value="required-single"/>
+    <xs:enumeration value="required-multiple"/>
+    <xs:enumeration value="optional-single"/>
+    <xs:enumeration value="optional-multiple"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="redirectToken">
+  <xs:restriction base="xs:token">
+    <xs:enumeration value="stdin"/>
+    <xs:enumeration value="stdout"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="taintCheckToken">
+  <xs:restriction base="xs:token">
+    <xs:pattern value="[a-zA-Z0-9_]+"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="perlNSType">
+  <xs:restriction base="xs:Name">
+    <xs:pattern value="([a-zA-Z0-9_]+::)*[a-zA-Z0-9_]+"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="versionType">
+  <xs:restriction base="xs:token">
+    <xs:pattern value="([0-9]+\.)*[0-9]+"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<!-- Complex Types -->
+
+<xs:complexType name="commandType">
+  <xs:annotation>
+    <xs:documentation>
+      This type collects various info related to commands.
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:sequence> 
+    <xs:element name="options" minOccurs="0">
+      <xs:annotation>
+	<xs:documentation>
+	  Contains a sequence of option descriptions. 
+	  Element. Optional.
+	</xs:documentation>
+      </xs:annotation>
+      <xs:complexType>
+	<xs:sequence>
+	  <xs:element name="option" type="tns:optionType" maxOccurs="unbounded"/>
+	</xs:sequence>
+      </xs:complexType>
+    </xs:element>
+    
+    <xs:element name="filespecs" minOccurs="0">
+      <xs:annotation>
+	<xs:documentation>
+	  A sequence of filespecType elements, describing the I/O
+	  portion of the command-line for this command, and other
+	  atypical options not flagged by dashes.
+	  The order in which these appear in the xml must be the order
+	  required by the program (this is how the correct mapping is made)
+	  Element. Optional.
+	</xs:documentation>
+      </xs:annotation>
+      <xs:complexType>
+	<xs:sequence>
+	  <xs:element name="filespec" type="tns:filespecType" maxOccurs="unbounded"/>
+	</xs:sequence>
+      </xs:complexType>
+    </xs:element>
+  </xs:sequence>
+
+  <xs:attribute name="name" type="tns:taintCheckToken" use="required">
+    <xs:annotation>
+      <xs:documentation>
+	The name of a command associated with the program. It must be
+	an actual command name for the program begin described
+	(e.g. "status", if program is "svn"). If the document is
+	describing a "pseudo-program", this name must be an actual
+	program name (e.g., "blastn" if program is "blastplus").
+	Element. Required.
+      </xs:documentation>
+    </xs:annotation>
+  </xs:attribute>
+    
+  <xs:attribute name="prefix" type="tns:taintCheckToken" use="optional">
+    <xs:annotation>
+      <xs:documentation>
+	A short mnemonic for this command.
+	Attribute. Optional.
+      </xs:documentation>
+    </xs:annotation>
+  </xs:attribute>
+
+</xs:complexType>
+
+<xs:complexType name="optionType">
+  <xs:annotation>
+    <xs:documentation>
+      This type models options:
+      - provides a human-readable/rememberable name for the option 
+      - indicates whether an option is a parameter (takes
+      an argument) or a switch (is presence/absence boolean)
+      - provides the actual command-line translation of the option
+      - informs about corequired and incompatible options
+    </xs:documentation>
+  </xs:annotation>
+  <xs:sequence> 
+    <xs:element name="incompatibles" minOccurs="0">
+      <xs:annotation>
+	<xs:documentation>
+	  A list of option names with which this option is incompatible
+	  on the command-line.
+	  Element. Optional.
+	</xs:documentation>
+      </xs:annotation>
+      <xs:complexType>
+	<xs:sequence>
+	  <xs:element name="option" type="tns:taintCheckToken" 
+		      maxOccurs="unbounded"/>
+	</xs:sequence>
+      </xs:complexType>
+    </xs:element>
+    
+    <xs:element name="corequisites" minOccurs="0">
+      <xs:annotation>
+	<xs:documentation>
+	  A list of option names with which this option must co-occur on
+	  the command-line.
+	  Element. Optional.
+	</xs:documentation>
+      </xs:annotation>
+      <xs:complexType>
+	<xs:sequence>
+	  <xs:element name="option" type="tns:taintCheckToken"
+		      maxOccurs="unbounded"/>
+	</xs:sequence>
+      </xs:complexType>
+    </xs:element>
+  </xs:sequence>
+  
+  <xs:attribute name="type" type="tns:optionToken" use="required">
+    <xs:annotation>
+      <xs:documentation>
+	Either 'parameter' or 'switch'. Attribute. Required.
+      </xs:documentation>
+    </xs:annotation>
+  </xs:attribute>
+
+  <xs:attribute name="name" type="tns:taintCheckToken" use="required">
+    <xs:annotation>
+      <xs:documentation>
+	The human-readable name for the option (will be used in module
+	set_parameters() calls). Attribute. Required.
+      </xs:documentation>
+    </xs:annotation>
+  </xs:attribute>
+
+  <xs:attribute name="translation" type="tns:taintCheckToken" use="optional">
+    <xs:annotation>
+      <xs:documentation>
+	The command-line translation of this option. Do not include dashes.
+	Attribute. Optional.
+      </xs:documentation>
+    </xs:annotation>
+  </xs:attribute>
+    
+
+</xs:complexType>
+
+<xs:complexType name="filespecType">
+  <xs:annotation>
+    <xs:documentation>
+      Description of a command-line I/O file specification. Allows
+      specification of aliases that indicate stream redirection.
+    </xs:documentation>
+  </xs:annotation>
+  <xs:sequence>
+    <xs:element name="accepted-types" maxOccurs="0">
+      <xs:annotation>
+	<xs:documentation>
+	  A list of filetypes that are accepted for this filespec. Allows 
+	  CommandExts to do sanity checking. Ex) Accepted types for filespec
+	  'fas' might be 'fasta', 'fastq', 'raw'. 
+	  Element. Optional.
+	</xs:documentation>
+      </xs:annotation>
+      <xs:complexType>
+	<xs:sequence>
+	  <xs:element name="filetype" maxOccurs="unbounded">
+	    <xs:annotation>
+	      <xs:documentation>
+		Filetype specs go
+		&lt;filetype type="fasta" /&gt;
+		&lt;filetype type="fastq" /&gt;
+		etc.
+	      </xs:documentation>
+	    </xs:annotation>
+	    <xs:complexType>
+	      <xs:attribute name="type" type="xs:token" use="required"/>
+	    </xs:complexType>
+	  </xs:element>
+	</xs:sequence>
+      </xs:complexType>
+    </xs:element>
+  </xs:sequence>
+
+  <xs:attribute name="token" type="tns:taintCheckToken" use="required">
+    <xs:annotation>
+      <xs:documentation>
+	Short token (e.g., 'fas') to be used as an argument name when
+	specifying a filename in a call.
+	Attribute. Required.
+      </xs:documentation>
+    </xs:annotation>
+  </xs:attribute>
+
+  <xs:attribute name="use" type="tns:filespecPolicyToken" use="required">
+    <xs:annotation>
+      <xs:documentation>
+	Specifies the policy for this filespec: one of 
+	   "required-single"
+	   "required-multiple"
+	   "optional-single"
+	   "optional-multiple"
+	Attribute. Required.
+      </xs:documentation>
+    </xs:annotation>
+  </xs:attribute>
+
+  <xs:attribute name="redirect" type="tns:redirectToken" use="optional">
+      <xs:annotation>
+	<xs:documentation>
+	  Indicates whether this filespec redirects stdin or stdout.
+	  Ex) if 'fas' redirects stdout, then in the call, (-fas => 'my.fas')
+	  indicates the program should send its stdout to the file 'my.fas.
+	  Element. Optional.
+	</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+
+</xs:complexType>
+
+<xs:complexType name="lookupType">
+  <xs:annotation>
+    <xs:documentation>
+      Type defining an arbitrary lookup (key => value) table.
+    </xs:documentation>
+  </xs:annotation>
+  <xs:sequence>
+    <xs:element name="elt" maxOccurs="unbounded">
+      <xs:complexType>
+	<xs:attribute name="key" type="xs:taintCheckToken" use="required"/>
+	<xs:attribute name="value" type="xs:string" use="required"/>
+      </xs:complexType>
+    </xs:element>
+  </xs:sequence>
+</xs:complexType>
+
+<!-- Elements -->
+
+<xs:element name="program">
+  <xs:annotation>
+    <xs:documentation>
+    Name of program. Can be actual program name, or a "pseudo-program"
+    that collects a number of related actual programs (marked with 
+    attribute 'is-pseudo').
+    Element. Required.
+    </xs:documentation>
+  </xs:annotation>
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element name="name" type="xs:NCName"/>
+    </xs:sequence>
+    <xs:attribute name="is-pseudo" type="xs:boolean" use="optional">
+      <xs:annotation>
+	<xs:documentation>
+	  Set to "true" if this is a "pseudo-program", a collection of
+	  related actual programs
+	</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+
+    <xs:attribute name="dash-policy" type="tns:dashPolicyToken" use="required">
+      <xs:annotation>
+	<xs:documentation>
+	  Directs the use of dashes when forming the actual command line.
+	  One of 'single' (all options recieve a dash)
+	  'double' (all options recieve a double-dash)
+	  'mixed'  (single-character options recieve a single-dash,
+	  others a double-dash)
+	  Element. Required.
+	</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+
+    <xs:attribute name="prog-version" type="tns:versionType" use="optional">
+      <xs:annotation>
+	<xs:documentation>
+	  The version number of the program for which this deffile was designed.
+	  Attribute. Optional.
+	</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+
+    <xs:attribute name="join-char" use="optional">
+      <xs:simpletype>
+	<xs:restriction base="xs:string">
+	  <xs:pattern value="\s|[=]"/>
+	</xs:restriction>
+      </xs:simpletype>
+    </xs:attribute>
+	
+  </xs:complexType>
+</xs:element>
+
+<xs:element name="defs-version" type="tns:versionType" use="optional">
+  <xs:annotation>
+    <xs:documentation>
+      Version number for the definitions file.
+      Element. Optional.
+    </xs:documentation>
+  </xs:annotation>
+</xs:element>
+
+<xs:element name="perl-namespace" type="tns:perlNSType" minOccurs="0"/>
+  
+<xs:element name="commands">
+  <xs:annotation>
+    <xs:documentation>
+      A sequence of commandType elements, describing the commands available
+      the program.
+      Element. Required.
+    </xs:documentation>
+  </xs:annotation>
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element name="command" type="tns:commandType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name="composite-commands" maxOccurs="0">
+  <xs:annotation>
+    <xs:documentation>
+      Define composite commands: a single method name associated with
+      execution of a set of native commands in order
+      Element (sequence). Optional.
+    </xs:documentation>
+  </xs:annotation>
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element name="command" maxOccurs="unbounded">
+	<xs:annotation>
+	  <xs:documentation>
+	    Command element in a composite-command sequence.
+	    Ex) &lt;command name="index" /&gt;
+	    Element. Required.
+	  </xs:documentation>
+	</xs:annotation>
+	<xs:complexType>
+	  <xs:annotation>
+	    <xs:documentation>
+	      Name of command in a composite-command sequence
+	      Attribute. Required.
+	    </xs:documentation>
+	  </xs:annotation>
+	  <xs:attribute name="name" type="tns:taintCheckToken" use="required"/>
+	</xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name="lookups" minOccurs="0">
+  <xs:annotation>
+    <xs:documentation>
+      Elements define arbitrary lookup tables, which are converted to 
+      Perl hashes with the given name and key => value data
+      Element (sequence). Optional
+    </xs:documentation>
+  </xs:annotation>
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element name="lookup" type="tns:lookupType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:element>
+
+</xs:schema>
