@@ -120,6 +120,7 @@ our ( $defs_version,
       %command_files,
       %accepted_types );
 
+our %lookups; # container for arbitrary lookup tables
 
 =head2 new
 
@@ -139,7 +140,15 @@ sub new {
     $ns && $self->namespace($ns);
     # xml defs file or xml string?
     $WRAPPER_VALIDATE && $self->validate_defs($def);
-
+    # generate the twig that will parse the xml (but parse later?)
+    $self->{_twig} = XML::Twig->new( twig_handlers =>
+				     { 'program' => \&program,
+				       'defs-version' => \&defs_version,
+				       'perl-namespace' => \&perlns,
+				       'commands' => \&commands,
+				       'composite-commands' => \&composite_commands,
+				       'lookups' => \&lookups };
+					   
     return $self;
 }
 
@@ -190,6 +199,9 @@ sub export {
     return;
 }
 
+# twig accessor
+sub _twig {$self->{_twig}}
+
 ### XML handlers = config var loaders
 
 # going to (try to) assume that xsd validation has
@@ -222,16 +234,59 @@ sub perlns {
 
 sub commands {
     my ($twig, $elt) = @_;
+    foreach my $cmd ($elt->children) {
+	# looping over commandType elements
+	push @program_commands, $cmd->att('name');
+	$command_prefixes{$cmd->att('name')} = $cmd->att('prefix') 
+	    if $cmd->att('prefix');
+	# handle options
+	my $opts = $cmd->first_child('options');
+	if ($opts) {
+	    foreach my $opt ($opts->children) {
+		# looping over option specs
+		handle_option($opt);
+	    }
+	}
+	# handle filespecs
+	my $fspecs = $cmd->first_child('filespecs');
+	if ($fspecs) {
+	    foreach my $spc ($fspecs->children) {
+		handle_filespec($spc);
+	    }
+	}
+    }
     $elt->flush;
 }
 
 sub composite_commands {
     my ($twig, $elt) = @_;
+    foreach my $cmd ($elt->children) {
+	my @subcmds;
+	foreach my $subcmd ($cmd->children) {
+	    push @subcmds, $cmd->att('name');
+	}
+	$composite_commands{$cmd->att('name')} = \@subcmds;
+    }
     $elt->flush;
 }
 
 sub lookups {
     my ($twig, $elt) = @_;
+    foreach my $lkup ($elt->children) {
+	my %tbl;
+	foreach my $pr ($lkup->children) {
+	    $tbl{$pr->att('key')} = $pr->att('value');
+	}
+	$lookups{$lkup->att('name')} = \%tbl;
+    }
     $elt->flush;
+}
+
+sub handle_option {
+    my $opt = shift;
+}
+
+sub handle_filespec {
+    my $spc = shift;
 }
 1;
