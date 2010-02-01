@@ -346,110 +346,128 @@
   </xs:complexType>
   
   <!-- Elements -->
-  
-  <xs:element name="program">
-    <xs:annotation>
-      <xs:documentation>
-	Define program name and various command-line policies. 
-	Can be actual program name, or a "pseudo-program"
-	that collects a number of related actual programs (marked with 
-	attribute 'is-pseudo').
-	Element. Required.
-      </xs:documentation>
-    </xs:annotation>
-    <xs:complexType>
-      <xs:attribute name="name" type="xs:NCName" use="required"/>
-      <xs:attribute name="is-pseudo" type="xs:boolean" use="optional">
+      <xs:element name="program">
 	<xs:annotation>
 	  <xs:documentation>
-	    Set to "true" if this is a "pseudo-program", a collection of
-	    related actual programs
-	  </xs:documentation>
-	</xs:annotation>
-      </xs:attribute>
-      
-      <xs:attribute name="dash-policy" type="tns:dashPolicyToken" use="required">
-	<xs:annotation>
-	  <xs:documentation>
-	    Directs the use of dashes when forming the actual command line.
-	    One of 'single' (all options recieve a dash)
-	    'double' (all options recieve a double-dash)
-	    'mixed'  (single-character options recieve a single-dash,
-	    others a double-dash)
+	    Define program name and various command-line policies. 
+	    Can be actual program name, or a "pseudo-program"
+	    that collects a number of related actual programs (marked with 
+	    attribute 'is-pseudo').
 	    Element. Required.
 	  </xs:documentation>
 	</xs:annotation>
-      </xs:attribute>
+	<xs:complexType>
+	  <xs:attribute name="name" type="xs:NCName" use="required"/>
+	  <xs:attribute name="is-pseudo" type="xs:boolean" use="optional">
+	    <xs:annotation>
+	      <xs:documentation>
+		Set to "true" if this is a "pseudo-program", a collection of
+		related actual programs
+	      </xs:documentation>
+	    </xs:annotation>
+	  </xs:attribute>
+	  
+	  <xs:attribute name="dash-policy" type="tns:dashPolicyToken" use="required">
+	    <xs:annotation>
+	      <xs:documentation>
+		Directs the use of dashes when forming the actual command line.
+		One of 'single' (all options recieve a dash)
+		'double' (all options recieve a double-dash)
+		'mixed'  (single-character options recieve a single-dash,
+		others a double-dash)
+		Element. Required.
+	      </xs:documentation>
+	    </xs:annotation>
+	  </xs:attribute>
+	  
+	  <xs:attribute name="prog-version" type="tns:versionType" use="optional">
+	    <xs:annotation>
+	      <xs:documentation>
+		The version number of the program for which this deffile was designed.
+		Attribute. Optional.
+	      </xs:documentation>
+	    </xs:annotation>
+	  </xs:attribute>
+	  
+	  <xs:attribute name="join-char" use="optional">
+	    <xs:simpleType>
+	      <xs:restriction base="xs:string">
+		<xs:pattern value="\s|[=]"/>
+	      </xs:restriction>
+	    </xs:simpleType>
+	  </xs:attribute>
+	  
+	</xs:complexType>
+      </xs:element>
       
-      <xs:attribute name="prog-version" type="tns:versionType" use="optional">
+      <xs:element name="defs-version" type="tns:versionType" >
 	<xs:annotation>
 	  <xs:documentation>
-	    The version number of the program for which this deffile was designed.
-	    Attribute. Optional.
+	    Version number for the definitions file.
+	    Element. Optional.
 	  </xs:documentation>
 	</xs:annotation>
-      </xs:attribute>
+      </xs:element>
       
-      <xs:attribute name="join-char" use="optional">
-	<xs:simpleType>
-	  <xs:restriction base="xs:string">
-	    <xs:pattern value="\s|[=]"/>
-	  </xs:restriction>
-	</xs:simpleType>
-      </xs:attribute>
+      <xs:element name="perl-namespace" type="tns:perlNSType" />
+  
+      <xs:element name="commands">
+	<xs:annotation>
+	  <xs:documentation>
+	    A sequence of commandType elements, describing the commands available
+	    the program.
+	    Element. Required.
+	  </xs:documentation>
+	</xs:annotation>
+	<xs:complexType>
+	  <xs:sequence>
+	    <xs:element name="command" type="tns:commandType" maxOccurs="unbounded"/>
+	  </xs:sequence>
+	</xs:complexType>
+      </xs:element>
       
-    </xs:complexType>
-  </xs:element>
-  
-  <xs:element name="defs-version" type="tns:versionType">
-    <xs:annotation>
-      <xs:documentation>
-	Version number for the definitions file.
-	Element. Optional.
-      </xs:documentation>
-    </xs:annotation>
-  </xs:element>
-  
-  <xs:element name="perl-namespace" type="tns:perlNSType"/>
-  
-  <xs:element name="commands">
-    <xs:annotation>
-      <xs:documentation>
-	A sequence of commandType elements, describing the commands available
-	the program.
-	Element. Required.
-      </xs:documentation>
-    </xs:annotation>
-    <xs:complexType>
-      <xs:sequence>
-	<xs:element name="command" type="tns:commandType" maxOccurs="unbounded"/>
-      </xs:sequence>
-    </xs:complexType>
-  </xs:element>
-  
-  <xs:element name="composite-commands" type="tns:compositeCommandType">
-    <xs:annotation>
-      <xs:documentation>
-	Define composite commands: a single method name associated with
-	execution of a set of native commands in order
-	Element (sequence). Optional.
-      </xs:documentation>
-    </xs:annotation>
-  </xs:element>
-  
-  <xs:element name="lookups">
-    <xs:annotation>
-      <xs:documentation>
-	Elements define arbitrary lookup tables, which are converted to 
-	Perl hashes with the given name and key => value data
-	Element (sequence). Optional
-      </xs:documentation>
-    </xs:annotation>
-    <xs:complexType>
-      <xs:sequence>
-	<xs:element name="lookup" type="tns:lookupType" maxOccurs="unbounded"/>
-      </xs:sequence>
-    </xs:complexType>
-  </xs:element>
-  
+      <xs:element name="composite-commands" type="tns:compositeCommandType" >
+	<xs:annotation>
+	  <xs:documentation>
+	    Define composite commands: a single method name associated with
+	    execution of a set of native commands in order
+	    Element (sequence). Optional.
+	  </xs:documentation>
+	</xs:annotation>
+      </xs:element>
+      
+      <xs:element name="lookups" >
+	<xs:annotation>
+	  <xs:documentation>
+	    Elements define arbitrary lookup tables, which are converted to 
+	    Perl hashes with the given name and key => value data
+	    Element (sequence). Optional
+	  </xs:documentation>
+	</xs:annotation>
+	<xs:complexType>
+	  <xs:sequence>
+	    <xs:element name="lookup" type="tns:lookupType" maxOccurs="unbounded"/>
+	  </xs:sequence>
+	</xs:complexType>
+      </xs:element>
+
+<!-- Root element -->
+
+<!-- put annotation-documentation down here... -->
+<xs:element name="defs">
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element ref="tns:program"/>
+      <xs:element ref="tns:defs-version" minOccurs="0"/>
+      <xs:element ref="tns:perl-namespace" minOccurs="0"/>
+      <!-- maybe make commands optional, and make sure can 
+           wrap a program without command (ordinary WrapperBase 
+           implementation -->
+      <xs:element ref="tns:commands"/>
+      <xs:element ref="tns:composite-commands" minOccurs="0"/>
+      <xs:element ref="tns:lookups" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:element>
+
 </xs:schema>
