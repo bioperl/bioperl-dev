@@ -6,7 +6,7 @@
     targetNamespace="http://www.bioperl.org/wrappermaker/1.0" 
     xmlns:tns="http://www.bioperl.org/wrappermaker/1.0"
     xmlns:xs="http://www.w3.org/2001/XMLSchema" 
-    elementFormDefault="qualified" >
+    elementFormDefault="unqualified" >
   <xs:annotation>
     <xs:documentation>
       This revision: $Rev$
@@ -44,6 +44,14 @@
     <xs:restriction base="xs:token">
       <xs:enumeration value="stdin"/>
       <xs:enumeration value="stdout"/>
+      <xs:enumeration value="stderr"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- something for Dan's file switches.... -->
+  <xs:simpleType name="fileSwitchToken">
+    <xs:restriction base="xs:token">
+      <xs:pattern value="."/> <!-- something here -->
     </xs:restriction>
   </xs:simpleType>
   
@@ -73,7 +81,6 @@
 	This type collects various info related to commands.
       </xs:documentation>
     </xs:annotation>
-    
     <xs:sequence> 
       <xs:element name="options" minOccurs="0">
 	<xs:annotation>
@@ -88,7 +95,6 @@
 	  </xs:sequence>
 	</xs:complexType>
       </xs:element>
-      
       <xs:element name="filespecs" minOccurs="0">
 	<xs:annotation>
 	  <xs:documentation>
@@ -107,7 +113,6 @@
 	</xs:complexType>
       </xs:element>
     </xs:sequence>
-    
     <xs:attribute name="name" type="tns:taintCheckToken" use="required">
       <xs:annotation>
 	<xs:documentation>
@@ -120,7 +125,6 @@
 	</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    
     <xs:attribute name="prefix" type="tns:taintCheckToken" use="optional">
       <xs:annotation>
 	<xs:documentation>
@@ -129,7 +133,6 @@
 	</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    
   </xs:complexType>
   
   <xs:complexType name="optionType">
@@ -154,8 +157,11 @@
 	</xs:annotation>
 	<xs:complexType>
 	  <xs:sequence>
-	    <xs:element name="option" type="tns:taintCheckToken" 
-			maxOccurs="unbounded"/>
+	    <xs:element name="option" maxOccurs="unbounded">
+	      <xs:complexType>
+		<xs:attribute name='name' type="tns:taintCheckToken" use="required"/>
+	      </xs:complexType>
+	    </xs:element>
 	  </xs:sequence>
 	</xs:complexType>
       </xs:element>
@@ -170,8 +176,11 @@
 	</xs:annotation>
 	<xs:complexType>
 	  <xs:sequence>
-	    <xs:element name="option" type="tns:taintCheckToken"
-			maxOccurs="unbounded"/>
+	    <xs:element name="option" maxOccurs="unbounded">
+	      <xs:complexType>
+		<xs:attribute name='name' type="tns:taintCheckToken" use="required"/>
+	      </xs:complexType>
+	    </xs:element>
 	  </xs:sequence>
 	</xs:complexType>
       </xs:element>
@@ -214,7 +223,7 @@
       </xs:documentation>
     </xs:annotation>
     <xs:sequence>
-      <xs:element name="accepted-types" maxOccurs="0">
+      <xs:element name="accepted-types" minOccurs="0">
 	<xs:annotation>
 	  <xs:documentation>
 	    A list of filetypes that are accepted for this filespec. Allows 
@@ -276,7 +285,15 @@
 	</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    
+
+    <xs:attribute name="fileswitch" type="tns:fileSwitchToken" use="optional">
+      <xs:annotation>
+	<xs:documentation>
+	  File switch token, probably incompatible with 'redirect' attribute...
+	</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+          
   </xs:complexType>
   
   <xs:complexType name="compositeCommandType">
@@ -320,7 +337,7 @@
     <xs:sequence>
       <xs:element name="elt" maxOccurs="unbounded">
 	<xs:complexType>
-	  <xs:attribute name="key" type="xs:taintCheckToken" use="required"/>
+	  <xs:attribute name="key" type="tns:taintCheckToken" use="required"/>
 	  <xs:attribute name="value" type="xs:string" use="required"/>
 	</xs:complexType>
       </xs:element>
