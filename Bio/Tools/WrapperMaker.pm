@@ -80,11 +80,13 @@ use XML::Twig;
 
 use base qw(Bio::Root::Root );
 
+our $HAVE_LIBXML = eval "require XML::LibXML; 1";
 # to turn off validation, have to work for it...
-our $WRAPPER_VALIDATE = 1;
+our $VALIDATE_DEFS = 1;
+our $SCHEMA_URL = "http://fortinbras.us/wrappermaker/1.0/maker.xsd";
 
 # config globals for export to specified namespace:
-@export_symbols = 
+my @export_symbols = 
     qw(
              $defs_version
              $version
@@ -122,6 +124,26 @@ our ( $defs_version,
 
 our %lookups; # container for arbitrary lookup tables
 
+#create the run factory and deliver : class or instance method
+# main user access; validation and parse happens here...
+
+sub compile { 
+    my $class = shift;
+    my @args = @_;
+    my $self = ref $class ? $class : $class->new(@args);
+    if ( $self->_defs !~ /<[^>]+>/ ) { # else, is xml string
+	unless (ref $self->_defs) { # is a filename
+	    open my $fh, "<", $self->_defs;
+	    $self->{_defs} = $fh;
+	}
+	# otherwise, assume a(n open) filehandle...
+    }
+    $self->_twig->parse($self->_defs);
+    $self->_export_globals; # get the globals (now loaded) into the 
+                            # desired namespace
+    return; # $an_instance_of_the_desired_namespace;
+}
+
 =head2 new
 
  Title   : new
@@ -135,31 +157,85 @@ our %lookups; # container for arbitrary lookup tables
 sub new {
     my ($class,@args) = @_;
     my $self = $class->SUPER::new(@args);
-    my ($ns, $def) = $self->_rearrange( [qw(NAMESPACE DEF)], @args );
+    my ($ns, $defs, $xsd) = $self->_rearrange( [qw(NAMESPACE DEFS XSD)], @args );
     # perl namespace to inject
-    $ns && $self->namespace($ns);
-    # xml defs file or xml string?
-    $WRAPPER_VALIDATE && $self->validate_defs($def);
-    # generate the twig that will parse the xml (but parse later?)
+    if ($ns) {
+	unless ($ns =~ /^([a-z0-9_]+::)*[a-z0-9_]+$/i) {
+	    $self->throw( "Invalid Perl namespace '$ns' specified" );
+	}
+	$self->namespace($ns);
+    }
+    unless ($defs) {
+	$self->throw( "Definitions arg DEFS is required" );
+    }
+    $self->{_defs} = $defs;
+    $self->validate_defs($xsd);
+    
+    # generate the twig that will parse the xml 
+    # (but parse in compile() )
     $self->{_twig} = XML::Twig->new( twig_handlers =>
 				     { 'program' => \&program,
 				       'defs-version' => \&defs_version,
 				       'perl-namespace' => \&perlns,
 				       'commands' => \&commands,
 				       'composite-commands' => \&composite_commands,
-				       'lookups' => \&lookups };
+				       'lookups' => \&lookups } );
 					   
     return $self;
 }
-
 
 # validate_defs validates input xml against the WrapperMaker xsd
 
 sub validate_defs {
     my $self = shift;
-    my $def = shift;
+    my $schema_file = shift;
+    my $defs = $self->_defs;
+    unless ($HAVE_LIBXML) {
+	$self->warn("XML::LibXML not present; can't validate. Beware!");
+	return 1;
+    }
+    unless ($VALIDATE_DEFS) {
+	$self->warn("Validation turned off; won't validate. Beware!");
+	return 1;
+    }
+    my @args = ( ($defs =~ /<[^>]+>/) ? 
+		 ( string => $defs ) :
+		 ( location => $defs ) );
+    my $doc = XML::LibXML->new->load_xml(@args);
+    my $schema = XML::LibXML::Schema->new( location => $schema_file ||
+					   $SCHEMA_URL );
+    unless ($schema) {
+	$self->throw("Schema unavailable; can't validate");
+    }
+    eval {
+	$schema->validate( $doc );
+    };
+    if ($@) {
+	$self->throw( "Defs not valid against schema : $@ " );
+    }
     return 1;
 }
+
+# do the export; should be fun
+sub _export_globals {
+    my $self = shift;
+    no strict qw(refs);
+    no strict qw(subs); ###
+    my $ns = $self->namespace;
+    $ns ||= "MyWrapper";
+    foreach (@export_symbols) {
+	# export only if symbol defined...
+	if ( defined(eval) ) {
+	    /(.)(.*)/;
+	    my $sigil = $1;
+	    my $token = $2;
+	    eval "$sigil$ns\::$token = $_";
+	}
+    }
+    return;
+}
+
+### properties/accessors
 
 # associate a Perl-compliant namespace with this wrapper:
 sub namespace {
@@ -200,7 +276,10 @@ sub export {
 }
 
 # twig accessor
-sub _twig {$self->{_twig}}
+sub _twig {shift->{_twig}}
+
+# defs accessor
+sub _defs {shift->{_defs}}
 
 ### XML handlers = config var loaders
 
@@ -217,19 +296,16 @@ sub program {
     $use_dash = $elt->att('dash-policy');
     $join = $elt->att('join-char') || ' ';
     $version = $elt->att('prog-version');
-    $elt->flush;
 }
 
 sub defs_version {
     my ($twig, $elt) = @_;
     $defs_version = $elt->text;
-    $elt->flush;
 }
 
 sub perlns {
     my ($twig, $elt) = @_;
-    __PACKAGE__->namespace($elt->text);
-    $elt->flush;
+    __PACKAGE__->namespace($elt->text) unless __PACKAGE__->namespace;
 }
 
 sub commands {
@@ -250,12 +326,13 @@ sub commands {
 	# handle filespecs
 	my $fspecs = $cmd->first_child('filespecs');
 	if ($fspecs) {
+	    my $ar = [];
+	    $command_files{$cmd->att('name')} = $ar;
 	    foreach my $spc ($fspecs->children) {
-		handle_filespec($spc);
+		handle_filespec($spc, $ar);
 	    }
 	}
     }
-    $elt->flush;
 }
 
 sub composite_commands {
@@ -267,7 +344,6 @@ sub composite_commands {
 	}
 	$composite_commands{$cmd->att('name')} = \@subcmds;
     }
-    $elt->flush;
 }
 
 sub lookups {
@@ -279,14 +355,70 @@ sub lookups {
 	}
 	$lookups{$lkup->att('name')} = \%tbl;
     }
-    $elt->flush;
 }
 
 sub handle_option {
     my $opt = shift;
+    my $pfx = $opt->parent('command')->att('prefix');
+    my $nm = $opt->att('name');
+    $nm = join('|', $pfx, $nm) if $pfx;
+    for  ($opt->att('type')) {
+	m/parameter/ && do { push @program_params, $nm; };
+	m/switch/ && do { push @program_switches, $nm; };
+    }
+    if ($opt->att('translation')) {
+	$param_translation{$nm} = $opt->att('translation');
+    }
+    if ($opt->first_child('incompatibles')) {
+	foreach ($opt->first_child('incompatibles')->children) {
+	    # note here that no prefix is added to the command name
+	    $incompat_options{$opt->att('name')} =$_->att('name');
+	}
+    }
+    if ($opt->first_child('corequisites')) {
+	foreach ($opt->first_child('corequisites')->children) {
+	    $corequisite_options{$opt->att('name')} = $_->att('name');
+	}
+    }
 }
 
 sub handle_filespec {
-    my $spc = shift;
+    my ($spc,$ar) = @_;
+    my $tok = $spc->att('token');
+    for ($spc->att('use')) {
+	last if !defined;
+	m/required-single/ && do {
+	    last;
+	};
+	m/required-multiple/ && do {
+	    $tok = "*$tok";
+	};
+	m/optional-single/ && do {
+	    $tok = "#$tok";
+	};
+	m/optional-multiple/ && do {
+	    $tok = "#*$tok";
+	};
+    }
+    for ($spc->att('redirect')) {
+	last if !defined;
+	m/stdout/ && do {
+	    $tok = ">$tok";
+	};
+	m/stderr/ && do {
+	    $tok = "2>$tok";
+	};
+	m/stdin/ && do {
+	    $tok = "<$tok";
+	};
+    }
+#### need something for Dan's file switches here...
+    for ($spc->att('fileswitch')) {
+	last if !defined;
+	m/.+/ && do {
+	    $tok = "$_$tok"; # stub
+	};
+    }
 }
+
 1;

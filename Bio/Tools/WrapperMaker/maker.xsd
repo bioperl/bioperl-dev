@@ -6,7 +6,7 @@
     targetNamespace="http://www.bioperl.org/wrappermaker/1.0" 
     xmlns:tns="http://www.bioperl.org/wrappermaker/1.0"
     xmlns:xs="http://www.w3.org/2001/XMLSchema" 
-    elementFormDefault="unqualified" >
+    elementFormDefault="qualified" >
   <xs:annotation>
     <xs:documentation>
       This revision: $Rev$
