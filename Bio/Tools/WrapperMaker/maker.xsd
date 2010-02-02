@@ -133,6 +133,15 @@
 	</xs:documentation>
       </xs:annotation>
     </xs:attribute>
+    <xs:attribute name="default" type="xs:boolean" use="optional">
+      <xs:annotation>
+	<xs:documentation>
+	  Indicate with "true" that this command is the default (selected
+	  when the -command parameter is not set.)
+	</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+      
   </xs:complexType>
   
   <xs:complexType name="optionType">
@@ -344,7 +353,38 @@
     </xs:sequence>
     <xs:attribute name="name" type="tns:taintCheckToken" use="required"/>
   </xs:complexType>
-  
+
+  <!-- want a restriction of the commandType for use with the 'self'
+       element: a commandType with name="_self", no prefix ( or _self
+       prefix) -->
+  <xs:complexType name="selfCommandType">
+    <xs:complexContent>
+      <xs:restriction base="tns:commandType">
+	<xs:sequence> 
+	  <xs:element name="options" minOccurs="0">
+	    <xs:complexType>
+	      <xs:sequence>
+		<xs:element name="option" type="tns:optionType" 
+			    maxOccurs="unbounded"/>
+	      </xs:sequence>
+	    </xs:complexType>
+	  </xs:element>
+	  <xs:element name="filespecs" minOccurs="0">
+	    <xs:complexType>
+	      <xs:sequence>
+		<xs:element name="filespec" type="tns:filespecType" 
+			    maxOccurs="unbounded"/>
+	      </xs:sequence>
+	    </xs:complexType>
+	  </xs:element>
+	</xs:sequence>
+	<xs:attribute name="name" fixed="_self" type="tns:taintCheckToken"/>
+	<xs:attribute name="prefix" fixed="_self" type="tns:taintCheckToken"/>
+	<xs:attribute name="default" type="xs:boolean"/>
+      </xs:restriction>
+    </xs:complexContent>
+  </xs:complexType>
+
   <!-- Elements -->
       <xs:element name="program">
 	<xs:annotation>
@@ -425,6 +465,18 @@
 	  </xs:sequence>
 	</xs:complexType>
       </xs:element>
+
+      <xs:element name="self" type="tns:selfCommandType">
+	<xs:annotation>
+	  <xs:documentation>
+	    This is a single, restricted commandType element, to
+	    describe options and filespecs applied to the program
+	    itself; that is, without an intervening command. Useful
+	    for setting up wrappers for simple programs. The 'name'
+	    and 'prefix" attributes are fixed at "_self".
+	  </xs:documentation>
+	</xs:annotation>
+      </xs:element>
       
       <xs:element name="composite-commands" type="tns:compositeCommandType" >
 	<xs:annotation>
@@ -460,10 +512,15 @@
       <xs:element ref="tns:program"/>
       <xs:element ref="tns:defs-version" minOccurs="0"/>
       <xs:element ref="tns:perl-namespace" minOccurs="0"/>
-      <!-- maybe make commands optional, and make sure can 
-           wrap a program without command (ordinary WrapperBase 
-           implementation -->
-      <xs:element ref="tns:commands"/>
+      <!-- 'commands' and/or 'self' must appear... -->
+      <xs:choice>
+	<xs:element ref="tns:commands"/>
+	<xs:element ref="tns:self"/>
+	<xs:sequence>
+	  <xs:element ref="tns:commands"/>
+	  <xs:element ref="tns:self"/>
+	</xs:sequence>
+      </xs:choice>
       <xs:element ref="tns:composite-commands" minOccurs="0"/>
       <xs:element ref="tns:lookups" minOccurs="0"/>
     </xs:sequence>
