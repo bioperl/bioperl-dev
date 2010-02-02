@@ -69,7 +69,6 @@ Internal methods are usually preceded with a _
 
 # Let the code begin...
 
-
 package Bio::Tools::WrapperMaker;
 use strict;
 
@@ -77,6 +76,8 @@ use strict;
 
 use Bio::Root::Root;
 use XML::Twig;
+use Bio::Tools::Run::WrapperBase;
+use Bio::Tools::Run::WrapperBase::CommandExts;
 
 use base qw(Bio::Root::Root );
 
@@ -122,6 +123,8 @@ our ( $defs_version,
       %command_files,
       %accepted_types );
 
+@program_commands = qw(command);
+
 our %lookups; # container for arbitrary lookup tables
 
 #create the run factory and deliver : class or instance method
@@ -141,7 +144,11 @@ sub compile {
     $self->_twig->parse($self->_defs);
     $self->_export_globals; # get the globals (now loaded) into the 
                             # desired namespace
-    return; # $an_instance_of_the_desired_namespace;
+    my $ns = $self->namespace;
+    eval "\@$ns\::ISA = qw(Bio::Tools::Run::WrapperBase
+                           Bio::Root::Root)";
+    my $wrapper = $ns->new();
+    
 }
 
 =head2 new
@@ -165,6 +172,9 @@ sub new {
 	}
 	$self->namespace($ns);
     }
+    else {
+	$self->namespace('MyWrapper');
+    }
     unless ($defs) {
 	$self->throw( "Definitions arg DEFS is required" );
     }
@@ -178,6 +188,7 @@ sub new {
 				       'defs-version' => \&defs_version,
 				       'perl-namespace' => \&perlns,
 				       'commands' => \&commands,
+				       'self' => \&self_command,
 				       'composite-commands' => \&composite_commands,
 				       'lookups' => \&lookups } );
 					   
@@ -308,11 +319,18 @@ sub perlns {
     __PACKAGE__->namespace($elt->text) unless __PACKAGE__->namespace;
 }
 
+sub self_command {
+    my ($twig, $elt) = @_;
+    # tricky kludge alert:
+    commands($twig, $elt->parent);
+}
+
 sub commands {
     my ($twig, $elt) = @_;
     foreach my $cmd ($elt->children) {
 	# looping over commandType elements
-	push @program_commands, $cmd->att('name');
+	push @program_commands, ($cmd->att('default') ? '*' : '').
+	    $cmd->att('name');
 	$command_prefixes{$cmd->att('name')} = $cmd->att('prefix') 
 	    if $cmd->att('prefix');
 	# handle options
