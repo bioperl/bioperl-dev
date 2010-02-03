@@ -206,7 +206,7 @@ or
 
 (Or you might have little heart-to-heart with your sysadmin.)
 
-=head2 USING THE WRAPPER OBJECT
+=head2 USING THE WRAPPER OBJECT DIRECTLY
 
 The wrapper object will manage the program according to the facilities
 in C<Bio::Tools::Run::WrapperBase::CommandExts>. It will automatically
@@ -229,6 +229,49 @@ Some examples based on the definition in L</WRAPPER DEFINITION FILE>:
  $lsfac->run( -pth => "~" );
  @myfiles = split("\n", $lsfac->stdout);
  
+=head2 USING WRAPPERMAKER IN A NEW WRAPPER MODULE
+
+If you are designing a new wrapper module that requires more complex
+sanity checking or other computation than C<CommandExts> provides, you
+can use C<WrapperMaker> to "initialize" that module. Set the
+C<-namespace> parameter to the qualified module name:
+
+ package My::Complex::Wrapper;
+ use strict;
+ use warnings;
+ use Bio::Tools::WrapperMaker;
+ my $WRAPPER_DEFS = "./complex_wrapper.xml";
+
+ Bio::Tools::WrapperMaker->compile( 
+   -defs => $WRAPPER_DEFS,
+   -namespace => __PACKAGE__ );
+ 
+ sub additional_computation {
+   my $self;
+   ...
+ }
+ ...
+ 1;
+ 
+
+In support of this usage, C<maker.xsd> defines the <lookups>
+element. It can be used to define arbitrary lookup hashes, which
+C<WrapperMaker> will import as package globals:
+
+ <defs xmlns="http://www.bioperl.org/wrappermaker/1.0">
+   ...
+   <lookups>
+     <lookup name="accepted_types">
+       <elt key="seq" value="fasta fastq raw crossbow"/>
+       <elt key="seq2" value="fasta fastq raw"/>
+       <elt key="ref" value="fasta"/>
+     </lookup>
+     ...
+   </lookups>
+  </defs>
+
+The C<value> of the C<elt> members is an arbitrary string.
+
 =head1 SECURITY NOTES
 
 Because this module is designed to run commands outside Perl as directed
@@ -320,7 +363,7 @@ my $where_i_am = (File::Spec->splitpath( File::Spec->rel2abs(__FILE__) ))[1];
 our $LOCAL_XSD = File::Spec->catfile($where_i_am, "WrapperMaker","maker.xsd");
 
 # config globals for export to specified namespace:
-my @export_symbols = 
+my @EXPORT_SYMBOLS = 
     qw(
              $defs_version
              $version
@@ -334,7 +377,7 @@ my @export_symbols =
              %command_prefixes
              %composite_commands
              %incompat_options
-             %corequisite_options
+             %coreq_options
              %param_translation
              %command_files
              %accepted_types
@@ -352,14 +395,13 @@ our ( $defs_version,
       @program_params,
       @program_switches,
       %incompat_options,
-      %corequisite_options,
+      %coreq_options,
       %param_translation,
       %command_files,
-      %accepted_types );
+      %accepted_types,
+      %lookups);
 
 @program_commands = qw(command);
-
-our %lookups; # container for arbitrary lookup tables
 
 #create the run factory and deliver : class or instance method
 # main user access; validation and parse happens here...
@@ -479,13 +521,19 @@ sub _export_globals {
     no strict qw(subs); ###
     my $ns = $self->namespace;
     $ns ||= "MyWrapper";
-    foreach (@export_symbols) {
+    foreach (@EXPORT_SYMBOLS) {
 	# export only if symbol defined...
 	if ( defined(eval) ) {
 	    /(.)(.*)/;
 	    my $sigil = $1;
 	    my $token = $2;
 	    eval "$sigil$ns\::$token = $_";
+	}
+    }
+    # handle lookup tables...
+    if (%lookups) {
+	foreach my $lkup (keys %lookups) {
+	    eval "\%$ns\::$lkup = \%\{$lookups{$lkup}\};";
 	}
     }
     return;
@@ -541,6 +589,11 @@ sub _defs {shift->{_defs}}
 
 # going to (try to) assume that xsd validation has
 # caught malformed/invalid entries...
+
+# other logic errors to test for during validation:
+# - options not present in <commands><options> are referenced
+#   in <incompatibles> or <corequisites>
+# - no <commands> nor <self> present
 
 sub program {
     my ($twig, $elt) = @_;
@@ -636,7 +689,7 @@ sub handle_option {
     }
     if ($opt->first_child('corequisites')) {
 	foreach ($opt->first_child('corequisites')->children) {
-	    $corequisite_options{$opt->att('name')} = $_->att('name');
+	    $coreq_options{$opt->att('name')} = $_->att('name');
 	}
     }
 }

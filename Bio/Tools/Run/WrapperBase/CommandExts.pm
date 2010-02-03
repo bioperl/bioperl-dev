@@ -419,6 +419,21 @@ use IPC::Run;
 use base qw(Bio::Root::Root Bio::ParameterBaseI);
 
 our $AUTOLOAD;
+our @IMPORT_SYMBOLS = qw( 
+             @program_commands 
+             %command_prefixes
+             @program_params
+             @program_switches 
+             %param_translation
+             $use_dash
+             $join
+             $program_name
+             $program_dir
+             %composite_commands
+             %command_files 
+             %incompat_options
+             %coreq_options
+);
 
 =head2 new()
 
@@ -451,18 +466,11 @@ sub new {
 	$name,
 	$dir,
 	$composite_commands,
-	$files);
-    for (qw( @program_commands 
-             %command_prefixes
-             @program_params
-             @program_switches 
-             %param_translation
-             $use_dash
-             $join
-             $program_name
-             $program_dir
-             %composite_commands
-             %command_files ) ) {
+	$files,
+	$incompat_options,
+	$coreq_options,
+);
+    for ( @IMPORT_SYMBOLS ) {
 	my ($sigil, $var) = m/(.)(.*)/;
 	my $qualvar = "${sigil}${pkg}::${var}";
 	for ($sigil) {
@@ -489,10 +497,11 @@ sub new {
     }
     @registry{qw( _commands _default_command _prefixes _files 
                   _params _switches _translation
-                  _composite_commands )} =
+                  _composite_commands _incompat _coreq )} =
 	($commands, $default_command, $prefixes, $files,
 	 $params, $switches, $translation, 
-	 $composite_commands);
+	 $composite_commands, $incompat_options, $coreq_options);
+
     $self->{_options} = \%registry;
     if (not defined $use_dash) {
 	$self->{'_options'}->{'_dash'}      = 1;
@@ -1196,6 +1205,18 @@ sub AUTOLOAD {
     }
 }
 
+# options predicates
+
+sub _is_parameter {
+    my ($self, $opt) = @_;
+    return grep /^$opt$/, $self->available_parameters('parameters');
+}
+
+sub _is_switch {
+    my ($self, $opt) = @_;
+    return grep /^$opt$/, $self->available_parameters('switches');
+}
+
 =head1 Bio:ParameterBaseI compliance
 
 =head2 set_parameters()
@@ -1212,11 +1233,11 @@ sub set_parameters {
     my ($self, @args) = @_;
     # currently stored stuff
     my $opts = $self->{'_options'};
-    my $params = $opts->{'_params'};
-    my $switches = $opts->{'_switches'};
-    my $translation = $opts->{'_translation'};
-    my $use_dash = $opts->{'_dash'};
-    my $join = $opts->{'_join'};
+    my ($params, $switches, $translation, $use_dash, $join) =
+	@{$opts}{qw(_params _switches _translation _dash _join)};
+    # check incompatibilites and corequisites, attempting to DTRT
+    # (ripped for kortsch's Bowtie, thanks Dan)
+    $self->_massage_options(@args);
     unless (($self->can('command') && $self->command) 
 	    || (grep /command/, @args)) {
 	if ($opts->{'_default_command'}) {
@@ -1416,4 +1437,45 @@ sub get_parameters {
     return @ret;
 }
 
+# DTRT with incompatible/corequired options; 
+# if impossible, throw...
+# liberally ripped from kortsch's Bowtie.pm
+
+sub _massage_options {
+    my $self = shift;
+    my %args = @_;
+    my ($incompat, $coreqs) = @{$self->{_options}}{qw( _incompat _coreq)};
+    foreach (keys %args) {
+	my @added;
+	my @removed;
+	s/^-//;
+	foreach my $conflict (@{$$incompat{$_}}) {
+	    if (grep /$conflict/, @added) {
+		$self->debug("Argument imcompatibility cannot be resolved : '$conflict' is required by one option and incompatible with another");
+		return;
+	    }
+	    delete $args{'-'.$conflict};
+	    if ($self->{'_'.$conflict}) {
+		$args{'-'.$conflict} = undef;
+		push @removed, $conflict;
+	    }
+	}
+	foreach my $requirement (@{$$coreqs{$_}}) {
+	    if (grep /$requirement/, @removed) {
+		$self->debug("Argument imcompatibility cannot be resolved : '$requirement' is incompatible with one option and required by another");
+		return;
+	    }
+	    if ($self->_is_switch($requirement)) {
+		$args{'-'.$requirement}=1 if $args{$_};
+		push @added, $requirement;
+	    }
+	    else {
+		$self->debug("The co-required option '$requirement', which itself requires an argument, is not specified");
+		return;
+	    }
+	}
+	$self->debug("Removed incompatibilities : \n".join("\n", @removed)."\n") if @removed;
+	$self->debug("Added corequisites : \n".join("\n",@added)."\n") if @added;
+    }
+}
 1;
