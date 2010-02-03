@@ -539,13 +539,27 @@ sub program_name {
  Function: get/set the program dir
  Returns:  string
  Args    : string
+ Default : if $dir is not specified and program_dir
+           has not yet been set explicitly, 
+           returns the value of the an environment
+           variable constructed by uppercasing the 
+           program name and appending 'DIR'; e.g., 
+           for samtools, the value of $SAMTOOLSDIR
 
 =cut
 
 sub program_dir {
     my ($self, $val) = @_;
-    $self->{'_program_dir'} = $val if $val;
-    return $self->{'_program_dir'};
+    if ($val) {
+	$self->{'_program_dir'} = $val;
+    }
+    elsif (!$self->{'_program_dir'}) {
+	my $envar = uc($self->program_name)."DIR";
+	return $ENV{$envar};
+    }
+    else {
+	return $self->{'_program_dir'};
+    }
 }
 
 =head2 _translate_params
@@ -562,8 +576,14 @@ sub program_dir {
 sub _translate_params {
   my ($self)   = @_;
   # Get option string
-  my ($params, $switches, $join, $dash, $translat) =
-      @{$self->{_options}}{qw(_params _switches _join _dash _translation)};
+  my ($join, $dash, $translat) =
+      @{$self->{_options}}{qw(_join _dash _translation)};
+  
+  my %params = $self->get_parameters('parameters');
+  my %switches = $self->get_parameters('switches');
+  # submit only those options that have been set...
+  my $params = [keys %params];
+  my $switches = [keys %switches];
 
   # access the multiple dash choices of _setparams...
   my @dash_args;
@@ -591,6 +611,7 @@ sub _translate_params {
 	  @dash_args = ( -dash => 1 );
       };
   }
+  $DB::single=1;
   my $options  = $self->_setparams(
     -params    => $params,
     -switches  => $switches,
@@ -949,6 +970,7 @@ sub _run {
     my $exe = $self->executable;
     $self->throw("Can't find executable for '".($self->is_pseudo ? $self->command : $self->program_name)."'; can't continue") unless $exe;
     # Get command-line options
+    $DB::single=1;
     my $options = $self->_translate_params();
     # Get file specs sans redirects in correct order
     my @specs = map { 

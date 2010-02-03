@@ -378,7 +378,7 @@
 	    </xs:complexType>
 	  </xs:element>
 	</xs:sequence>
-	<xs:attribute name="name" fixed="_self" type="tns:taintCheckToken"/>
+	<xs:attribute name="name" fixed="_self" type="tns:taintCheckToken" use="required"/>
 	<xs:attribute name="prefix" fixed="_self" type="tns:taintCheckToken"/>
 	<xs:attribute name="default" type="xs:boolean"/>
       </xs:restriction>
@@ -508,19 +508,18 @@
 <!-- put annotation-documentation down here... -->
 <xs:element name="defs">
   <xs:complexType>
+    <xs:annotation>
+      <xs:documentation>
+	Note: At least one of 'commands' or 'self' MUST occur,
+	but both MAY occur...
+      </xs:documentation>
+    </xs:annotation>
     <xs:sequence>
       <xs:element ref="tns:program"/>
       <xs:element ref="tns:defs-version" minOccurs="0"/>
       <xs:element ref="tns:perl-namespace" minOccurs="0"/>
-      <!-- 'commands' and/or 'self' must appear... -->
-      <xs:choice>
-	<xs:element ref="tns:commands"/>
-	<xs:element ref="tns:self"/>
-	<xs:sequence>
-	  <xs:element ref="tns:commands"/>
-	  <xs:element ref="tns:self"/>
-	</xs:sequence>
-      </xs:choice>
+      <xs:element ref="tns:commands" minOccurs="0"/>
+      <xs:element ref="tns:self" minOccurs="0"/>
       <xs:element ref="tns:composite-commands" minOccurs="0"/>
       <xs:element ref="tns:lookups" minOccurs="0"/>
     </xs:sequence>
