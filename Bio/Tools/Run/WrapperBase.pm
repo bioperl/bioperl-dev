@@ -73,6 +73,7 @@ Email jason-at-bioperl.org
 =head1 CONTRIBUTORS
 
 Sendu Bala, bix@sendu.me.uk
+Mark A. Jensen, maj -at- fortinbras -dot- us
 
 =head1 APPENDIX
 
@@ -95,7 +96,12 @@ use base qw(Bio::Root::Root);
 use File::Spec;
 use File::Path qw(); # don't import anything
 
-use vars qw($TMPMODE);
+use vars qw($TMPMODE $HAVE_IXHASH);
+
+# if you have Tie::IxHash, we use it to keep 
+# command-line options in calling order...
+
+$HAVE_IXHASH = eval "require 'Tie::IxHash'; 1;";
 
 $TMPMODE = 0777; 
 
@@ -460,9 +466,13 @@ sub _setparams {
     $self->throw('at least one of -params or -switches is required') unless ($params || $switches);
     $self->throw("-dash, -double_dash and -mixed_dash are mutually exclusive") if (defined($d) + defined($dd) + defined($md) > 1);
     $join ||= ' ';
-    
-    my %params = ref($params) eq 'HASH' ? %{$params} : map { $_ => $_ } @{$params};
-    my %switches = ref($switches) eq 'HASH' ? %{$switches} : map { $_ => $_ } @{$switches};
+    my (%params, %switches);
+    if ($HAVE_IXHASH) {
+	tie my %params, 'Tie::IxHash';
+	tie my %switches, 'Tie::IxHash';
+    }
+    %params = ref($params) eq 'HASH' ? %{$params} : map { $_ => $_ } @{$params};
+    %switches = ref($switches) eq 'HASH' ? %{$switches} : map { $_ => $_ } @{$switches};
     
     my $param_string = '';
     for my $hash_ref (\%params, \%switches) {
