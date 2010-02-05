@@ -434,6 +434,7 @@ our @IMPORT_SYMBOLS = qw(
              %incompat_options
              %coreq_options
 );
+our $HAVE_IXHASH = eval "require 'Tie::IxHash';1";
 
 =head2 new()
 
@@ -519,9 +520,11 @@ sub new {
     }
     $self->program_name($name) if not defined $self->program_name();
     $self->program_dir($dir) if not defined $self->program_dir();
-    $self->parameters_changed(
-	$self->set_parameters(@args)
-	); # set on instantiation, per Bio::ParameterBaseI
+    if (@args) {
+	$self->parameters_changed(
+	    $self->set_parameters(@args)
+	    ); # set on instantiation, per Bio::ParameterBaseI
+    }
     return $self;
 }
 
@@ -569,128 +572,6 @@ sub program_dir {
     else {
 	return $self->{'_program_dir'};
     }
-}
-
-=head2 _translate_params
-
- Title   : _translate_params
- Usage   : @options = $assembler->_translate_params( );
- Function: Translate the Bioperl arguments into the arguments to pass to the
-           program on the command line
- Returns : Arrayref of arguments
- Args    : none
-
-=cut
-
-sub _translate_params {
-  my ($self)   = @_;
-  # Get option string
-  my ($join, $dash, $translat) =
-      @{$self->{_options}}{qw(_join _dash _translation)};
-  my $opts = $self->{_options};
-  my %params = $self->get_parameters('parameters');
-  my %switches = $self->get_parameters('switches');
-  my %self_params = $self->get_parameters('self_parameters');
-  my %self_switches = $self->get_parameters('self_switches');
-
-  # access the multiple dash choices of _setparams...
-  my @dash_args;
-  $dash ||= 1; # default as advertised
-  for ($dash) {
-      $_ eq '1' && do {
-	  @dash_args = ( -dash => 1 );
-	  last;
-      };
-      /^s/ && do { #single dash only
-	  @dash_args = ( -dash => 1);
-	  last;
-      };
-      /^d/ && do { # double dash only
-	  @dash_args = ( -double_dash => 1);
-	  last;
-      };
-      /^m/ && do { # mixed dash: one-letter opts get -,
-                  # long opts get --
-	  @dash_args = ( -mixed_dash => 1);
-	  last;
-      };
-      do { 
-	  $self->warn( "Dash spec '$dash' not recognized; using 'single'" );
-	  @dash_args = ( -dash => 1 );
-      };
-  }
-
-  my $options  = $self->_setparams(
-    -params    => [keys %params],
-    -switches  => [keys %switches],
-    -join      => $join,
-    @dash_args
-  );
-  # handle self options, if any:
-  my $self_options;
-  if ( %self_params || %self_switches ) {
-      $self_options  = $self->_setparams(
-	  -params    => [keys %self_params],
-	  -switches  => [keys %self_switches],
-	  -join      => $join,
-	  @dash_args
-	  );
-  };
-      
-
-  if ($self->can('self_options')) {
-	my @p = grep(/^_self\|/, @{$opts->{_params}});
-	my @s = grep(/^_self\|/, @{$opts->{_switches}});
-	s/.*?\|// for @p;
-	s/.*?\|// for @s;
-	
-	$self_options = $self->_setparams(
-	    -params => \@p,
-	    -switches => \@s,
-	    -join => $join,
-	    @dash_args
-	    );
-  }
-  # Translate options
-  my @options  = split(/(\s|$join)/, $options);
-  for (my $i = 0; $i < scalar @options; $i++) {
-    my ($prefix, $name) = ( $options[$i] =~ m/^(-{0,2})(.+)$/ );
-    if (defined $name) {
-	if ($name =~ /command/i) {
-	    $name = $options[$i+2]; # get the command
-	    splice @options, $i, 4;
-	    $i--;
-	    # don't add the command if this is a pseudo-program
-	    unshift @options, $name unless ($self->is_pseudo); # put command first
-	}
-	elsif (defined $$translat{$name}) {
-	    $options[$i] = $prefix.$$translat{$name};
-	}
-    } 
-    else {
-	splice @options, $i, 1;
-	$i--;
-    }
-  }
-  # special : the command '_self' indicates
-  # the program should be run without an
-  # intervening command
-  shift @options if ($options[0] and $options[0] eq '_self');
-
-  $options = join('', @options);
-
-  # this is a kludge for mixed options: the reason mixed doesn't 
-  # work right on the pass through _setparams is that the 
-  # *aliases* and not the actual params are passed to it. 
-  # here we just rejigger the dashes
-  if ($dash =~ /^m/) {
-      $options =~ s/--([a-z0-9](?:\s|$))/-$1/gi;
-  }
-
-  # Now arrayify the options
-  @options = split(' ', $options);
-
-  return \@options;
 }
 
 =head2 executable()
@@ -949,7 +830,8 @@ sub _run {
     # -- provide these as arguments to this function
     my $cmd = $self->can('command') ? $self->command : $self->default_command;
     my $opts = $self->{_options};
-    my %args; 
+    my %args;
+    tie %args, 'Tie::IxHash' if $HAVE_IXHASH;
     $self->throw("No command specified for the object and no default available")
 	unless $cmd;
     # setup files necessary for this command
@@ -1204,6 +1086,9 @@ sub AUTOLOAD {
     my $tok = $AUTOLOAD;
     my @args = @_;
     $tok =~ s/.*:://;
+    my %args;
+    tie %args, 'Tie::IxHash' if $HAVE_IXHASH;
+
     if ($tok eq 'command') {
 	return $self->default_command;
     }
@@ -1211,7 +1096,7 @@ sub AUTOLOAD {
 	my ($cmd) = $tok =~ m/new_(.*)/;
 	return $class->new( -command => $cmd, @args );
     }
-    my %args = @args;
+    %args = @args;
     if ($self && grep(/^$tok$/, $class->available_commands)) {
 	if ( @args{qw( command -command COMMAND -COMMAND)} ) {
 	    $self->warn("-command argument ignored in autorun");
@@ -1232,12 +1117,159 @@ sub AUTOLOAD {
 
 sub _is_parameter {
     my ($self, $opt) = @_;
-    return grep /^$opt$/, $self->available_parameters('parameters');
+    return grep /$opt$/, $self->available_parameters('parameters');
 }
 
 sub _is_switch {
     my ($self, $opt) = @_;
-    return grep /^$opt$/, $self->available_parameters('switches');
+    return grep /$opt$/, $self->available_parameters('switches');
+}
+
+=head2 _translate_params
+
+ Title   : _translate_params
+ Usage   : @options = $obj->_translate_params( );
+ Function: Translate the Bioperl arguments into the arguments to pass to the
+           program on the command line
+ Returns : Arrayref of arguments
+ Args    : none
+
+=cut
+
+sub _translate_params {
+  my ($self)   = @_;
+  # Get option string
+  my ($join, $dash) =
+      @{$self->{_options}}{qw(_join _dash)};
+  my %xlt;
+  my $opts = $self->{_options};
+  my (%params,%switches, %self_params, %self_switches);
+  if ($HAVE_IXHASH) {
+      tie %params, 'Tie::IxHash';
+      tie %switches, 'Tie::IxHash';
+      tie %self_params, 'Tie::IxHash';
+      tie %self_switches, 'Tie::IxHash';
+  }
+
+  %params = $self->get_parameters('parameters');
+  %switches = $self->get_parameters('switches');
+
+  if ($self->command ne '_self') {
+      %self_params = $self->get_parameters('self_parameters');
+      %self_switches = $self->get_parameters('self_switches');
+  }
+
+  # access the multiple dash choices of _setparams...
+  my @dash_args;
+  $dash ||= 1; # default as advertised
+  for ($dash) {
+      $_ eq '1' && do {
+	  @dash_args = ( -dash => 1 );
+	  last;
+      };
+      /^s/ && do { #single dash only
+	  @dash_args = ( -dash => 1);
+	  last;
+      };
+      /^d/ && do { # double dash only
+	  @dash_args = ( -double_dash => 1);
+	  last;
+      };
+      /^m/ && do { # mixed dash: one-letter opts get -,
+                  # long opts get --
+	  @dash_args = ( -mixed_dash => 1);
+	  last;
+      };
+      do { 
+	  $self->warn( "Dash spec '$dash' not recognized; using 'single'" );
+	  @dash_args = ( -dash => 1 );
+      };
+  }
+  my $options;
+  if (%params || %switches) {
+      $options  = $self->_setparams(
+	  -params    => [keys %params],
+	  -switches  => [keys %switches],
+	  -join      => $join,
+	  @dash_args
+	  );
+
+      $xlt{$_} = $self->{_options}{_translation}->{
+	  $self->{_options}{_prefixes}->{$self->command}.'|'.$_
+      } for (keys %params, keys %switches);
+      $options =~ s/^\s+//;
+      $options =~ s/\s+$//;
+  }
+
+  # handle self options, if any:
+  my $self_options;
+  if ( %self_params || %self_switches ) {
+      $self_options  = $self->_setparams(
+	  -params    => [keys %self_params],
+	  -switches  => [keys %self_switches],
+	  -join      => $join,
+	  @dash_args
+	  );
+      $xlt{$_} = $self->{_options}{_translation}->{"_self|$_"}
+      for (keys %self_params, keys %self_switches);
+      $self_options =~ s/^\s+//;
+      $self_options =~ s/\s+$//;
+};
+  
+  # Translate options
+  my (@options,@self_options);
+
+  @options = split(/\s+|$join/, $options) if $options;
+  @self_options = split(/\s+|$join/, $self_options) if $self_options;
+  for (my $i = 0; $i < scalar @options; $i++) {
+    my ($dash, $name) = ( $options[$i] =~ m/^(-{0,2})(.+)$/ );
+    if (defined $name) {
+	# if ($name =~ /command/i) {
+# 	    $nname = $options[$i+2]; # get the command
+# 	    splice @options, $i, 4;
+# 	    $i--;
+# 	    # don't add the command if this is a pseudo-program
+# 	    unshift @options, $name unless ($self->is_pseudo); # put command first
+# 	}
+	if (defined $xlt{$name}) {
+	    $options[$i] = $dash.$xlt{$name};
+	}
+    } 
+    else {
+	splice @options, $i, 1;
+	$i--;
+    }
+  }
+
+  if ( !$self->is_pseudo and $self->command ne '_self' ) {
+      unshift @options, $self->command;
+  }
+
+  # translate and add additional self options if any
+  for (my $i = 0; $i < scalar @self_options; $i++) {
+    my ($dash, $name) = ( $self_options[$i] =~ m/^(-{0,2})(.+)$/ );
+    if (defined $name && defined $xlt{$name} ) {
+	$self_options[$i] = $dash.$xlt{$name};
+    } 
+  }
+  @options = (@self_options,@options);
+
+#  $options = join('', @options);
+
+  # this is a kludge for mixed options: the reason mixed doesn't 
+  # work right on the pass through _setparams is that the 
+  # *aliases* and not the actual params are passed to it. 
+  # here we just rejigger the dashes
+  if ($dash =~ /^m/) {
+      s/--([a-z0-9](?:\s|$))/-$1/gi for (@options);
+  }
+
+  # Now arrayify the options
+ # @options = split(' ', $options);
+
+  #trim wsp
+
+  return \@options;
 }
 
 =head1 Bio:ParameterBaseI compliance
@@ -1263,15 +1295,20 @@ sub set_parameters {
 	@{$opts}{qw(_params _switches _translation _dash _join)};
     # check incompatibilites and corequisites, attempting to DTRT
     # (ripped from kortsch's Bowtie, thanks Dan)
-    $self->_massage_options(\@args);
-    my %args = @args;
+    return unless (@args = $self->_massage_options(@args)); 
+    my %args;
+    tie %args, 'Tie::IxHash' if $HAVE_IXHASH;
+    %args = @args;
+    my (@p, @s);
     my $cmd = $args{'-command'} || $args{'command'} || ($self->can('command') && $self->command);
     unless ($cmd) {
 	if ($self->default_command) {
 	    push @args, '-command' => $self->default_command;
+	    $cmd = $self->default_command;
 	}
 	elsif (grep /^run$/, @{$opts->{'_commands'}}) {
 	    push @args, '-command' => 'run';
+	    $cmd = 'run';
 	}
 	else {
 	    return 0; # quietly, but 0, since a command is needed to 
@@ -1279,51 +1316,20 @@ sub set_parameters {
 	}
     }
     %args = @args;
-    if ($cmd) {
-	# filter the registered params/switches to
-	# the subset requested in the arguments to set_parameters,
-	# so we only create accessors for this command's options:
-	$self->throw("Command '$cmd' not registered") unless grep /^$cmd$/, @{$self->{'_options'}->{'_commands'}};
-	$cmd = $self->{_options}->{_prefixes}->{$cmd} || $cmd;
-	
-	my @p = (grep(!/^.*?\|/, @$params), grep(/^${cmd}\|/, @$params));
-	my @s = (grep(!/^.*?\|/, @$switches), grep(/^${cmd}\|/, @$switches));
-	s/.*?\|// for @p;
-	s/.*?\|// for @s;
-# 	@x{@p, @s} = @{$translation}{
-# 	    grep( !/^.*?\|/, @$params, @$switches),
-# 	    grep(/^${cmd}\|/, @$params, @$switches) };
 
-#  	$opts->{_translation} = $translation = \%x;
-# 	$opts->{_params} =   $params = \@p;
-# 	$opts->{_switches} = $switches = \@s;
-	$params = \@p;
-	$switches = \@s;
-    }
-    my $self_options = $args{'-self_options'} || $args{'-SELF_OPTIONS'};
-    delete $args{'-self_options'};
-    delete $args{'-SELF_OPTIONS'};
-    if ($self_options) {
-	$self->throw( "Arrayref requried at arg '-self_options'") unless
-	    ref($self_options) and ref($self_options) eq 'ARRAY';
-	my @p = grep(/^_self\|/, @{$opts->{_params}});
-	my @s = grep(/^_self\|/, @{$opts->{_switches}});
-	s/.*?\|/self_/ for @p;
-	s/.*?\|/self_/ for @s;
-	$self->_set_from_args(
-	    $self_options,
-	    -methods => [@p, @s],
-	    -create => 1,
-	    -code => 
-	    ' my $self = shift; 
-              $self->parameters_changed(0);
-              return $self->{\'_\'.$method} = shift if @_;
-              return $self->{\'_\'.$method};'
-	    );
-    }
+    # filter the registered params/switches to
+    # the subset requested in the arguments to set_parameters,
+    # so we only create accessors for this command's options:
+    $self->throw("Command '$cmd' not registered") unless grep /^$cmd$/, @{$self->{'_options'}->{'_commands'}};
+    $cmd = $self->{_options}->{_prefixes}->{$cmd} || $cmd;
+    
+    @p = (grep(!/^.*?\|/, @$params), grep(/^${cmd}\|/, @$params));
+    @s = (grep(!/^.*?\|/, @$switches), grep(/^${cmd}\|/, @$switches));
+    s/.*?\|// for @p;
+    s/.*?\|// for @s;
     $self->_set_from_args(
 	\@args,
-	-methods => [ @$params, @$switches, 'command', 'program_name', 'program_dir', 'out_type' ],
+#	-methods => [ 'command', 'program_name', 'program_dir' ],
 	-create =>  1,
 	# when our parms are accessed, signal parameters are unchanged for
 	# future reads (until set_parameters is called)
@@ -1331,10 +1337,33 @@ sub set_parameters {
 	' my $self = shift; 
           $self->parameters_changed(0);
           return $self->{\'_\'.$method} = shift if @_;
-          return $self->{\'_\'.$method};'
+          return $self->{\'_\'.$method};',
+	-case_sensitive => 1
 	);
-    # the question is, are previously-set parameters left alone when
-    # not specified in @args?
+
+    my $self_options = $args{'-self_options'} || $args{'-SELF_OPTIONS'};
+    delete $args{'-self_options'};
+    delete $args{'-SELF_OPTIONS'};
+    if ($self_options) {
+	$self->throw( "Arrayref requried at arg '-self_options'") unless
+	    ref($self_options) and ref($self_options) eq 'ARRAY';
+	@p = grep(/^_self\|/, @{$opts->{_params}});
+	@s = grep(/^_self\|/, @{$opts->{_switches}});
+	s/.*?\|/self_/ for @p;
+	s/.*?\|/self_/ for @s;
+	$self->_set_from_args(
+	    $self_options,
+#	    -methods => [@p, @s],
+	    -create => 1,
+	    -code => 
+	    ' my $self = shift; 
+              $self->parameters_changed(0);
+              return $self->{\'_\'.$method} = shift if @_;
+              return $self->{\'_\'.$method};',
+	    -case_sensitive => 1
+	    );
+    }
+
     $self->parameters_changed(1);
     return 1;
 }
@@ -1355,30 +1384,27 @@ sub reset_parameters {
     my @reset_args;
     # currently stored stuff
     my $opts = $self->{'_options'};
-    my $params = $opts->{'_params'};
-    my $switches = $opts->{'_switches'};
-    my $translation = $opts->{'_translation'};
-    my $qual_param = $opts->{'_qual_param'};
-    my $use_dash = $opts->{'_dash'};
-    my $join = $opts->{'_join'};
 
     # handle command name
-    my %args = @args;
-    my $cmd = $args{'-command'} || $args{'command'} || $self->command;
-    $args{'command'} = $cmd;
-    delete $args{'-command'};
-    @args = %args;
-    # don't like this, b/c _set_program_args will create a bunch of
-    # accessors with undef values, but oh well for now /maj
-
-    for my $p (@$params) {
-	push(@reset_args, $p => undef) unless grep /^[-]?$p$/, @args;
+#     my %args = @args;
+#     my $cmd = $args{'-command'} || $args{'command'} || $self->command;
+#     $args{'command'} = $cmd;
+#     delete $args{'-command'};
+#     @args = %args;
+    my %p = $self->get_parameters('params');
+    my %s = $self->get_parameters('switches');
+    my (%self_p, %self_s);
+    unless ($self->command eq '_self') {
+	%self_p = $self->get_parameters('self_params');
+	%self_s = $self->get_parameters('self_switches');
     }
-    for my $s (@$switches) {
-	push(@reset_args, $s => undef) unless grep /^[-]?$s$/, @args;
+    for my $p (keys %p, keys %s, keys %self_p, keys %self_s ) {
+	push(@reset_args, $p) unless grep /^[-]?$p$/, @args;
     }
-    push @args, @reset_args;
-    $self->set_parameters(@args);
+    for (@reset_args) { 
+	$self->$_(undef);
+    }
+    return unless $self->set_parameters(@args); 
     $self->parameters_changed(1);
 }
 
@@ -1462,47 +1488,47 @@ sub get_parameters {
     $subset ||= 'all';
     my @ret;
     my $opts = $self->{'_options'};
+    my @o;
     for ($subset) {
 	m/^p/i && do { #params only
-	    for (@{$opts->{'_params'}}) {
-		push(@ret, $_, $self->$_) if $self->can($_) && defined $self->$_;
+	    if ($self->command eq '_self') {
+		$_ = "self_params";
 	    }
-	    last;
+	    else {
+		@o = grep !/^_self/, @{$opts->{'_params'}};
+		last;
+	    }
 	};
 	m/^sw/i && do { #switches only
-	    for (@{$opts->{'_switches'}}) {
-		push(@ret, $_, $self->$_) if $self->can($_) && defined $self->$_;
+	    if ($self->command eq '_self') {
+		$_ = "self_switches";
 	    }
-	    last;
+	    else {
+		@o = grep !/^_self/, @{$opts->{'_switches'}};
+		last;
+	    }
 	};
 	m/^self_p/i && do { # self parameters only
-	    my @p = grep /^_self/, @{$opts->{'_params'}};
-	    s/^_self\|/self_/ for @p;
-	    for (@p) {
-		push(@ret, $_, $self->$_) 
-		    if $self->can($_) && defined $self->$_;	    
-	    }
+	    @o = grep /^_self/, @{$opts->{'_params'}};
 	    last;
 	};
 	m/^self_s/i && do { # self switches only
-	    my @s = grep /^_self/, @{$opts->{'_switches'}};
-	    s/^_self\|/self_/ for @s;
-	    for (@s) {
-		push(@ret, $_, $self->$_) 
-		    if $self->can($_) && defined $self->$_;	    
-	    }
+	    @o = grep /^_self/, @{$opts->{'_switches'}};
 	    last;
 	};
 	m/^a/i && do { # all
-	    for ((@{$opts->{'_params'}},@{$opts->{'_switches'}})) {
-		push(@ret, $_, $self->$_) if $self->can($_) && defined $self->$_;
-	    }
+	    @o = ('command',@{$opts->{'_params'}},@{$opts->{'_switches'}});
 	    last;
 	};
 	do {
 	    $self->throw("get_parameters: unrecognized subset");
 	};
     }
+    s/^.*\|// for @o;
+    for (@o) {
+	push(@ret, $_, $self->$_) if $self->can($_) && defined $self->$_;
+    }
+
     return @ret;
 }
 
@@ -1512,31 +1538,35 @@ sub get_parameters {
 
 sub _massage_options {
     my $self = shift;
-    my $args = shift;
-    my %args = @$args; 
+    tie my %args, 'Tie::IxHash';
+    %args = @_;
+    my @added;
+    my @removed;
     my ($incompat, $coreqs) = @{$self->{_options}}{qw( _incompat _coreq)};
     foreach (keys %args) {
-	my @added;
-	my @removed;
 	s/^-//;
 	foreach my $conflict (@{$$incompat{$_}}) {
+
+	    next if grep /$_/, @removed;
+	    next if grep /$conflict/, @removed; # 
 	    if (grep /$conflict/, @added) {
 		$self->debug("Argument imcompatibility cannot be resolved : '$conflict' is required by one option and incompatible with another");
 		return;
 	    }
 	    delete $args{'-'.$conflict};
-	    if ($self->{'_'.$conflict}) {
-		$args{'-'.$conflict} = undef;
-		push @removed, $conflict;
-	    }
+	    $self->$conflict(undef) if $self->can($conflict);
+	    push @removed, $conflict;
+
 	}
 	foreach my $requirement (@{$$coreqs{$_}}) {
 	    if (grep /$requirement/, @removed) {
 		$self->debug("Argument imcompatibility cannot be resolved : '$requirement' is incompatible with one option and required by another");
 		return;
 	    }
+	    next if grep(/$requirement/, keys %args) or 
+		($self->can($requirement) && $self->$requirement);
 	    if ($self->_is_switch($requirement)) {
-		$args{'-'.$requirement}=1 if $args{$_};
+		$args{'-'.$requirement}=1;
 		push @added, $requirement;
 	    }
 	    else {
@@ -1548,7 +1578,7 @@ sub _massage_options {
 	$self->debug("Added corequisites : \n".join("\n",@added)."\n") if @added;
     }
     my @args = %args;
-    return $args = \@args;
+    return @args;
 
 }
 1;

@@ -362,6 +362,8 @@ our $SCHEMA_URL = "http://fortinbras.us/wrappermaker/1.0/maker.xsd";
 my $where_i_am = (File::Spec->splitpath( File::Spec->rel2abs(__FILE__) ))[1];
 our $LOCAL_XSD = File::Spec->catfile($where_i_am, "WrapperMaker","maker.xsd");
 
+our $HAVE_IXHASH = eval "require Tie::IxHash; 1";
+
 # config globals for export to specified namespace:
 my @EXPORT_SYMBOLS = 
     qw(
@@ -401,6 +403,18 @@ our ( $defs_version,
       %accepted_types,
       %lookups);
 
+if ($HAVE_IXHASH) {
+    tie my %command_executables, 'Tie::IxHash';
+    tie my %command_prefixes, 'Tie::IxHash';
+    tie my %composite_commands, 'Tie::IxHash';
+    tie my %incompat_options, 'Tie::IxHash';
+    tie my %coreq_options, 'Tie::IxHash';
+    tie my %param_translation, 'Tie::IxHash';
+    tie my %command_files, 'Tie::IxHash';
+    tie my %accepted_types, 'Tie::IxHash';
+    tie my %lookups, 'Tie::IxHash';
+}
+
 @program_commands = qw(command);
 
 #create the run factory and deliver : class or instance method
@@ -426,7 +440,7 @@ sub compile {
                            Bio::Root::Root)";
     # if no explicit 'run' command, export an alias to 
     # _run
-    unless ( grep /^run$/, @program_commands ) {
+    unless ( grep /^run$/, (@program_commands, keys %composite_commands) ) {
 	eval "sub $ns\::run \{ shift->_run(\@_); \}";
     }
     my $wrapper = $ns->new();
@@ -471,7 +485,7 @@ sub new {
 				       'perl-namespace' => \&perlns,
 				       'commands' => \&commands,
 				       'self' => \&commands,
-				       'composite-commands' => \&composite_commands,
+				       'composite-command' => \&composite_command,
 				       'lookups' => \&lookups } );
 					   
     return $self;
@@ -496,10 +510,19 @@ sub validate_defs {
 	return 1;
     }
     return 1 if ($VALIDATE_DEFS < 0); # quiet non-val
-    my @args = ( ($defs =~ /<[^>]+>/) ? 
-		 ( string => $defs ) :
-		 ( location => $defs ) );
-    my $doc = XML::LibXML->new->load_xml(@args);
+    my $mth = "parse_";
+    for ($defs) {
+	ref && do {
+	    $mth .= 'fh';
+	    last;
+	};
+	/<[^>]+>/ && do {
+	    $mth .= 'string';
+	    last;
+	};
+	$mth .= 'file';
+    }
+    my $doc = XML::LibXML->new->$mth($defs);
     my $schema = XML::LibXML::Schema->new( location => $schema_file ||
 					   $SCHEMA_URL );
     unless ($schema) {
@@ -622,10 +645,15 @@ sub commands {
 
     foreach my $cmd ($elt->gi eq 'self' ? $elt : $elt->children) {
 	# looping over commandType elements
-	push @program_commands, ($cmd->att('default') ? '*' : '').
+	push @program_commands, ($cmd->att('default') eq 'true' ? '*' : '').
 	    $cmd->att('name');
-	$command_prefixes{$cmd->att('name')} = $cmd->att('prefix') 
-	    if $cmd->att('prefix');
+	if ($elt->gi eq 'self') {
+	    $command_prefixes{$cmd->att('name')} = '_self';
+	}
+	else {
+	    $command_prefixes{$cmd->att('name')} = $cmd->att('prefix') 
+		if $cmd->att('prefix');
+	}
 	# handle options
 	my $opts = $cmd->first_child('options');
 	if ($opts) {
@@ -646,15 +674,13 @@ sub commands {
     }
 }
 
-sub composite_commands {
-    my ($twig, $elt) = @_;
-    foreach my $cmd ($elt->children) {
-	my @subcmds;
-	foreach my $subcmd ($cmd->children) {
-	    push @subcmds, $cmd->att('name');
-	}
-	$composite_commands{$cmd->att('name')} = \@subcmds;
+sub composite_command {
+    my ($twig, $cmd) = @_;
+    my @subcmds;
+    foreach my $subcmd ($cmd->children) {
+	push @subcmds, $cmd->att('name');
     }
+    $composite_commands{$cmd->att('name')} = \@subcmds;
 }
 
 sub lookups {
@@ -682,14 +708,16 @@ sub handle_option {
 	$param_translation{$nm} = $opt->att('translation');
     }
     if ($opt->first_child('incompatibles')) {
+	my $a = $incompat_options{$opt->att('name')} = [];
 	foreach ($opt->first_child('incompatibles')->children) {
 	    # note here that no prefix is added to the command name
-	    $incompat_options{$opt->att('name')} =$_->att('name');
+	    push @$a, $_->att('name');
 	}
     }
     if ($opt->first_child('corequisites')) {
+	my $a = $coreq_options{$opt->att('name')} = [];
 	foreach ($opt->first_child('corequisites')->children) {
-	    $coreq_options{$opt->att('name')} = $_->att('name');
+	    push @$a, $_->att('name');
 	}
     }
 }
@@ -699,17 +727,21 @@ sub handle_filespec {
     my $tok = $spc->att('token');
     for ($spc->att('use')) {
 	last if !defined;
-	m/required-single/ && do {
+	m/required/ && do {
 	    last;
 	};
-	m/required-multiple/ && do {
-	    $tok = "*$tok";
-	};
-	m/optional-single/ && do {
+	m/optional/ && do {
 	    $tok = "#$tok";
+	    last;
 	};
-	m/optional-multiple/ && do {
-	    $tok = "#*$tok";
+    }
+    for ($spc->att('use')) {
+	m/single/ && do {
+	    last;
+	};
+	m/multiple/ && do {
+	    $tok = "*$tok";
+	    last;
 	};
     }
     for ($spc->att('redirect')) {
@@ -730,6 +762,16 @@ sub handle_filespec {
 	m/.+/ && do {
 	    $tok = "$_$tok"; # stub
 	};
+    }
+
+#### accepted types: provided to CommandExts as global hash,
+#### but nothing done with it explicitly--up to user to 
+#### implement
+
+    if ($spc->first_child('accepted-types')) {
+	foreach ($spc->first_child('accepted-types')->children) {
+	    $accepted_types{$spc->att('token')} = $_->att('type');
+	}
     }
     push @$ar, $tok;
 }
