@@ -82,20 +82,15 @@
       </xs:documentation>
     </xs:annotation>
     <xs:sequence> 
-      <xs:element name="options" minOccurs="0">
+      <xs:element name="options" minOccurs="0" type="tns:optionSeqType">
 	<xs:annotation>
 	  <xs:documentation>
 	    Contains a sequence of option descriptions. 
 	    Element. Optional.
 	  </xs:documentation>
 	</xs:annotation>
-	<xs:complexType>
-	  <xs:sequence>
-	    <xs:element name="option" type="tns:optionType" maxOccurs="unbounded"/>
-	  </xs:sequence>
-	</xs:complexType>
       </xs:element>
-      <xs:element name="filespecs" minOccurs="0">
+      <xs:element name="filespecs" minOccurs="0" type="tns:filespecSeqType">
 	<xs:annotation>
 	  <xs:documentation>
 	    A sequence of filespecType elements, describing the I/O
@@ -106,11 +101,6 @@
 	    Element. Optional.
 	  </xs:documentation>
 	</xs:annotation>
-	<xs:complexType>
-	  <xs:sequence>
-	    <xs:element name="filespec" type="tns:filespecType" maxOccurs="unbounded"/>
-	  </xs:sequence>
-	</xs:complexType>
       </xs:element>
     </xs:sequence>
     <xs:attribute name="name" type="tns:taintCheckToken" use="required">
@@ -220,10 +210,20 @@
 	</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    
-    
   </xs:complexType>
-  
+
+  <xs:complexType name="optionSeqType">
+    <xs:annotation>
+      <xs:documentation>
+	Contains a sequence of option descriptions. 
+	Element. Optional.
+      </xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="option" type="tns:optionType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+    
   <xs:complexType name="filespecType">
     <xs:annotation>
       <xs:documentation>
@@ -235,8 +235,9 @@
       <xs:element name="accepted-types" minOccurs="0">
 	<xs:annotation>
 	  <xs:documentation>
-	    A list of filetypes that are accepted for this filespec. Allows 
-	    CommandExts to do sanity checking. Ex) Accepted types for filespec
+	    A list of filetypes that are accepted for this filespec.
+	    Causes creation of hash %accepted_types, intended for
+	    user-provided sanity checking. Ex) Accepted types for filespec
 	    'fas' might be 'fasta', 'fastq', 'raw'. 
 	    Element. Optional.
 	  </xs:documentation>
@@ -304,6 +305,22 @@
     </xs:attribute>
           
   </xs:complexType>
+
+  <xs:complexType name="filespecSeqType">
+    <xs:annotation>
+      <xs:documentation>
+	A sequence of filespecType elements, describing the I/O
+	portion of the command-line for this command, and other
+	atypical options not flagged by dashes.
+	The order in which these appear in the xml must be the order
+	required by the program (this is how the correct mapping is made)
+	Element. Optional.
+      </xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="filespec" type="tns:filespecType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
   
   <xs:complexType name="compositeCommandType">
     <xs:sequence>
@@ -335,6 +352,15 @@
 	</xs:documentation>
       </xs:annotation>
     </xs:attribute>
+    <xs:attribute name="default" type="xs:boolean" use="optional">
+      <xs:annotation>
+	<xs:documentation>
+	  Indicate with "true" that this command is the default (selected
+	  when the -command parameter is not set.)
+	</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+
   </xs:complexType>
   
   <xs:complexType name="lookupType">
@@ -361,22 +387,8 @@
     <xs:complexContent>
       <xs:restriction base="tns:commandType">
 	<xs:sequence> 
-	  <xs:element name="options" minOccurs="0">
-	    <xs:complexType>
-	      <xs:sequence>
-		<xs:element name="option" type="tns:optionType" 
-			    maxOccurs="unbounded"/>
-	      </xs:sequence>
-	    </xs:complexType>
-	  </xs:element>
-	  <xs:element name="filespecs" minOccurs="0">
-	    <xs:complexType>
-	      <xs:sequence>
-		<xs:element name="filespec" type="tns:filespecType" 
-			    maxOccurs="unbounded"/>
-	      </xs:sequence>
-	    </xs:complexType>
-	  </xs:element>
+	  <xs:element name="options" minOccurs="0" type="tns:optionSeqType"/>
+	  <xs:element name="filespecs" minOccurs="0" type="tns:filespecSeqType"/>
 	</xs:sequence>
 	<xs:attribute name="name" fixed="_self" type="tns:taintCheckToken" use="required"/>
 	<xs:attribute name="prefix" fixed="_self" type="tns:taintCheckToken"/>
@@ -478,12 +490,12 @@
 	</xs:annotation>
       </xs:element>
       
-      <xs:element name="composite-commands" type="tns:compositeCommandType" >
+      <xs:element name="composite-command" type="tns:compositeCommandType" >
 	<xs:annotation>
 	  <xs:documentation>
-	    Define composite commands: a single method name associated with
+	    Define a composite command: a single method name associated with
 	    execution of a set of native commands in order
-	    Element (sequence). Optional.
+	    Element. Optional. Multiple.
 	  </xs:documentation>
 	</xs:annotation>
       </xs:element>
@@ -520,7 +532,7 @@
       <xs:element ref="tns:perl-namespace" minOccurs="0"/>
       <xs:element ref="tns:commands" minOccurs="0"/>
       <xs:element ref="tns:self" minOccurs="0"/>
-      <xs:element ref="tns:composite-commands" minOccurs="0"/>
+      <xs:element ref="tns:composite-command" minOccurs="0"/>
       <xs:element ref="tns:lookups" minOccurs="0"/>
     </xs:sequence>
   </xs:complexType>
