@@ -1,0 +1,65 @@
+<!-- test wrappermaker defs file for perl -->
+<!-- $Id$ -->
+<defs 
+    xmlns="http://www.bioperl.org/wrappermaker/1.0">
+  <program name="perl" dash-policy="mixed"/>
+
+    <commands>
+      <!-- commands here are test scripts -->
+      <command name="test1" prefix="t1" >
+	<options>
+	  <option name="boog" type="parameter"/>
+	  <option name="goob" type="switch" translation="b"/>
+	  <option name="freen" type="switch">
+	    <corequisites>
+	      <option name="needed"/>
+	    </corequisites>
+	  </option>
+	  <option name="glarb" type="parameter">
+	    <corequisites>
+	      <option name="needed_to_fail"/>
+	    </corequisites>
+	  </option>
+	  <option name="needed" type="switch"/>
+	  <option name="needed_to_fail" type="parameter"/>
+	</options>
+      </command>
+      <command name="test2" prefix="t2">
+      </command>
+    </commands>
+    
+    <self name="_self" prefix="_self" default="true">
+      <!-- options for 'perl' itself -->
+      <options>
+	<option name="perl_version" type="switch" translation="v"/>
+	<option name="perl_Version" type="switch" translation="V"/>
+	<option name="one_liner" type="parameter" translation="e"/>
+	<option name="autoloop" type="switch" translation="p"/>
+	<option name="quiet_autoloop" type="switch" translation="n"/>
+	<option name="module" type="parameter" translation="M"/>
+	<option name="syntax_only" type="switch" translation="c"/>
+	<option name="warnings" type="switch" translation="W">
+	  <incompatibles>
+	    <option name="nowarnings"/>
+	  </incompatibles>
+	</option>
+	<option name="nowarnings" type="switch" translation="X">
+	  <incompatibles>
+	    <option name="warnings"/>
+	  </incompatibles>
+	</option>
+      </options>
+      <filespecs>
+	<filespec token="stdin" use="optional-single" redirect="stdin"/>
+	<filespec token="in" use="optional-multiple"/>
+	<filespec token="out" use="optional-single" redirect="stdout"/>
+	<filespec token="err" use="optional-single" redirect="stderr"/>
+      </filespecs>
+
+    </self>
+    
+    <composite-command name="run">
+      <command name="test2"/>
+      <command name="test1"/>
+    </composite-command>
+</defs>
