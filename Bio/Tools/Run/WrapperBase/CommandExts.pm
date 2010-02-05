@@ -1538,7 +1538,8 @@ sub get_parameters {
 
 sub _massage_options {
     my $self = shift;
-    tie my %args, 'Tie::IxHash';
+    my %args;
+    tie my %args, 'Tie::IxHash' if $HAVE_IXHASH;
     %args = @_;
     my @added;
     my @removed;
