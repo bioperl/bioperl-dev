@@ -1441,17 +1441,22 @@ sub available_parameters {
     my $subset = shift;
     my $opts = $self->{'_options'};
     my @ret;
+    my $pfx = $opts->{_prefixes}->{$self->command};
     for ($subset) {
-	(!defined || /^a/) && do {
+	!defined && do {
 	    @ret = (@{$opts->{'_params'}}, @{$opts->{'_switches'}});
 	    last;
 	};
+	m/^a/i && do {
+	    @ret = grep /^$pfx/,(@{$opts->{'_params'}}, @{$opts->{'_switches'}});
+	    last;
+	};
 	m/^p/i && do {
-	    @ret = @{$opts->{'_params'}};
+	    @ret = grep /^$pfx/, @{$opts->{'_params'}};
 	    last;
 	};
 	m/^s/i && do {
-	    @ret = @{$opts->{'_switches'}};
+	    @ret = grep /^$pfx/, @{$opts->{'_switches'}};
 	    last;
 	};
 	m/^c/i && do {
@@ -1465,6 +1470,7 @@ sub available_parameters {
 	    $self->throw("available_parameters: unrecognized subset");
 	};
     }
+    if ($subset =~ /^[psa]/i) { s/^.*\|// for (@ret); }
     return @ret;
 }
 
@@ -1495,7 +1501,7 @@ sub get_parameters {
 		$_ = "self_params";
 	    }
 	    else {
-		@o = grep !/^_self/, @{$opts->{'_params'}};
+		@o = grep !/^_self|command/, @{$opts->{'_params'}};
 		last;
 	    }
 	};
@@ -1524,7 +1530,7 @@ sub get_parameters {
 	    $self->throw("get_parameters: unrecognized subset");
 	};
     }
-    s/^.*\|// for @o;
+    unless ($subset =~ /^a/i) { s/^.*\|// for (@o);}
     for (@o) {
 	push(@ret, $_, $self->$_) if $self->can($_) && defined $self->$_;
     }
@@ -1539,7 +1545,7 @@ sub get_parameters {
 sub _massage_options {
     my $self = shift;
     my %args;
-    tie my %args, 'Tie::IxHash' if $HAVE_IXHASH;
+    tie %args, 'Tie::IxHash' if $HAVE_IXHASH;
     %args = @_;
     my @added;
     my @removed;

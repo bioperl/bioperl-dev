@@ -85,7 +85,6 @@ SKIP : {
     my @ls = readdir $d;
 
     my @lsw = split("\n", $lsfac->stdout);
-    $DB::single=1;
     is_deeply([sort @lsw], [sort @ls] , "return ok");
     1;
 }
@@ -111,7 +110,6 @@ ok $pf->reset_parameters( -command => 'test1',
 			     -module => 'Test::More'
 			]), "set parms (3)";
 is (join(' ',@{$pf->_translate_params}), "-M Test::More test1 -b", "xlt parms (3)");
-$DB::single =1;
 ok $pf->reset_parameters( -command => 'test1',
 			  -freen => 1 );
 ok $pf->needed, "coreq switch massage";
