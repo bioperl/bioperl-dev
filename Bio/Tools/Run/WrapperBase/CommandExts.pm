@@ -434,7 +434,8 @@ our @IMPORT_SYMBOLS = qw(
              %incompat_options
              %coreq_options
 );
-our $HAVE_IXHASH = eval "require 'Tie::IxHash';1";
+
+our $HAVE_IXHASH = eval "require Tie::IxHash; 1";
 
 =head2 new()
 
@@ -1363,7 +1364,7 @@ sub set_parameters {
     delete $args{'-self_options'};
     delete $args{'-SELF_OPTIONS'};
     if ($self_options) {
-	$self->throw( "Arrayref requried at arg '-self_options'") unless
+	$self->throw( "Arrayref required at arg '-self_options'") unless
 	    ref($self_options) and ref($self_options) eq 'ARRAY';
 	@p = grep(/^_self\|/, @{$opts->{_params}});
 	@s = grep(/^_self\|/, @{$opts->{_switches}});
@@ -1403,12 +1404,6 @@ sub reset_parameters {
     # currently stored stuff
     my $opts = $self->{'_options'};
 
-    # handle command name
-#     my %args = @args;
-#     my $cmd = $args{'-command'} || $args{'command'} || $self->command;
-#     $args{'command'} = $cmd;
-#     delete $args{'-command'};
-#     @args = %args;
     my %p = $self->get_parameters('params');
     my %s = $self->get_parameters('switches');
     my (%self_p, %self_s);

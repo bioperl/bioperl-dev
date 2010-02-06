@@ -9,7 +9,7 @@ BEGIN {
  use Bio::Root::Test;
  $home = "..";
  unshift @INC, $home;
- test_begin( -tests => 100,
+ test_begin( -tests => 45, ###
 	      -requires_modules => [qw(
                                      Bio::Tools::Run::WrapperBase
                                      Bio::Tools::Run::WrapperBase::CommandExts
@@ -52,7 +52,7 @@ is (ref($lsfac), 'MyWrapper', "class correct");
 is ($lsfac->program_name, 'ls', "program name in the namespace");
 is ($MyWrapper::use_dash, 'mixed','$use_dash');
 is_deeply (\@MyWrapper::program_commands, [qw( command _self )], '@program_commands');
-is_deeply (\@MyWrapper::program_switches, [qw( all sort_by_size sort_by_time one_line_each )], '@program_switches');
+is_deeply (\@MyWrapper::program_switches, [qw( _self|all _self|sort_by_size _self|sort_by_time _self|one_line_each )], '@program_switches');
 is_deeply (\%MyWrapper::param_translation, { '_self|sort_by_size' => 'S',
 					     '_self|sort_by_time' => 't',
 					     '_self|one_line_each' => '1' },
@@ -70,7 +70,7 @@ is_deeply ($opts->{_translation}, { '_self|sort_by_size' => 'S',
 is_deeply ($opts->{_files}, { _self => [qw( *#pth >#out )] },
 	   'registry (4)');
 
-is_deeply ([$lsfac->available_parameters('switches')], [qw( _self|all _self|sort_by_size _self|sort_by_time _self|one_line_each )], "switches thru api");
+is_deeply ([$lsfac->available_parameters('switches')], [qw( all sort_by_size sort_by_time one_line_each )], "switches thru api");
 
 SKIP : {
     test_skip( -tests => 6,
