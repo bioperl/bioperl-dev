@@ -494,6 +494,8 @@ sub new {
 	$default_command = '_self';
     }
     else {
+	# the default command is indicated by a leading 
+	# asterisk in the name:
 	for (@$commands) { s/^\*// && ($default_command = $_); }
     }
     @registry{qw( _commands _default_command _prefixes _files 
@@ -505,7 +507,7 @@ sub new {
 
     $self->{_options} = \%registry;
     if (not defined $use_dash) {
-	$self->{'_options'}->{'_dash'}      = 1;
+	$self->{'_options'}->{'_dash'}      = 1; # single-dash policy
     } else {
 	$self->{'_options'}->{'_dash'}      = $use_dash;
     }
@@ -514,6 +516,8 @@ sub new {
     } else {
 	$self->{'_options'}->{'_join'}      = $join;
     }
+    # a leading asterisk on the program name indicates
+    # a pseudo-program:
     if ($name =~ /^\*/) {
 	$self->is_pseudo(1);
 	$name =~ s/^\*//;
@@ -614,7 +618,7 @@ sub executable {
 =head2 executables()
 
  Title   : executables
- Usage   : 
+ Usage   : called by executable()
  Function: find the full path to a command's executable
  Returns : full path (scalar string)
  Args    : command (scalar string), 
@@ -650,6 +654,7 @@ sub executables {
 
  Title   : _find_executable
  Usage   : my $exe_path = $fac->_find_executable($exe, $warn);
+           (internal method)
  Function: find the full path to a named executable,
  Returns : full path, if found
  Args    : name of executable to find
@@ -683,11 +688,14 @@ sub _find_executable {
 	$path = File::Spec->catfile($self->program_dir, $exe);
     } else {
 	$path = $exe;
-	$self->warn('Program directory not specified; use program_dir($path).') if $warn;
+	$self->warn('Program directory not specified; use program_dir($path).')
+	    if $warn;
     }
 
     # use provided info - we are allowed to follow symlinks, but refuse directories
-    map { return $path.$_ if ( -x $path.$_ && !(-d $path.$_) ) } ('', '.exe') if defined $path;
+    map { 
+	return $path.$_ if ( -x $path.$_ && !(-d $path.$_) ) 
+    } ('', '.exe') if defined $path;
 
     # couldn't get path to executable from provided info, so use system path
     $path = $path ? " in $path" : undef;
@@ -695,7 +703,10 @@ sub _find_executable {
     if ($path = $self->io->exists_exe($exe)) {
 	return $path;
     } else {
-	$self->warn("Cannot find executable for program '".($self->is_pseudo ? $self->command : $self->program_name)."'") if $warn;
+	$self->warn("Cannot find executable for program '".
+		    ($self->is_pseudo ? 
+		     $self->command : 
+		     $self->program_name)."'") if $warn;
 	return;
     }
 }
@@ -784,11 +795,11 @@ sub _collate_subcmd_args {
     my $self = shift;
     my $cmd = shift;
     my %ret;
-    # default command is 'run'
-    $cmd ||= 'run';
-    return unless $self->{'_options'}->{'_composite_commands'};
-    return unless $self->{'_options'}->{'_composite_commands'}->{$cmd};
-    my @subcmds = @{$self->{'_options'}->{'_composite_commands'}->{$cmd}};
+    $cmd ||= $self->default_command;
+    my $compcmd = $self->{'_options'}->{'_composite_commands'};
+    return unless $compcmd;
+    return unless $compcmd->{$cmd};
+    my @subcmds = @{$compcmd->{$cmd}};
 
     my $cur_options = $self->{'_options'};
     # collate
@@ -805,7 +816,8 @@ sub _collate_subcmd_args {
 	foreach my $opt (@params, @switches) {
 	    my $subopt = $opt; 
 	    $subopt =~ s/^${pfx}_//; 
-	    push(@{$ret{$subcmd}}, '-'.$subopt => $self->$opt) if defined $self->$opt;
+	    push(@{$ret{$subcmd}}, '-'.$subopt => $self->$opt)
+		if defined $self->$opt;
 	}
     }
     return \%ret;
@@ -824,7 +836,7 @@ sub _collate_subcmd_args {
 
 sub _run {
     my ($self, @args) = @_;
-    # _translate_params will provide an array of command/parameters/switches
+    # _translate_options will provide an array of command/parameters/switches
     # -- these are set at object construction
     # to set up the run, need to add the files to the call
     # -- provide these as arguments to this function
@@ -882,10 +894,13 @@ sub _run {
     
     # Get program executable
     my $exe = $self->executable;
-    $self->throw("Can't find executable for '".($self->is_pseudo ? $self->command : $self->program_name)."'; can't continue") unless $exe;
-    # Get command-line options
+    $self->throw("Can't find executable for '".
+		 ($self->is_pseudo ? 
+		  $self->command : 
+		  $self->program_name)."'; can't continue") unless $exe;
 
-    my $options = $self->_translate_params();
+    # Get command-line options
+    my $options = $self->_translate_options();
     # Get file specs sans redirects in correct order
     my @specs = map { 
 	my $s = $_; 
@@ -1125,10 +1140,11 @@ sub _is_switch {
     return grep /$opt$/, $self->available_parameters('switches');
 }
 
-=head2 _translate_params
+=head2 _translate_options
 
- Title   : _translate_params
- Usage   : @options = $obj->_translate_params( );
+ Title   : _translate_options
+ Alias   : _translate_params
+ Usage   : @options = $obj->_translate_options( );
  Function: Translate the Bioperl arguments into the arguments to pass to the
            program on the command line
  Returns : Arrayref of arguments
@@ -1136,7 +1152,7 @@ sub _is_switch {
 
 =cut
 
-sub _translate_params {
+sub _translate_options {
   my ($self)   = @_;
   # Get option string
   my ($join, $dash) =
@@ -1271,6 +1287,8 @@ sub _translate_params {
 
   return \@options;
 }
+
+sub _translate_params { shift->_translate_options(@_) }
 
 =head1 Bio:ParameterBaseI compliance
 
@@ -1430,9 +1448,13 @@ sub parameters_changed {
  Usage   : @params = $pobj->available_parameters()
  Function: Returns a list of the available parameters
  Returns : Array of parameters
- Args    : 'params' for settable program paramters
+ Args    : undefined (params+switches for all commands, with prefixes),or
+           for current command (no prefixes):
+           'all' : params+switches
+           'params' for settable program parameters
            'switches' for boolean program switches
-           default: all 
+           'self_params' for program ("self") parameters 
+           'self_switches' for program ("self") switches
 
 =cut
 
@@ -1455,8 +1477,17 @@ sub available_parameters {
 	    @ret = grep /^$pfx/, @{$opts->{'_params'}};
 	    last;
 	};
-	m/^s/i && do {
+	m/^sw/i && do {
 	    @ret = grep /^$pfx/, @{$opts->{'_switches'}};
+	    last;
+	};
+	m/^self_p/i && do {
+	    @ret = grep /^_self/, @{$opts->{'_params'}};
+	    last;
+	};
+	    
+	m/^self_sw/i && do {
+	    @ret = grep /^_self/, @{$opts->{'_switches'}};
 	    last;
 	};
 	m/^c/i && do {
@@ -1470,7 +1501,7 @@ sub available_parameters {
 	    $self->throw("available_parameters: unrecognized subset");
 	};
     }
-    if ($subset =~ /^[psa]/i) { s/^.*\|// for (@ret); }
+    if ($subset && $subset =~ /^[psa]/i) { s/^.*\|// for (@ret); }
     return @ret;
 }
 
@@ -1482,55 +1513,20 @@ sub filespec { shift->available_parameters('filespec') }
  Title   : get_parameters
  Usage   : %params = $pobj->get_parameters;
  Function: Returns list of key-value pairs of parameter => value
- Returns : List of key-value pairs
- Args    : [optional] A string is allowed if subsets are wanted or (if a
-           parameter subset is default) 'all' to return all parameters
+ Returns : List of key-value pairs ("unqualified" (no prefix) parameter
+           names associated with the current command (in $pobj->command)
+ Args    : 'all' (default), 'parameters', 'switches', 'self_parameters'
+           'self_switches' 
 
 =cut
 
 sub get_parameters {
     my $self = shift;
     my $subset = shift;
-    $subset ||= 'all';
     my @ret;
     my $opts = $self->{'_options'};
-    my @o;
-    for ($subset) {
-	m/^p/i && do { #params only
-	    if ($self->command eq '_self') {
-		$_ = "self_params";
-	    }
-	    else {
-		@o = grep !/^_self|command/, @{$opts->{'_params'}};
-		last;
-	    }
-	};
-	m/^sw/i && do { #switches only
-	    if ($self->command eq '_self') {
-		$_ = "self_switches";
-	    }
-	    else {
-		@o = grep !/^_self/, @{$opts->{'_switches'}};
-		last;
-	    }
-	};
-	m/^self_p/i && do { # self parameters only
-	    @o = grep /^_self/, @{$opts->{'_params'}};
-	    last;
-	};
-	m/^self_s/i && do { # self switches only
-	    @o = grep /^_self/, @{$opts->{'_switches'}};
-	    last;
-	};
-	m/^a/i && do { # all
-	    @o = ('command',@{$opts->{'_params'}},@{$opts->{'_switches'}});
-	    last;
-	};
-	do {
-	    $self->throw("get_parameters: unrecognized subset");
-	};
-    }
-    unless ($subset =~ /^a/i) { s/^.*\|// for (@o);}
+    $subset ||= 'all'; 
+    my @o = $self->available_parameters($subset);
     for (@o) {
 	push(@ret, $_, $self->$_) if $self->can($_) && defined $self->$_;
     }
