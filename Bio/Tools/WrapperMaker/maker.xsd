@@ -547,8 +547,8 @@
       <xs:element ref="tns:program"/>
       <xs:element ref="tns:defs-version" minOccurs="0"/>
       <xs:element ref="tns:perl-namespace" minOccurs="0"/>
-      <xs:element ref="tns:commands" minOccurs="0"/>
       <xs:element ref="tns:self" minOccurs="0"/>
+      <xs:element ref="tns:commands" minOccurs="0"/>
       <xs:element ref="tns:composite-command" minOccurs="0"/>
       <xs:element ref="tns:lookups" minOccurs="0"/>
       <xs:element ref="tns:document-meta" minOccurs="0"/>
