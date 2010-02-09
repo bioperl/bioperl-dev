@@ -525,9 +525,9 @@
 	  <xs:sequence>
 	    <xs:element name="creator" type="xs:string"/>
 	    <xs:element name="create-date" type="xs:date"/>
-	    <xs:element name="last-modified-date" type="xs:date" maxOccurs="0"/>
-	    <xs:element name="validated-by" type="xs:string" maxOccurs="0"/>
-	    <xs:element name="schema-revision" type="xs:string" maxOccurs="0"/>
+	    <xs:element name="last-modified-date" type="xs:date" minOccurs="0"/>
+	    <xs:element name="validated-by" type="xs:string" minOccurs="0"/>
+	    <xs:element name="schema-revision" type="xs:string" minOccurs="0"/>
 	  </xs:sequence>
 	</xs:complexType>
       </xs:element>
