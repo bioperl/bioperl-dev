@@ -514,6 +514,23 @@
 	  </xs:sequence>
 	</xs:complexType>
       </xs:element>
+      
+      <xs:element name="document-meta">
+	<xs:annotation>
+	  <xs:documentation>
+	    Describe the document instance
+	  </xs:documentation>
+	</xs:annotation>
+	<xs:complexType>
+	  <xs:sequence>
+	    <xs:element name="creator" type="xs:string"/>
+	    <xs:element name="create-date" type="xs:date"/>
+	    <xs:element name="last-modified-date" type="xs:date"/>
+	    <xs:element name="validated-by" type="xs:string"/>
+	    <xs:element name="schema-revision" type="xs:string"/>
+	  </xs:sequence>
+	</xs:complexType>
+      </xs:element>
 
 <!-- Root element -->
 
@@ -534,6 +551,7 @@
       <xs:element ref="tns:self" minOccurs="0"/>
       <xs:element ref="tns:composite-command" minOccurs="0"/>
       <xs:element ref="tns:lookups" minOccurs="0"/>
+      <xs:element ref="tns:document-meta" minOccurs="0"/>
     </xs:sequence>
   </xs:complexType>
 </xs:element>
