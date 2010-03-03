@@ -42,7 +42,7 @@ from the program primer3
                                             -path => "/usr/bin/primer3_core");
 
   # or after the fact you can change the program_name
-  $primer3->program_name('my_suprefast_primer3');
+  $primer3->program_name('my_superfast_primer3');
 
   unless ($primer3->executable) {
     print STDERR "primer3 can not be found. Is it installed?\n";
@@ -106,8 +106,8 @@ web:
 
 Chris Fields cjfields-at-bioperl-dot-org
 
-Largely refactored from the original Primer3 parser by Rob Edwards, which in
-turn was based heavily on work of Chad Matsalla
+Refactored from the original Primer3 parser by Rob Edwards, which in turn was
+based heavily on work of Chad Matsalla
 
 bioinformatics1@dieselwurks.com
 
@@ -146,8 +146,8 @@ my $PROGRAMNAME;
 my %PARAMS;
 my @P1;
 my @P2;
-# 2.0 is still in alpha (3/12/09), so fallback
-# to v1 for determining parameters
+
+# 2.0 is still in alpha (3/3/10), so fallback to v1 for determining parameters
 my $DEFAULT_VERSION = '1.1.4'; 
 BEGIN {
     # $ct assigns order of parameter building

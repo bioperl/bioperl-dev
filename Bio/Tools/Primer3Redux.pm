@@ -76,6 +76,10 @@ the bugs and their resolution.  Bug reports can be submitted via the web:
 
 =head1 AUTHOR -
 
+  Chris Fields
+
+=head1 CONTRIBUTORS
+
   Rob Edwards
 
   redwards@utmem.edu
@@ -85,8 +89,6 @@ the bugs and their resolution.  Bug reports can be submitted via the web:
   Chad Matsalla
 
   bioinformatics1@dieselwurks.com
-
-=head1 CONTRIBUTORS
 
   Brian Osborne bosborne at alum.mit.edu
 
