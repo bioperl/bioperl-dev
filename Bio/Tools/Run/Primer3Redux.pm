@@ -25,7 +25,7 @@
 
 =head1 NAME
 
-Bio::Tools::Run::Primer3 - Create input for and work with the output 
+Bio::Tools::Run::Primer3Redux - Create input for and work with the output 
 from the program primer3
 
 =head1 SYNOPSIS

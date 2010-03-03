@@ -60,7 +60,7 @@ Describe contact details here
 
 =head1 CONTRIBUTORS
 
-Additional contributors names and emails here
+Nathan Hillson
 
 =head1 APPENDIX
 
