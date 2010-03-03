@@ -261,6 +261,21 @@ sub next_primer_pair {
     $self->{it}->{pair}->($self);
 }
 
+=head2 persistent_data
+
+ Title    : persistent_data
+ Usage    : $obj->persistent_data
+ Function : 
+ Returns  : 
+ Args     : 
+
+=cut
+
+sub persistent_data {
+    my ($self, @params) = @_;
+    return $self->{persistent_data};
+}
+
 =head2 run_parameters
 
  Title    : run_parameters
