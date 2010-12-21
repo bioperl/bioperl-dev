@@ -1,5 +1,3 @@
-# $Id: Slim.pm 11754 2007-11-07 19:44:54Z jason $
-#
 # BioPerl module for Bio::SeqFeature::Slim
 #
 # Cared for by Jason Stajich <jason_AT_bioperl.org>
