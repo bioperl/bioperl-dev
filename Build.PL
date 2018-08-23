@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl
 #$Id$
 # This is a Module::Build script for bioperl-dev installation.
 # See http://search.cpan.org/~kwilliams/Module-Build/lib/Module/Build.pm
@@ -6,6 +6,7 @@
 # Uses a custom subclass of Module::Build called Bio::Root::Build
 
 use strict;
+use warnings;
 my $v = '1.006900'; # pre-1.7, requires bioperl-live main trunk
 eval "use Bio::Root::Build $v";
 if ($@) {
